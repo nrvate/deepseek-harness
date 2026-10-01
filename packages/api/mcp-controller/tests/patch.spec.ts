@@ -53,7 +53,7 @@ it('replaces managed keys in place and leaves keys the form does not manage', ()
     '        maxInstructionBytes: 1024',
     '',
   ].join('\n')
-  const text = upsertRow(original, 'mcp-github', { ...stdio, cwd: undefined })
+  const text = upsertRow(original, 'mcp-github', stdio)
   expect(text).toContain('# keep me')
   expect(text).toContain('maxAttempts: 3')
   expect(text).toContain('maxInstructionBytes: 1024')

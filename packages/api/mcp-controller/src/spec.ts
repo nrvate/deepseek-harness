@@ -10,12 +10,21 @@ const SENSITIVE_HEADER_PATTERN = /authorization|cookie|token|key|secret|password
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
 
-/** Whether a literal value under this key would store a credential in the patch file. */
+/**
+ * Whether a literal value under this key would store a credential in the patch file.
+ * @param spec - the server the key belongs to; its transport selects the name pattern.
+ * @param key - the `env` or header name.
+ * @returns true for a credential-shaped name.
+ */
 export function isSecretKey(spec: McpServerSpec, key: string): boolean {
   return (spec.transport === 'stdio' ? SENSITIVE_ENV_PATTERN : SENSITIVE_HEADER_PATTERN).test(key)
 }
 
-/** The `env` or `headers` map of a spec. */
+/**
+ * The `env` or `headers` map of a spec.
+ * @param spec - server configuration.
+ * @returns `env` for a local command, `headers` for an HTTP endpoint.
+ */
 export function valueMap(spec: McpServerSpec): Record<string, McpValue> {
   return spec.transport === 'stdio' ? spec.env : spec.headers
 }
@@ -46,7 +55,11 @@ export function displayUrl(url: string): string {
   }
 }
 
-/** Whether a URL embeds a user name or password. */
+/**
+ * Whether a URL embeds a user name or password.
+ * @param url - configured endpoint; text that is not a URL has none.
+ * @returns true when a user name or password is present.
+ */
 export function hasEmbeddedCredentials(url: string): boolean {
   try {
     const parsed = new URL(url)

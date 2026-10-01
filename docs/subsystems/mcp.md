@@ -136,4 +136,46 @@ register(server: string, provider: McpResourceProvider): () => void
 ```
 
 Source: [`packages/mcp/mcp-resources/src/index.ts`](../../packages/mcp/mcp-resources/src/index.ts)
+
+<a id="ctxmcpserverscontroller--mcpserverscontroller"></a>
+
+### `ctx.mcpServersController` — `McpServersController`
+
+Remote owner of the profile's MCP server rows.
+
+```ts cordis-catalog
+/**
+ * List every MCP server row of the running profile, including rows from bundles, the
+ * home patch, and command-line overlays that cannot be changed here.
+ * @returns rows in composition order; stored literal secrets are replaced by `kept`.
+ */
+@Remote async list(): Promise<McpServerInfo[]>
+
+/**
+ * Add an MCP server row, or replace the row `options.id` names. A stdio server runs a
+ * command with the Host's privileges, so adding or changing one requires the caller to
+ * echo the command line it showed the person.
+ * @param spec - configuration to write; secrets are environment variable references.
+ * @param options - row to replace and the confirmed command line.
+ * @returns the persisted change and whether the running profile applied it.
+ */
+@Remote upsert(spec: McpServerSpec, options?: McpUpsertOptions): Promise<McpChangeResult>
+
+/**
+ * Remove one server row from the profile patch.
+ * @param id - row id returned by `list`.
+ * @returns the persisted change and whether the running profile applied it.
+ */
+@Remote remove(id: McpEntryId): Promise<McpChangeResult>
+
+/**
+ * Enable or disable one server row the profile patch owns.
+ * @param id - row id returned by `list`.
+ * @param enabled - whether the row loads.
+ * @returns the persisted change and whether the running profile applied it.
+ */
+@Remote setEnabled(id: McpEntryId, enabled: boolean): Promise<McpChangeResult>
+```
+
+Source: [`packages/api/mcp-controller/src/index.ts`](../../packages/api/mcp-controller/src/index.ts)
 <!-- END GENERATED cordis-surface -->

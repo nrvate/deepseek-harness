@@ -1492,6 +1492,37 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'mcpServersController',
+    summary: 'Remote owner of the profile\'s MCP server rows.',
+    description: 'Remote owner of the profile\'s MCP server rows.',
+    methods: [
+      {
+        signature: '@Remote async list(): Promise<McpServerInfo[]>',
+        description: 'List every MCP server row of the running profile, including rows from bundles, the home patch, and command-line overlays that cannot be changed here.',
+        parameters: [],
+        returns: 'rows in composition order; stored literal secrets are replaced by `kept`.',
+      },
+      {
+        signature: '@Remote upsert(spec: McpServerSpec, options?: McpUpsertOptions): Promise<McpChangeResult>',
+        description: 'Add an MCP server row, or replace the row `options.id` names. A stdio server runs a command with the Host\'s privileges, so adding or changing one requires the caller to echo the command line it showed the person.',
+        parameters: [{ name: 'spec', description: 'configuration to write; secrets are environment variable references.' }, { name: 'options', description: 'row to replace and the confirmed command line.' }],
+        returns: 'the persisted change and whether the running profile applied it.',
+      },
+      {
+        signature: '@Remote remove(id: McpEntryId): Promise<McpChangeResult>',
+        description: 'Remove one server row from the profile patch.',
+        parameters: [{ name: 'id', description: 'row id returned by `list`.' }],
+        returns: 'the persisted change and whether the running profile applied it.',
+      },
+      {
+        signature: '@Remote setEnabled(id: McpEntryId, enabled: boolean): Promise<McpChangeResult>',
+        description: 'Enable or disable one server row the profile patch owns.',
+        parameters: [{ name: 'id', description: 'row id returned by `list`.' }, { name: 'enabled', description: 'whether the row loads.' }],
+        returns: 'the persisted change and whether the running profile applied it.',
+      },
+    ],
+  },
+  {
     key: 'messageFeedback',
     summary: 'Session-log service; cold operations never construct a Session or Agent.',
     description: 'Session-log service; cold operations never construct a Session or Agent.',
@@ -5698,12 +5729,60 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface ManualCompactAgentContext extends CompactionAgentContext {\n    runMaintenance<T>(task: (signal: AbortSignal) => Promise<T>): Promise<T>;\n}',
   },
   {
+    name: 'McpChangeResult',
+    declaration: 'export interface McpChangeResult {\n    changed: boolean;\n    application: \'applied\' | \'restart-required\' | \'failed\';\n    target: string;\n    error?: McpError;\n    warnings?: string[];\n}',
+  },
+  {
+    name: 'McpEntryId',
+    declaration: 'export type McpEntryId = Branded<\'McpEntryId\'>;',
+  },
+  {
+    name: 'McpError',
+    declaration: 'export interface McpError {\n    code: McpErrorCode;\n    message: string;\n    command?: string;\n}',
+  },
+  {
+    name: 'McpErrorCode',
+    declaration: 'export type McpErrorCode = \'invalid-config\' | \'duplicate-server\' | \'confirmation-required\' | \'literal-secret\' | \'unknown-server\' | \'read-only\' | \'unreadable-patch\' | \'operation-error\';',
+  },
+  {
+    name: 'McpHttpSpec',
+    declaration: 'export interface McpHttpSpec extends McpSpecBase {\n    transport: \'streamable-http\';\n    url: string;\n    headers: Record<string, McpValue>;\n}',
+  },
+  {
+    name: 'McpReadOnlyReason',
+    declaration: 'export type McpReadOnlyReason = \'unaddressable\' | \'custom-expression\' | \'embedded-credentials\';',
+  },
+  {
     name: 'McpResourceProvider',
     declaration: 'export interface McpResourceProvider {\n    request(request: McpResourceRequest, exec: ToolExecution): Promise<JsonValue>;\n}',
   },
   {
     name: 'McpResourceRequest',
     declaration: 'export type McpResourceRequest = {\n    method: \'resources/list\' | \'resources/templates/list\';\n    cursor?: string;\n} | {\n    method: \'resources/read\';\n    uri: string;\n};',
+  },
+  {
+    name: 'McpServerInfo',
+    declaration: 'export interface McpServerInfo {\n    id: McpEntryId;\n    serverName: string;\n    transport: McpServerSpec[\'transport\'];\n    summary: string;\n    enabled: boolean;\n    fiberPhase: PluginFiberPhase;\n    spec?: McpServerSpec;\n    readOnlyReason?: McpReadOnlyReason;\n    owned: boolean;\n}',
+  },
+  {
+    name: 'McpServerSpec',
+    declaration: 'export type McpServerSpec = McpStdioSpec | McpHttpSpec;',
+  },
+  {
+    name: 'McpSpecBase',
+    declaration: 'export interface McpSpecBase {\n    serverName: string;\n    toolCallTimeoutMs?: number;\n    failOnStartupError?: boolean;\n}',
+  },
+  {
+    name: 'McpStdioSpec',
+    declaration: 'export interface McpStdioSpec extends McpSpecBase {\n    transport: \'stdio\';\n    command: string;\n    args: string[];\n    env: Record<string, McpValue>;\n    cwd?: string;\n}',
+  },
+  {
+    name: 'McpUpsertOptions',
+    declaration: 'export interface McpUpsertOptions {\n    id?: McpEntryId;\n    confirmedCommand?: string;\n}',
+  },
+  {
+    name: 'McpValue',
+    declaration: 'export type McpValue = {\n    kind: \'literal\';\n    value: string;\n} | {\n    kind: \'env\';\n    name: string;\n    scheme?: \'Bearer\';\n} | {\n    kind: \'expression\';\n    source: string;\n} | {\n    kind: \'kept\';\n};',
   },
   {
     name: 'Message',

@@ -288,6 +288,13 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Projects the user-settings seam onto the generated Remote namespace: the read is always redacted and every refusal is classified here, not on the seam Definition.',
   },
   {
+    key: 'mcpServersController',
+    pkg: 'api-mcp-controller',
+    title: 'Host MCP server Remote controller',
+    mode: 'core',
+    note: 'Adds, edits, enables, and removes MCP server rows in the profile patch; validation, secret handling, and rollback live here, not in the Plugins page.',
+  },
+  {
     key: 'workspaceFiles',
     pkg: 'api-workspace-files',
     title: 'Host workspace file Remote service',

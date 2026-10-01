@@ -421,6 +421,9 @@
     - id: ui-settings-web-search
       name: '@deepseek-ai/dsh-client-ui-settings-web-search'
 
+    - id: ui-settings-mcp-servers
+      name: '@deepseek-ai/dsh-client-ui-settings-mcp-servers'
+
     # Plan control: the composer plan seat over the plan projection + /plan channel.
     - id: ui-plan
       name: '@deepseek-ai/dsh-client-ui-plan'

@@ -1,0 +1,37 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/api/mcp-controller/README.md
+/:
+  en: 847b5549c2990d54
+  zh: f2136b86d0432831
+/deepseek-ai-dsh-api-mcp-controller:
+  en: 4f92f41a07b7a3bc
+  zh: d11f2060532634f1
+/deepseek-ai-dsh-api-mcp-controller/summary:
+  en: 3f19a7e34fd4a87e
+  zh: 827079a71d8548b8
+/deepseek-ai-dsh-api-mcp-controller/table-of-contents:
+  en: 122f0d41696980b1
+  zh: 528864635b577290
+/deepseek-ai-dsh-api-mcp-controller/use-this-package:
+  en: 3582ba6a324c2611
+  zh: 11c0a1586ae16804
+/deepseek-ai-dsh-api-mcp-controller/use-this-package/secrets:
+  en: 403282633f1b47db
+  zh: 2d58292eeaa190a9
+/deepseek-ai-dsh-api-mcp-controller/understand-the-implementation:
+  en: a3b080b62d3a90cb
+  zh: 1cd8b53ed95e3571
+/deepseek-ai-dsh-api-mcp-controller/model-experience:
+  en: 19d0e3975f629bcf
+  zh: bbd7c97af9a84b28
+/deepseek-ai-dsh-api-mcp-controller/model-experience/kv-cache-effect:
+  en: 1b23e2cab3d0973b
+  zh: d092bcb90bc7d8f7
+/deepseek-ai-dsh-api-mcp-controller/known-limitations-and-deferred-work:
+  en: 7e80fdb477d6a81d
+  zh: d5651028c7338a12
+/deepseek-ai-dsh-api-mcp-controller/known-limitations-and-deferred-work/dev-note:
+  en: 0f004813f01a7e05
+  zh: a034e08986bc23c2

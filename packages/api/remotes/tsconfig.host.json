@@ -87,6 +87,9 @@
       "path": "../account-controller"
     },
     {
+      "path": "../mcp-controller"
+    },
+    {
       "path": "../../credentials/deepseek-account"
     }
   ]

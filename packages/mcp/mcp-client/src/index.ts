@@ -26,6 +26,7 @@ import type {} from '@deepseek-ai/dsh-tools'
 export { createMcpToolDefinition } from './tools.ts'
 export type { McpResult, McpToolDefinitionOptions } from './tools.ts'
 export type { ReconnectConfig, ResolvedReconnectPolicy } from './connection.ts'
+export { validateServerConfig } from './connection.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'mcp-client'

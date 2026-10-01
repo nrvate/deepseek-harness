@@ -143,6 +143,10 @@
     - id: settings-controller
       name: '@deepseek-ai/dsh-api-settings-controller'
 
+    # Add, edit, enable, and remove MCP server rows in the profile patch.
+    - id: mcp-servers-controller
+      name: '@deepseek-ai/dsh-api-mcp-controller'
+
     # Workspace commands and reconnect-safe projection over Typert Remote.
     - id: workspace-controller
       name: '@deepseek-ai/dsh-api-workspace-controller'

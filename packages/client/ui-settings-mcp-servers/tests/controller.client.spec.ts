@@ -2,7 +2,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
-import type { McpChangeResult, McpEntryId, McpServerInfo, McpServerSpec } from '@deepseek-ai/dsh-api-remotes/client'
+import type { McpChangeResult, McpEntryId, McpServerInfo, McpServerSpec, McpServerStatus, McpToolInfo } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   draftFromSpec, emptyDraft, McpServersController, specFromDraft,
   type EditorDraft, type McpServersFace,
@@ -29,6 +29,9 @@ function row(rowId: string, spec?: McpServerSpec, rest: Partial<McpServerInfo> =
 
 const applied: McpChangeResult = { changed: true, application: 'applied', target: 'mcp-files' }
 
+const connected: McpServerStatus = { serverName: 'files', state: 'connected', attempt: 0, maxAttempts: 10, toolCount: 1 }
+const echo: McpToolInfo = { name: 'echo', publicName: 'mcp__files__echo', description: 'Echo it', parameters: [] }
+
 function bench(rows: McpServerInfo[] = [row('mcp-files', stdioSpec), row('mcp-web', httpSpec)]) {
   const ctx = new Context()
   const mcpServers = {
@@ -36,6 +39,8 @@ function bench(rows: McpServerInfo[] = [row('mcp-files', stdioSpec), row('mcp-we
     upsert: vi.fn((_spec: McpServerSpec, _options?: unknown) => Promise.resolve({ ok: true as const, value: applied })),
     setEnabled: vi.fn((_id: McpEntryId, _enabled: boolean) => Promise.resolve({ ok: true as const, value: applied })),
     removeServer: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: applied })),
+    tools: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: { tools: [echo], status: connected } })),
+    reconnectServer: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: { started: true } })),
   }
   const remote = new TestRemote(ctx, { mcpServers })
   const controller = new McpServersController(ctx)
@@ -454,5 +459,103 @@ describe('toggling and removing', () => {
     await pending.promise
     await Promise.resolve()
     expect(controller.getSnapshot().notice).toBeNull()
+  })
+})
+
+describe('tools and reconnect', () => {
+  const live = row('mcp-files', stdioSpec, { status: connected })
+
+  it('opens the tools of a listed server and reads them', async () => {
+    const { controller, face, mcpServers } = await loaded([live])
+    face.openTools(id('missing'))
+    expect(controller.getSnapshot().tools).toBeNull()
+    face.openTools(id('mcp-files'))
+    expect(controller.getSnapshot().tools).toMatchObject({ status: 'loading', tools: [], connection: connected })
+    await vi.waitFor(() => { expect(controller.getSnapshot().tools?.status).toBe('ready') })
+    expect(mcpServers.tools).toHaveBeenCalledWith('mcp-files')
+    expect(controller.getSnapshot().tools).toMatchObject({ tools: [echo], connection: connected })
+    face.closeTools()
+    expect(controller.getSnapshot().tools).toBeNull()
+  })
+
+  it('reports tools that could not be read and keeps the dialog open', async () => {
+    const { controller, face, mcpServers } = await loaded([live])
+    mcpServers.tools.mockResolvedValueOnce(failure as never)
+    face.openTools(id('mcp-files'))
+    await vi.waitFor(() => { expect(controller.getSnapshot().tools?.status).toBe('failed') })
+  })
+
+  it('re-reads the tools of an open dialog whenever the rows refresh', async () => {
+    const { controller, face, mcpServers } = await loaded([live])
+    face.openTools(id('mcp-files'))
+    await vi.waitFor(() => { expect(controller.getSnapshot().tools?.status).toBe('ready') })
+    mcpServers.tools.mockResolvedValueOnce({ ok: true, value: { tools: [echo, echo], status: { ...connected, state: 'reconnecting' } } })
+    controller.refresh()
+    await vi.waitFor(() => { expect(controller.getSnapshot().tools?.tools).toHaveLength(2) })
+    expect(controller.getSnapshot().tools?.connection?.state).toBe('reconnecting')
+  })
+
+  it('drops tools that arrive for a dialog that was closed or replaced', async () => {
+    const other = row('mcp-other', stdioSpec, { status: connected })
+    const { controller, face, mcpServers } = await loaded([live, other])
+    const slow = Promise.withResolvers<{ ok: true; value: { tools: McpToolInfo[]; status: McpServerStatus } }>()
+    mcpServers.tools.mockReturnValueOnce(slow.promise)
+    face.openTools(id('mcp-files'))
+    face.closeTools()
+    slow.resolve({ ok: true, value: { tools: [echo], status: connected } })
+    await slow.promise
+    await Promise.resolve()
+    expect(controller.getSnapshot().tools).toBeNull()
+
+    const slowAgain = Promise.withResolvers<{ ok: true; value: { tools: McpToolInfo[]; status: McpServerStatus } }>()
+    mcpServers.tools.mockReturnValueOnce(slowAgain.promise)
+    face.openTools(id('mcp-files'))
+    face.openTools(id('mcp-other'))
+    slowAgain.resolve({ ok: true, value: { tools: [echo, echo, echo], status: connected } })
+    await slowAgain.promise
+    await vi.waitFor(() => { expect(controller.getSnapshot().tools?.row.id).toBe('mcp-other') })
+    expect(controller.getSnapshot().tools?.tools).not.toHaveLength(3)
+  })
+
+  it('ignores tools that arrive after teardown', async () => {
+    const { controller, face, mcpServers } = await loaded([live])
+    const slow = Promise.withResolvers<{ ok: true; value: { tools: McpToolInfo[]; status: McpServerStatus } }>()
+    mcpServers.tools.mockReturnValueOnce(slow.promise)
+    face.openTools(id('mcp-files'))
+    controller.dispose()
+    slow.resolve({ ok: true, value: { tools: [echo], status: connected } })
+    await slow.promise
+    await Promise.resolve()
+    expect(controller.getSnapshot().tools?.status).toBe('loading')
+  })
+
+  it('asks the Host to reconnect, then re-reads the rows', async () => {
+    const { controller, face, mcpServers } = await loaded([live])
+    face.reconnect(id('mcp-files'))
+    await vi.waitFor(() => { expect(mcpServers.list).toHaveBeenCalledTimes(2) })
+    expect(mcpServers.reconnectServer).toHaveBeenCalledWith('mcp-files')
+    expect(controller.getSnapshot().pending).toBeNull()
+    expect(controller.getSnapshot().notice).toBeNull()
+  })
+
+  it('toasts a reconnect the Host did not answer', async () => {
+    const { controller, face, mcpServers } = await loaded([live])
+    mcpServers.reconnectServer.mockResolvedValueOnce(failure as never)
+    face.reconnect(id('mcp-files'))
+    await vi.waitFor(() => { expect(controller.getSnapshot().notice).toMatchObject({ kind: 'failed' }) })
+  })
+
+  it('sends one reconnect at a time and ignores an answer after teardown', async () => {
+    const { controller, face, mcpServers } = await loaded([live])
+    const slow = Promise.withResolvers<{ ok: true; value: { started: boolean } }>()
+    mcpServers.reconnectServer.mockReturnValueOnce(slow.promise)
+    face.reconnect(id('mcp-files'))
+    face.reconnect(id('mcp-files'))
+    expect(mcpServers.reconnectServer).toHaveBeenCalledTimes(1)
+    controller.dispose()
+    slow.resolve({ ok: true, value: { started: true } })
+    await slow.promise
+    await Promise.resolve()
+    expect(controller.getSnapshot().pending).toBe('mcp-files')
   })
 })

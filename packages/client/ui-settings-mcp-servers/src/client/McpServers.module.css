@@ -115,6 +115,9 @@
 .dialogBody {
   max-height: min(70vh, 640px);
   overflow: auto;
+  /* The dialog is an elevated surface: scrolling content draws the l2 thumb (ui-theme styles/scrollbar.css). */
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
 }
 
 .form {
@@ -218,6 +221,8 @@
   max-height: 96px;
   margin: 0;
   overflow: auto;
+  --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
+  --dsh-scrollbar-thumb-hover: var(--dsw-alias-scrollbar-hover-l2);
   font-size: 13px;
   line-height: 20px;
   color: var(--dsw-alias-state-error-primary);
@@ -246,4 +251,120 @@
   line-height: 18px;
   color: var(--dsw-alias-label-primary);
   overflow-wrap: anywhere;
+}
+
+.problem {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-state-error-primary);
+  overflow-wrap: anywhere;
+}
+
+.toolsDialog {
+  width: min(680px, 100%);
+}
+
+.toolList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tool {
+  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
+}
+
+.toolSummary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 4px;
+  cursor: pointer;
+  list-style: none;
+}
+
+/* The expand cue: `summary` loses its marker once it is a flex row. */
+.toolSummary::before {
+  flex: none;
+  width: 12px;
+  content: '\25B8';
+  font-size: 10px;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.tool[open] > .toolSummary::before {
+  content: '\25BE';
+}
+
+.toolSummary:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 1px;
+}
+
+.toolName {
+  flex: none;
+  font-family: var(--dsw-font-mono);
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-primary);
+}
+
+.toolBrief {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-tertiary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.toolHelp {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 4px 14px 24px;
+}
+
+.toolText {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.params {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.params th {
+  padding: 4px 8px 4px 0;
+  text-align: left;
+  font-weight: 500;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.params td {
+  padding: 4px 8px 4px 0;
+  vertical-align: top;
+  color: var(--dsw-alias-label-secondary);
+  overflow-wrap: anywhere;
+}
+
+.params code {
+  font-family: var(--dsw-font-mono);
+  color: var(--dsw-alias-label-primary);
+}
+
+.paramFlag {
+  display: block;
+  color: var(--dsw-alias-label-tertiary);
 }

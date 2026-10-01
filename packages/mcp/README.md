@@ -22,12 +22,13 @@ The `mcp/` group lets the model call external Model Context Protocol (MCP) tools
 <a id="packages"></a>
 ## Packages
 
-The client owns each configured connection; the shared resource package supplies resource tools across those connections.
+The client owns each configured connection; the shared resource package supplies resource tools across those connections, and the status package reports each connection's state.
 
 | Package | What it provides |
 |---|---|
 | [`mcp-client/`](mcp-client/README.md) | Connect one MCP server, expose its tools and instructions, and provide its resource operations |
 | [`mcp-resources/`](mcp-resources/README.md) | Discover and read resources through shared tools with explicit server selection |
+| [`mcp-status/`](mcp-status/README.md) | Live connection state and tool lists of the configured servers, for management surfaces |
 
 -----
 

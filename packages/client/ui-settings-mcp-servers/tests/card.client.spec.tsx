@@ -4,7 +4,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
-import type { McpChangeResult, McpEntryId, McpServerInfo, McpServerSpec } from '@deepseek-ai/dsh-api-remotes/client'
+import type { McpChangeResult, McpEntryId, McpServerInfo, McpServerSpec, McpServerStatus, McpToolInfo } from '@deepseek-ai/dsh-api-remotes/client'
 import { McpServersCard, type McpServersCardProps } from '../src/client/McpServersCard.tsx'
 import { McpServersToast, type McpServersToastProps } from '../src/client/McpServersToast.tsx'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -28,6 +28,16 @@ function row(rowId: string, rest: Partial<McpServerInfo> = {}): McpServerInfo {
 
 const applied: McpChangeResult = { changed: true, application: 'applied', target: 'x' }
 
+const connected: McpServerStatus = { serverName: 'files', state: 'connected', attempt: 0, maxAttempts: 10, toolCount: 2 }
+const echo: McpToolInfo = { name: 'echo', publicName: 'mcp__files__echo', description: 'Echo it back.\nSecond line.', parameters: [] }
+const search: McpToolInfo = {
+  name: 'search', publicName: 'mcp__files__search', description: '',
+  parameters: [
+    { name: 'query', type: 'string', required: true, description: 'What to find' },
+    { name: 'limit', type: 'integer', required: false, description: '' },
+  ],
+}
+
 function mount(rows: McpServerInfo[], view: 'page' | 'summary' = 'page') {
   const ctx = new Context()
   const mcpServers = {
@@ -35,6 +45,8 @@ function mount(rows: McpServerInfo[], view: 'page' | 'summary' = 'page') {
     upsert: vi.fn((_spec: McpServerSpec, _options?: unknown) => Promise.resolve({ ok: true as const, value: applied })),
     setEnabled: vi.fn((_id: McpEntryId, _enabled: boolean) => Promise.resolve({ ok: true as const, value: applied })),
     removeServer: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: applied })),
+    tools: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: { tools: [echo], status: connected } })),
+    reconnectServer: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: { started: true } })),
   }
   new TestRemote(ctx, { mcpServers })
   const controller = new McpServersController(ctx)
@@ -57,7 +69,7 @@ describe('McpServersCard', () => {
     mount([])
     expect(screen.getByRole('status')).toBeTruthy()
     expect(await screen.findByText(en.empty)).toBeTruthy()
-    expect(screen.getByText(en.statusNote)).toBeTruthy()
+    expect(screen.queryByText(en.statusNote)).toBeNull()
   })
 
   it('offers a retry when the first read fails', async () => {
@@ -308,7 +320,7 @@ describe('McpServersCard', () => {
 
 describe('McpServersToast', () => {
   function mountToast(notice: McpServersState['notice']) {
-    const store = createSnapshotStore<McpServersState>({ status: 'ready', rows: [], pending: null, editor: null, removal: null, notice })
+    const store = createSnapshotStore<McpServersState>({ status: 'ready', rows: [], pending: null, editor: null, removal: null, tools: null, notice })
     const dismissNotice = vi.fn()
     const props = { dismissNotice, t, useMcpServers: bindSnapshotSelector(store) } as McpServersToastProps
     return { ...render(<McpServersToast {...props} />), dismissNotice }
@@ -325,5 +337,120 @@ describe('McpServersToast', () => {
   ] as const)('reports %s (restart %s) with its own sentence', (kind, restart, text) => {
     mountToast({ kind, restart, seq: 1 })
     expect(screen.getByText(text)).toBeTruthy()
+  })
+})
+
+describe('connection state and tools', () => {
+  const live = (state: McpServerStatus['state'], rest: Partial<McpServerStatus> = {}, info: Partial<McpServerInfo> = {}) =>
+    row('mcp-files', { serverName: 'files', spec: stdioSpec, status: { ...connected, state, ...rest }, ...info })
+
+  it('shows each connection state, the attempt count, and the last error', async () => {
+    mount([
+      live('connected'),
+      row('mcp-b', { serverName: 'b', status: { ...connected, state: 'connecting' } }),
+      row('mcp-c', { serverName: 'c', status: { ...connected, state: 'reconnecting', attempt: 2, error: 'refused' } }),
+      row('mcp-d', { serverName: 'd', status: { ...connected, state: 'failed', attempt: 10, error: 'gave up', toolCount: 0 } }),
+    ])
+    expect(await screen.findByText(en.stateConnected)).toBeTruthy()
+    expect(screen.getByText(en.stateConnecting)).toBeTruthy()
+    expect(screen.getByText('Reconnecting (2/10)')).toBeTruthy()
+    expect(screen.getByText(en.stateFailed)).toBeTruthy()
+    expect(screen.getByText('refused')).toBeTruthy()
+    expect(screen.getByText('gave up')).toBeTruthy()
+    expect(screen.queryByText(en.statusNote)).toBeNull()
+  })
+
+  it('does not show an old error once the server is connected, nor a state for a disabled row', async () => {
+    mount([live('connected', { error: 'stale' }), row('mcp-off', { serverName: 'off', enabled: false, status: { ...connected, state: 'connected' } })])
+    expect(await screen.findByText(en.stateConnected)).toBeTruthy()
+    expect(screen.queryByText('stale')).toBeNull()
+    expect(screen.getByText(en.phaseOff)).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: /^Tools/ })).toHaveLength(1)
+  })
+
+  it('keeps the plugin phase and its note for a row whose client reports no status', async () => {
+    mount([files])
+    expect(await screen.findByText(en.phaseLoaded)).toBeTruthy()
+    expect(screen.getByText(en.statusNote)).toBeTruthy()
+  })
+
+  it('offers reconnect only while not connected, and asks the Host', async () => {
+    const { mcpServers } = mount([live('connected'), row('mcp-c', { serverName: 'c', status: { ...connected, state: 'failed', toolCount: 0 } })])
+    const buttons = await screen.findAllByRole('button', { name: en.reconnect })
+    expect(buttons).toHaveLength(1)
+    fireEvent.click(buttons[0] as HTMLElement)
+    await waitFor(() => { expect(mcpServers.reconnectServer).toHaveBeenCalledWith('mcp-c') })
+  })
+
+  it('also offers reconnect while a retry is waiting', async () => {
+    mount([row('mcp-c', { serverName: 'c', status: { ...connected, state: 'reconnecting', attempt: 1, toolCount: 0 } })])
+    expect(await screen.findByRole('button', { name: en.reconnect })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^Tools/ })).toBeNull()
+  })
+
+  it('opens the tools dialog with each tool collapsed and expands one to its help', async () => {
+    const { mcpServers } = mount([live('connected')])
+    mcpServers.tools.mockResolvedValue({ ok: true, value: { tools: [echo, search], status: connected } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Tools (2)' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Tools of files' })
+    expect(await within(dialog).findByText('mcp__files__echo')).toBeTruthy()
+    expect(within(dialog).getByText(en.toolsIntro)).toBeTruthy()
+    // Collapsed: only the first line shows beside the name.
+    const echoDetails = within(dialog).getByText('mcp__files__echo').closest('details') as HTMLDetailsElement
+    expect(echoDetails.open).toBe(false)
+    expect(within(dialog).getByText('Echo it back.')).toBeTruthy()
+
+    fireEvent.click(within(dialog).getByText('mcp__files__echo'))
+    expect(echoDetails.open).toBe(true)
+    expect(within(dialog).getByText(en.toolNoParameters)).toBeTruthy()
+
+    const searchDetails = within(dialog).getByText('mcp__files__search').closest('details') as HTMLDetailsElement
+    fireEvent.click(within(dialog).getByText('mcp__files__search'))
+    expect(searchDetails.open).toBe(true)
+    expect(within(dialog).getByText(en.toolNoDescription)).toBeTruthy()
+    expect(within(dialog).getByText('query')).toBeTruthy()
+    expect(within(dialog).getByText(en.paramRequired)).toBeTruthy()
+    expect(within(dialog).getByText(en.paramOptional)).toBeTruthy()
+    expect(within(dialog).getByText('What to find')).toBeTruthy()
+  })
+
+  it('filters the tools by name or description and says when none match', async () => {
+    const { mcpServers } = mount([live('connected')])
+    mcpServers.tools.mockResolvedValue({ ok: true, value: { tools: [echo, search], status: connected } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Tools (2)' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Tools of files' })
+    const filter = await within(dialog).findByLabelText(en.toolsFilter)
+    fireEvent.change(filter, { target: { value: 'SEARCH' } })
+    expect(within(dialog).queryByText('mcp__files__echo')).toBeNull()
+    expect(within(dialog).getByText('mcp__files__search')).toBeTruthy()
+    fireEvent.change(filter, { target: { value: 'second line' } })
+    expect(within(dialog).getByText('mcp__files__echo')).toBeTruthy()
+    fireEvent.change(filter, { target: { value: 'zzz' } })
+    expect(within(dialog).getByText(en.toolsNoMatch)).toBeTruthy()
+    fireEvent.change(filter, { target: { value: ' ' } })
+    expect(within(dialog).getAllByRole('listitem')).toHaveLength(2)
+  })
+
+  it('shows a loader, then an empty state, a failure, and closes', async () => {
+    const { mcpServers } = mount([live('connected')])
+    const slow = Promise.withResolvers<{ ok: true; value: { tools: McpToolInfo[]; status: McpServerStatus } }>()
+    mcpServers.tools.mockReturnValueOnce(slow.promise)
+    fireEvent.click(await screen.findByRole('button', { name: 'Tools (2)' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Tools of files' })
+    expect(within(dialog).getByRole('status')).toBeTruthy()
+    slow.resolve({ ok: true, value: { tools: [], status: connected } })
+    expect(await within(dialog).findByText(en.toolsEmpty)).toBeTruthy()
+    fireEvent.click(within(dialog).getAllByRole('button', { name: en.close }).at(-1) as HTMLElement)
+    expect(screen.queryByRole('dialog')).toBeNull()
+
+    mcpServers.tools.mockResolvedValueOnce({ ok: false, error: new Error('down') } as never)
+    fireEvent.click(screen.getByRole('button', { name: 'Tools (2)' }))
+    expect((await screen.findByRole('alert')).textContent).toBe(en.toolsFailed)
+  })
+
+  it('names a server without a name by its row id in the tools dialog', async () => {
+    mount([row('bare', { serverName: '', status: connected })])
+    fireEvent.click(await screen.findByRole('button', { name: 'Tools (2)' }))
+    expect(await screen.findByRole('dialog', { name: 'Tools of bare' })).toBeTruthy()
   })
 })

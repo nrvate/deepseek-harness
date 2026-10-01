@@ -1,6 +1,9 @@
 /** Records shared by the MCP server Remote and its clients. */
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { PluginFiberPhase } from '@deepseek-ai/dsh-host-plugin-inventory/types'
+import type { McpServerStatus, McpToolInfo } from '@deepseek-ai/dsh-mcp-status/types'
+
+export type { McpConnectionState, McpServerStatus, McpToolInfo, McpToolParameter } from '@deepseek-ai/dsh-mcp-status/types'
 
 /** Row id as the profile patch declares it. */
 export type McpEntryId = Branded<'McpEntryId'>
@@ -67,6 +70,8 @@ export interface McpServerInfo {
   enabled: boolean
   /** Root-fiber phase of the running entry; null when none is live. */
   fiberPhase: PluginFiberPhase
+  /** The client's live connection state; absent while the plugin is not loaded or no status service is mounted. */
+  status?: McpServerStatus
   /** Present when the row can be edited. */
   spec?: McpServerSpec
   /** Present when the row cannot be edited; it can still be enabled, disabled, or removed only if the profile patch owns it. */
@@ -112,4 +117,18 @@ export interface McpChangeResult {
   error?: McpError
   /** Pre-existing inactive entries the reload left as they were. */
   warnings?: string[]
+}
+
+/** A server's tools with the state they were read under. */
+export interface McpToolsResult {
+  /** The client's connection state; absent when no client is registered for the row. */
+  status?: McpServerStatus
+  /** The tools registered from the server right now. */
+  tools: readonly McpToolInfo[]
+}
+
+/** Outcome of asking a server to connect now. */
+export interface McpReconnectResult {
+  /** False when the server was already connected or connecting, or no client is registered for the row. */
+  started: boolean
 }

@@ -26,10 +26,12 @@ kind: "package-reference"
 
 | 方法 | 效果 |
 |---|---|
-| `list()` | 运行中 profile 的所有 MCP 行，包括来自 bundle、家目录补丁和命令行覆盖的行，附带 `owned`、`readOnlyReason`、`enabled` 和实时的 `fiberPhase` |
+| `list()` | 运行中 profile 的所有 MCP 行，包括来自 bundle、家目录补丁和命令行覆盖的行，附带 `owned`、`readOnlyReason`、`enabled`、实时的 `fiberPhase`，以及挂载[状态服务](../../mcp/mcp-status/README.zh.md)时客户端的 `status`（连接状态、最近错误、尝试次数、工具数）|
 | `upsert(spec, { id?, confirmedCommand? })` | 添加 `mcp-<serverName>`，或替换 `id` 所指行中受托管的键 |
 | `setEnabled(id, enabled)` | 在 profile 补丁所拥有的行上写入 `disabled` |
 | `removeServer(id)` | 删除 profile 补丁所拥有的行 |
+| `tools(id)` | 服务器当前提供的工具及其连接状态 |
+| `reconnectServer(id)` | 请服务器的客户端立即连接；返回是否开始了尝试 |
 
 每次写入都返回 `{ changed, application, target, error?, warnings? }`。`application` 为 `applied` 表示 Loader 已协调该变更，`restart-required` 表示 profile 没有热重载，`failed` 则带有 `error.code`：`invalid-config`、`duplicate-server`、`confirmation-required`、`literal-secret`、`unknown-server`、`read-only`、`unreadable-patch` 或 `operation-error`。失败的变更会让补丁文件保持原样。
 
@@ -71,7 +73,7 @@ stdio 服务器会以 Host 的权限运行命令。在 `confirmedCommand` 等于
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- 不报告连接状态：首次连接失败的已保存服务器仍以 `fiberPhase: 'active'` 列出，其错误只出现在日志中。
+- 连接状态依赖状态服务：没有它时，行没有 `status`，首次连接失败的已保存服务器仍以 `fiberPhase: 'active'` 列出。
 - 只有 profile 补丁所插入的行才能被编辑、启用、禁用或删除；`env` 和 `headers` 之外含有 `!!js` 值的行可以删除或切换启用状态，但不能编辑。
 - 表单托管 `transport`、`serverName`、命令或 URL、`args`、`env`、`headers`、`cwd`、`toolCallTimeoutMs` 和 `failOnStartupError`。`reconnect` 等其他键保持文件中的原样。
 - 查询字符串中带有令牌的 URL 按输入原样存储，并显示在可编辑的 `spec` 中；列表摘要省略查询部分。
@@ -83,6 +85,6 @@ stdio 服务器会以 Host 的权限运行命令。在 `confirmedCommand` 等于
 <details>
 <summary>维护者的工作上下文——点击展开</summary>
 
-[插件页面中的 MCP 服务器](../../../.agents/notes/implemented/feature/2026-10-01-mcp-servers-on-the-plugins-page.zh.md)提案记录了设计和被否决的备选方案。来自 `mcp-client` 的状态反馈是尚未完成的后续工作。
+[插件页面中的 MCP 服务器](../../../.agents/notes/implemented/feature/2026-10-01-mcp-servers-on-the-plugins-page.zh.md)提案记录了设计和被否决的备选方案。
 
 </details>

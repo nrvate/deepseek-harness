@@ -14,10 +14,12 @@ import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { readPluginInventory } from '@deepseek-ai/dsh-host-plugin-inventory'
 import type {} from '@deepseek-ai/dsh-hmr'
 import type {} from '@deepseek-ai/dsh-plugin-manager'
+import type {} from '@deepseek-ai/dsh-mcp-status'
 import { commandLine, MCP_CLIENT_MODULE, readOwnedRows, removeRow, setRowEnabled, upsertRow, type OwnedRow } from './patch.ts'
 import { displayUrl, hasEmbeddedCredentials, messageOf, redact, validateSpec } from './spec.ts'
 import type {
-  McpChangeResult, McpEntryId, McpError, McpReadOnlyReason, McpServerInfo, McpServerSpec, McpUpsertOptions,
+  McpChangeResult, McpEntryId, McpError, McpReadOnlyReason, McpReconnectResult, McpServerInfo, McpServerSpec, McpToolsResult,
+  McpUpsertOptions,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -25,6 +27,9 @@ export type * from './types.ts'
 /** Row ids this form creates are `mcp-<serverName>`. */
 const ROW_ID_PREFIX = 'mcp-'
 const SERVER_NAME = /^[A-Za-z0-9_-]{1,32}$/
+
+/** Status changes arrive in bursts while a server reconnects; one `plugin-manager/changed` follows each burst. */
+const STATUS_CHANGE_DEBOUNCE_MS = 250
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -55,8 +60,21 @@ class ChangeRefused extends Error {
 export class McpServersController extends TypertRemoteService {
   static inject = ['loader', 'profileContext']
 
+  private statusTimer: NodeJS.Timeout | undefined
+
   constructor(ctx: Context) {
     super(ctx, 'mcpServersController', { namespace: 'mcpServers' })
+    ctx.on('mcp-status/changed', () => { this.scheduleStatusChange() })
+    ctx.effect(() => () => { clearTimeout(this.statusTimer) }, 'mcpServersController: status debounce')
+  }
+
+  private scheduleStatusChange(): void {
+    if (this.statusTimer !== undefined) return
+    this.statusTimer = setTimeout(() => {
+      this.statusTimer = undefined
+      this.ctx.emit('plugin-manager/changed', { reason: 'plugin' })
+    }, STATUS_CHANGE_DEBOUNCE_MS)
+    this.statusTimer.unref()
   }
 
   private get profile() { return this.ctx.profileContext }
@@ -73,12 +91,16 @@ export class McpServersController extends TypertRemoteService {
       .filter(row => row.name === MCP_CLIENT_MODULE)
     const inventory = new Map((await readPluginInventory(this.ctx)).entries.map(entry => [entry.entryId as string, entry]))
     const loaded = new Map([...this.ctx.loader.entries()].map(entry => [entry.options.id, entry.id]))
+    const statuses = this.ctx.get('mcpStatus')
     return rows.map((row) => {
       const live = inventory.get(loaded.get(row.id) ?? '')
+      const name = this.serverNameOf(row, owned.get(row.id))
+      const status = name === '' ? undefined : statuses?.get(name)
       const base = {
         id: row.id as McpEntryId,
         enabled: live?.enabled ?? row.disabled !== true,
         fiberPhase: live?.fiberPhase ?? null,
+        ...status === undefined ? {} : { status },
       }
       const mine = owned.get(row.id)
       if (mine?.spec !== undefined) {
@@ -99,6 +121,13 @@ export class McpServersController extends TypertRemoteService {
         readOnlyReason: (mine === undefined ? 'unaddressable' : 'custom-expression') satisfies McpReadOnlyReason,
       }
     })
+  }
+
+  /** The server name a composed row configures, from the profile file when the row is owned. */
+  private serverNameOf(row: EntryOptions, mine: OwnedRow | undefined): string {
+    if (mine?.serverName !== undefined) return mine.serverName
+    const name = (row.config as Record<string, unknown> | undefined)?.serverName
+    return typeof name === 'string' ? name : ''
   }
 
   /**
@@ -168,6 +197,31 @@ export class McpServersController extends TypertRemoteService {
       requireOwned(await this.list(), id)
       return text => setRowEnabled(text, id, enabled)
     })
+  }
+
+  /**
+   * Read the tools one server offers, with its connection state.
+   * @param id - row id returned by `list`.
+   * @returns the tools registered from the server right now; empty when it is not connected or has no client.
+   */
+  @Remote
+  async tools(id: McpEntryId): Promise<McpToolsResult> {
+    const name = (await this.list()).find(row => row.id === id)?.serverName
+    const statuses = this.ctx.get('mcpStatus')
+    const status = name === undefined ? undefined : statuses?.get(name)
+    return { ...status === undefined ? {} : { status }, tools: name === undefined ? [] : statuses?.tools(name) ?? [] }
+  }
+
+  /**
+   * Ask one server's client to connect now instead of waiting out its retry delay, restarting its retry budget.
+   * @param id - row id returned by `list`.
+   * @returns whether a new attempt started.
+   */
+  @Remote
+  async reconnectServer(id: McpEntryId): Promise<McpReconnectResult> {
+    const name = (await this.list()).find(row => row.id === id)?.serverName
+    const statuses = this.ctx.get('mcpStatus')
+    return { started: name !== undefined && statuses !== undefined && await statuses.reconnect(name) }
   }
 
   private async readPatch(): Promise<string> {

@@ -4,6 +4,7 @@ import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import McpResources from '@deepseek-ai/dsh-mcp-resources'
+import McpStatus, { type McpServerHandle } from '@deepseek-ai/dsh-mcp-status'
 import { createScope } from '@deepseek-ai/dsh-scope'
 import { registerServerContext } from '../src/server-context.ts'
 
@@ -16,7 +17,15 @@ async function setup() {
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(McpResources)
+  await ctx.plugin(McpStatus)
   return ctx
+}
+
+const idleHandle: McpServerHandle = {
+  status: () => ({ serverName: 'docs', state: 'connected', attempt: 0, maxAttempts: 10, toolCount: 0 }),
+  tools: () => [],
+  reconnect: () => Promise.resolve(false),
+  subscribe: () => () => {},
 }
 
 describe('MCP server context', () => {
@@ -26,13 +35,16 @@ describe('MCP server context', () => {
     const fiber = await ctx.plugin({ apply(inner: Context) {
       registerServerContext(inner, 'docs', {
         resources: { request: async () => ({ resources: [] }) },
+        handle: idleHandle,
         instructions: () => instructions,
       })
     } })
     expect(renderPrompt(await ctx.systemPrompt.assemble())).toContain(instructions)
+    expect(ctx.mcpStatus.get('docs')).toMatchObject({ state: 'connected' })
     instructions = 'MCP server: docs\nUpdated instructions.'
     expect(renderPrompt(await ctx.systemPrompt.assemble())).toContain(instructions)
     await fiber.dispose()
+    expect(ctx.mcpStatus.get('docs')).toBeUndefined()
     expect(renderPrompt(await ctx.systemPrompt.assemble())).not.toContain('MCP server: docs')
     const result = await ctx.tools.execute({
       name: 'list_mcp_resources', arguments: { server: 'docs' },
@@ -48,6 +60,7 @@ describe('MCP server context', () => {
       const scoped = createScope(inner, scopeKey)
       registerServerContext(scoped.ctx, 'private', {
         resources: { request: async () => ({ resources: [] }) },
+        handle: idleHandle,
         instructions: () => 'Private server instructions.',
       })
     } })

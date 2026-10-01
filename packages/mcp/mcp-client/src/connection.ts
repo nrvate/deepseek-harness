@@ -17,6 +17,7 @@
 
 import { Client, type Transport } from '@modelcontextprotocol/client'
 import type { Context } from '@deepseek-ai/cordis'
+import type { McpConnectionState, McpServerHandle, McpServerStatus, McpToolInfo } from '@deepseek-ai/dsh-mcp-status'
 import { assertNever, type JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { ServerContext } from './server-context.ts'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
@@ -165,10 +166,22 @@ export interface ConnectionHandle extends ServerContext {
 export function startConnection(ctx: Context, config: Config, policy: ResolvedReconnectPolicy): ConnectionHandle {
   const label = `mcp-client(${config.serverName})`
   const incompleteDisposalMessage = `${label}: transport closure could not be confirmed during disposal — server shutdown may be incomplete`
+  /** Connection state, tools, and the observers told when either changes. */
+  let state: McpConnectionState = 'connecting'
+  let lastError: string | undefined
+  let registeredTools: McpToolInfo[] = []
+  const observers = new Set<() => void>()
+  const notify = (): void => { for (const observer of [...observers]) observer() }
+  const setState = (next: McpConnectionState): void => {
+    if (state === next) return
+    state = next
+    notify()
+  }
   const opts: ToolBridgeOptions = {
     registrationFailure: 'contain',
     serverName: config.serverName,
     toolCallTimeoutMs: config.toolCallTimeoutMs,
+    onTools: (next) => { registeredTools = next; notify() },
   }
   // The initial sync uses 'throw' when failOnStartupError is configured, so
   // a registration conflict propagates to the startup-await path. Re-syncs
@@ -228,6 +241,8 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     if (!quiesced) {
       client = undefined
       closeClient = undefined
+      lastError = 'The failed connection could not be closed, so reconnecting stopped to avoid overlapping server processes'
+      setState('failed')
       ctx.logger.error(`${label}: failed generation could not confirm transport closure — reconnect stopped to avoid overlapping server processes; reload the plugin or restart the Host to retry`)
       return
     }
@@ -253,6 +268,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
         ? 'connection lost and reconnect is disabled — registered tools will fail until an HMR reload or Host restart'
         : 'connection failed and reconnect is disabled — no tools were registered; reload the plugin or restart the Host to connect'
       ctx.logger.error(`${label}: ${message}`)
+      setState('failed')
       return
     }
     // A connection that stayed up past the stability window (= maxDelayMs, the
@@ -267,13 +283,17 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
         for (const dispose of disposers.values()) dispose()
         disposers = new Map()
         serverInstructions = ''
+        registeredTools = []
+        notify()
       })
+      setState('failed')
       ctx.logger.error(`${label}: giving up after ${policy.maxAttempts} consecutive failed reconnect attempts — tools unregistered; reload the plugin or restart the Host to reconnect`)
       return
     }
     const delayMs = Math.min(policy.maxDelayMs, policy.initialDelayMs * 2 ** (failedAttempts - 1))
     const action = lostEstablishedConnection ? 'connection lost; reconnecting' : 'connection failed; retrying'
     ctx.logger.warn(`${label}: ${action} in ${delayMs}ms (attempt ${failedAttempts}/${policy.maxAttempts})`)
+    setState('reconnecting')
     reconnectTimer = setTimeout(() => {
       reconnectTimer = undefined
       settling = connectGeneration(false)
@@ -361,6 +381,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
       await enqueueSync(generation, startup ? startupOpts : opts)
     } catch (error) {
       if (firstAttemptError === undefined) firstAttemptError = error
+      lastError = error instanceof Error ? error.message : String(error)
       // Disposal clears current ownership before it closes the generation, so
       // only a live supervisor reports an attempt failure.
       if (isCurrent(generation)) ctx.logger.warn(`${label}: connection attempt failed: ${String(error)}`)
@@ -377,6 +398,8 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     if (!isCurrent(generation)) return
     serverInstructions = instructions
     connectedAt = Date.now()
+    lastError = undefined
+    setState('connected')
     if (failedAttempts > 0) ctx.logger.info(`${label}: reconnected and re-synced tools (attempt ${failedAttempts}/${policy.maxAttempts})`)
   }
 
@@ -398,8 +421,41 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     return { error: firstAttemptError ?? new Error(`${label}: initial connection failed`) }
   })
 
+  const handle: McpServerHandle = {
+    status(): McpServerStatus {
+      return {
+        serverName: config.serverName,
+        state,
+        attempt: state === 'connected' ? 0 : Math.min(failedAttempts, policy.maxAttempts),
+        maxAttempts: policy.maxAttempts,
+        ...lastError === undefined ? {} : { error: lastError },
+        ...state === 'connected' && connectedAt !== undefined ? { connectedAt } : {},
+        toolCount: registeredTools.length,
+      }
+    },
+    tools: () => registeredTools,
+    reconnect(): Promise<boolean> {
+      // A live or in-flight generation owns the connection; only a wait or a stop can be cut short.
+      if (disposed || client !== undefined) return Promise.resolve(false)
+      if (reconnectTimer !== undefined) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = undefined
+      }
+      failedAttempts = 0
+      connectedAt = undefined
+      setState('connecting')
+      settling = connectGeneration(false)
+      return Promise.resolve(true)
+    },
+    subscribe(listener): () => void {
+      observers.add(listener)
+      return () => { observers.delete(listener) }
+    },
+  }
+
   return {
     ready,
+    handle,
     instructions: () => serverInstructions,
     resources: {
       async request(request, exec): Promise<JsonValue> {
@@ -425,6 +481,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     },
     async dispose(): Promise<void> {
       disposed = true
+      observers.clear()
       serverInstructions = ''
       if (reconnectTimer !== undefined) {
         clearTimeout(reconnectTimer)

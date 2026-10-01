@@ -11,6 +11,7 @@ import Hmr from '@deepseek-ai/dsh-hmr'
 import {
   boot, initProfile, loadProfileDirectory, readProfileManifest, readProfilePatches, type ProfileContext,
 } from '@deepseek-ai/dsh-app-boot'
+import McpStatus, { type McpServerStatus } from '@deepseek-ai/dsh-mcp-status'
 import McpServersController from '../src/index.ts'
 import type { McpEntryId, McpHttpSpec, McpStdioSpec } from '../src/types.ts'
 
@@ -33,7 +34,22 @@ vi.mock('@deepseek-ai/dsh-app-boot', async (importOriginal) => {
 const unreachable: McpHttpSpec = { transport: 'streamable-http', serverName: 'web', url: 'http://127.0.0.1:9/mcp', headers: {} }
 const stdio: McpStdioSpec = { transport: 'stdio', serverName: 'files', command: 'mcp-files-test-missing', args: ['--root', '/tmp'], env: {} }
 
-async function fixture(reload: 'live' | 'startup' = 'live', patch = '[]\n', overlays: PatchOptions[] = []) {
+/** What the stub client publishes for one server; tests drive it to simulate the real client's state changes. */
+interface StubHandle {
+  current: McpServerStatus
+  reconnects: number
+  reconnectResult: boolean
+  set(next: Partial<McpServerStatus>): void
+}
+
+/** The stub clients that loaded, by server name. */
+function stubs(): Map<string, StubHandle> {
+  const registry: unknown = Reflect.get(globalThis, '__mcpStubs')
+  return registry as Map<string, StubHandle>
+}
+
+async function fixture(reload: 'live' | 'startup' = 'live', patch = '[]\n', overlays: PatchOptions[] = [], status = true) {
+  Reflect.set(globalThis, '__mcpStubs', new Map())
   const temporaryHome = mkdtempSync(join(tmpdir(), 'mcp-controller-'))
   let owner: Context | undefined
   onTestFinished(async () => { await owner?.fiber.dispose(); rmSync(temporaryHome, { recursive: true, force: true }) })
@@ -50,7 +66,29 @@ async function fixture(reload: 'live' | 'startup' = 'live', patch = '[]\n', over
   const client = join(dir, 'node_modules', '@deepseek-ai', 'dsh-mcp-client')
   mkdirSync(client, { recursive: true })
   writeFileSync(join(client, 'package.json'), JSON.stringify({ name: '@deepseek-ai/dsh-mcp-client', version: '1.0.0', type: 'module', main: 'index.mjs' }))
-  writeFileSync(join(client, 'index.mjs'), 'export const name = "mcp-client"\nexport function apply(ctx, config) { ctx.provide(`mcpProbe_${config.serverName}`, config) }\n')
+  writeFileSync(join(client, 'index.mjs'), [
+    'export const name = "mcp-client"',
+    'export function apply(ctx, config) {',
+    '  ctx.provide(`mcpProbe_${config.serverName}`, config)',
+    '  const listeners = new Set()',
+    '  const handle = {',
+    "    current: { serverName: config.serverName, state: 'connected', attempt: 0, maxAttempts: 10, toolCount: 1 },",
+    '    reconnects: 0,',
+    '    reconnectResult: true,',
+    '    set(next) { handle.current = { ...handle.current, ...next }; for (const listener of listeners) listener() },',
+    '  }',
+    '  globalThis.__mcpStubs.set(config.serverName, handle)',
+    '  ctx.inject([\'mcpStatus\'], (inner) => {',
+    '    inner.mcpStatus.register(config.serverName, {',
+    '      status: () => handle.current,',
+    "      tools: () => [{ name: 'echo', publicName: `mcp__${config.serverName}__echo`, description: 'Echo it', parameters: [] }],",
+    '      reconnect: async () => { handle.reconnects += 1; return handle.reconnectResult },',
+    '      subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },',
+    '    })',
+    '  })',
+    '}',
+    '',
+  ].join('\n'))
   writeFileSync(join(dir, 'package.json'), JSON.stringify(readProfileManifest('test', dir)))
   writeFileSync(join(dir, 'cordis.yml'), '[]\n')
   const patchPath = join(dir, 'cordis.patch.yml')
@@ -71,6 +109,7 @@ async function fixture(reload: 'live' | 'startup' = 'live', patch = '[]\n', over
     await ctx.plugin(Hmr, { root: [], ignored: [], debounce: 0 })
     await ctx.hmr.runExclusive(async () => {})
   }
+  if (status) await ctx.plugin(McpStatus)
   const changes: unknown[] = []
   ctx.on('plugin-manager/changed', (change) => { changes.push(change) })
   return { ctx, controller: ctx.mcpServersController, patchPath, read: () => readFileSync(patchPath, 'utf8'), changes }
@@ -309,4 +348,60 @@ it('leaves a malformed patch untouched', async () => {
   const result = await controller.upsert(unreachable)
   expect(result).toMatchObject({ changed: false, application: 'failed', error: { code: 'unreadable-patch' } })
   expect(read()).toBe('{ not: a sequence }\n')
+})
+
+it('lists each row with the live status its client publishes', async () => {
+  const { controller } = await fixture()
+  await controller.upsert(unreachable)
+  const [row] = await controller.list()
+  expect(row?.status).toMatchObject({ serverName: 'web', state: 'connected', toolCount: 1 })
+  stubs().get('web')?.set({ state: 'reconnecting', attempt: 2, error: 'refused' })
+  expect((await controller.list())[0]?.status).toMatchObject({ state: 'reconnecting', attempt: 2, error: 'refused' })
+})
+
+it('lists a row without a status while its plugin is off or no status service is mounted', async () => {
+  const off = await fixture()
+  await off.controller.upsert(unreachable)
+  await off.controller.setEnabled(id('mcp-web'), false)
+  expect((await off.controller.list())[0]?.status).toBeUndefined()
+
+  const none = await fixture('live', '[]\n', [], false)
+  await none.controller.upsert(unreachable)
+  expect((await none.controller.list())[0]?.status).toBeUndefined()
+  expect(await none.controller.tools(id('mcp-web'))).toEqual({ tools: [] })
+  expect(await none.controller.reconnectServer(id('mcp-web'))).toEqual({ started: false })
+})
+
+it('serves one server\'s tools with its state, and nothing for an unknown row', async () => {
+  const { controller } = await fixture()
+  await controller.upsert(unreachable)
+  const result = await controller.tools(id('mcp-web'))
+  expect(result.status).toMatchObject({ state: 'connected' })
+  expect(result.tools).toEqual([{ name: 'echo', publicName: 'mcp__web__echo', description: 'Echo it', parameters: [] }])
+  expect(await controller.tools(id('missing'))).toEqual({ tools: [] })
+})
+
+it('asks the client to reconnect and reports whether an attempt started', async () => {
+  const { controller } = await fixture()
+  await controller.upsert(unreachable)
+  expect(await controller.reconnectServer(id('mcp-web'))).toEqual({ started: true })
+  expect(stubs().get('web')?.reconnects).toBe(1)
+  const handle = stubs().get('web')
+  if (handle !== undefined) handle.reconnectResult = false
+  expect(await controller.reconnectServer(id('mcp-web'))).toEqual({ started: false })
+  expect(await controller.reconnectServer(id('missing'))).toEqual({ started: false })
+})
+
+it('announces a burst of status changes once, after the burst', async () => {
+  const { controller, changes } = await fixture()
+  await controller.upsert(unreachable)
+  changes.length = 0
+  const handle = stubs().get('web')
+  handle?.set({ state: 'reconnecting' })
+  handle?.set({ state: 'failed' })
+  handle?.set({ state: 'connecting' })
+  expect(changes).toEqual([])
+  await vi.waitFor(() => { expect(changes).toEqual([{ reason: 'plugin' }]) }, { timeout: 2000 })
+  await new Promise(resolve => setTimeout(resolve, 400))
+  expect(changes).toHaveLength(1)
 })

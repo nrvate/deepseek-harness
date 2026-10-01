@@ -76,6 +76,8 @@ flowchart LR
   pkg_api_settings_controller["api-settings-controller"]
   svc_credentialsController["ctx.credentialsController<br/>Host credential-surface Remote controller"]
   svc_settingsController["ctx.settingsController<br/>Host settings-surface Remote controller"]
+  pkg_mcp_status["mcp-status"]
+  svc_mcpStatus["ctx.mcpStatus<br/>Live MCP server connection state"]
   pkg_api_mcp_controller["api-mcp-controller"]
   svc_mcpServersController["ctx.mcpServersController<br/>Host MCP server Remote controller"]
   pkg_api_workspace_files["api-workspace-files"]
@@ -354,7 +356,9 @@ flowchart LR
   pkg_lsp --> svc_lsp
   pkg_lsp_stdio --> svc_lsp
   pkg_mcp_client --> svc_mcpResources
+  pkg_mcp_client --> svc_mcpStatus
   pkg_mcp_resources --> svc_mcpResources
+  pkg_mcp_status --> svc_mcpStatus
   pkg_message_feedback --> svc_messageFeedback
   pkg_office_to_pdf --> svc_officeToPdf
   pkg_otel --> svc_otel
@@ -482,6 +486,7 @@ flowchart LR
   svc_llm --> pkg_compaction_basic
   svc_lsp --> pkg_tool_lsp
   svc_mcpResources --> pkg_mcp_resources
+  svc_mcpStatus --> pkg_api_mcp_controller
   svc_officeToPdf --> pkg_client_ui_sidebar_documentpreview
   svc_otel --> pkg_host_product_telemetry_otel
   svc_otel --> pkg_session_telemetry_otel
@@ -603,6 +608,7 @@ flowchart LR
 | `ctx.jobController` | `core` | [`api-job-controller`](../packages/api/job-controller) | - | - | - | Streams one background job's observation record over the generated Remote namespace; the roster stays on the session control stream. |
 | `ctx.credentialsController` | `core` | [`api-settings-controller`](../packages/api/settings-controller) | - | - | - | Projects the credential-reference seam onto the generated Remote namespace: batch fan-out, view projection, and refusal mapping live here, not on the seam Definition. |
 | `ctx.settingsController` | `core` | [`api-settings-controller`](../packages/api/settings-controller) | - | - | - | Projects the user-settings seam onto the generated Remote namespace: the read is always redacted and every refusal is classified here, not on the seam Definition. |
+| `ctx.mcpStatus` | `seam` | [`mcp-status`](../packages/mcp/mcp-status) | [`mcp-client`](../packages/mcp/mcp-client) | [`api-mcp-controller`](../packages/api/mcp-controller) | - | Each MCP client registers a handle reading its own connection state and tools; management surfaces read them and the reconnect action. |
 | `ctx.mcpServersController` | `core` | [`api-mcp-controller`](../packages/api/mcp-controller) | - | - | - | Adds, edits, enables, and removes MCP server rows in the profile patch; validation, secret handling, and rollback live here, not in the Plugins page. |
 | `ctx.workspaceFiles` | `core` | [`api-workspace-files`](../packages/api/workspace-files) | - | - | - | Serves stat, paged text, byte windows, directory listings, and the change feed for files inside a Session's workspace root, confined by lstat, containment, and a stat re-check. |
 | `ctx.workspaceChanges` | `core` | [`workspace-changes`](../packages/deliverables/workspace-changes) | - | - | - | Serves the summary each workspace/changes event announced and each listed file's turn-start and turn-end comparison, by Session and event sequence, until that Session is disposed; the log carries only the turn. |

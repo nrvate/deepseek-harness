@@ -163,10 +163,11 @@ Remote owner of the profile's MCP server rows.
 
 /**
  * Remove one server row from the profile patch.
+ * The name is not `remove`: a Remote method may not share a name with a member of its namespace service.
  * @param id - row id returned by `list`.
  * @returns the persisted change and whether the running profile applied it.
  */
-@Remote remove(id: McpEntryId): Promise<McpChangeResult>
+@Remote removeServer(id: McpEntryId): Promise<McpChangeResult>
 
 /**
  * Enable or disable one server row the profile patch owns.
@@ -175,7 +176,87 @@ Remote owner of the profile's MCP server rows.
  * @returns the persisted change and whether the running profile applied it.
  */
 @Remote setEnabled(id: McpEntryId, enabled: boolean): Promise<McpChangeResult>
+
+/**
+ * Read the tools one server offers, with its connection state.
+ * @param id - row id returned by `list`.
+ * @returns the tools registered from the server right now; empty when it is not connected or has no client.
+ */
+@Remote async tools(id: McpEntryId): Promise<McpToolsResult>
+
+/**
+ * Ask one server's client to connect now instead of waiting out its retry delay, restarting its retry budget.
+ * @param id - row id returned by `list`.
+ * @returns whether a new attempt started.
+ */
+@Remote async reconnectServer(id: McpEntryId): Promise<McpReconnectResult>
 ```
 
 Source: [`packages/api/mcp-controller/src/index.ts`](../../packages/api/mcp-controller/src/index.ts)
+
+<a id="ctxmcpstatus--mcpstatusruntime"></a>
+
+### `ctx.mcpStatus` — `McpStatusRuntime`
+
+The shared registry the MCP clients register into.
+
+```ts cordis-catalog
+/**
+ * Publish one server and relay its changes as `mcp-status/changed`.
+ * @param server - configured server name.
+ * @param handle - live reads and the reconnect action for the server.
+ * @returns the disposer that removes this registration.
+ */
+register(server: string, handle: McpServerHandle): () => void
+
+/**
+ * Read every registered server's state.
+ * @returns one status per registration, in registration order.
+ */
+list(): McpServerStatus[]
+
+/**
+ * Read one server's state.
+ * @param server - configured server name.
+ * @returns its status, or undefined when no client registered it.
+ */
+get(server: string): McpServerStatus | undefined
+
+/**
+ * Read one server's tools.
+ * @param server - configured server name.
+ * @returns the tools registered from it, empty when no client registered it.
+ */
+tools(server: string): readonly McpToolInfo[]
+
+/**
+ * Ask one server's client to connect now.
+ * @param server - configured server name.
+ * @returns whether a new attempt started; false for an unknown server or one already live or connecting.
+ */
+async reconnect(server: string): Promise<boolean>
+```
+
+Source: [`packages/mcp/mcp-status/src/index.ts`](../../packages/mcp/mcp-status/src/index.ts)
+
+<a id="mcp-status-events"></a>
+
+### `mcp-status/*` events
+
+<a id="mcp-statuschanged--emit"></a>
+
+#### `mcp-status/changed` — emit
+
+A registered server's connection state or tool list changed, or a server was registered or removed.
+
+```ts cordis-catalog
+/**
+ * A registered server's connection state or tool list changed, or a server was registered or removed.
+ * @mode emit
+ * @param server - the configured `serverName`.
+ */
+'mcp-status/changed'(server: string): void
+```
+
+Source: [`packages/mcp/mcp-status/src/index.ts`](../../packages/mcp/mcp-status/src/index.ts)
 <!-- END GENERATED cordis-surface -->

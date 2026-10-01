@@ -22,12 +22,13 @@ kind: "package-group"
 <a id="packages"></a>
 ## 包
 
-客户端拥有每个已配置连接；共享资源包为这些连接提供资源工具。
+客户端拥有每个已配置连接；共享资源包为这些连接提供资源工具，状态包报告每个连接的状态。
 
 | 包 | 提供的能力 |
 |---|---|
 | [`mcp-client/`](mcp-client/README.zh.md) | 连接一台 MCP 服务器，暴露其工具与指令，并提供其资源操作 |
 | [`mcp-resources/`](mcp-resources/README.zh.md) | 通过显式选择服务器的共享工具发现和读取资源 |
+| [`mcp-status/`](mcp-status/README.zh.md) | 已配置服务器的实时连接状态和工具列表，供管理界面使用 |
 
 -----
 

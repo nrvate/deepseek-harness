@@ -39,6 +39,9 @@
       "path": "../mcp-resources"
     },
     {
+      "path": "../mcp-status"
+    },
+    {
       "path": "../../core/system-prompt"
     }
   ]

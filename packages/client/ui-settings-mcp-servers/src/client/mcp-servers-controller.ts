@@ -6,7 +6,7 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the ctx.remote merge into this program.
 import type {
-  McpChangeResult, McpEntryId, McpErrorCode, McpServerInfo, McpServerSpec, McpValue,
+  McpChangeResult, McpEntryId, McpErrorCode, McpServerInfo, McpServerSpec, McpServerStatus, McpToolInfo, McpValue,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 
@@ -68,6 +68,16 @@ export interface RemovalState {
   readonly saving: boolean
 }
 
+/** The tools dialog: one server's tools as the Host last reported them. */
+export interface ToolsState {
+  /** The server the dialog is about, as listed when it opened. */
+  readonly row: McpServerInfo
+  readonly status: 'loading' | 'ready' | 'failed'
+  readonly tools: readonly McpToolInfo[]
+  /** The connection state the tools were read under. */
+  readonly connection: McpServerStatus | undefined
+}
+
 /** What the last action leaves to say, shown as a toast; `seq` tells one showing from the next. */
 export interface McpNotice {
   readonly kind: 'saved' | 'removed' | 'enabled' | 'disabled' | 'failed' | 'refresh-failed'
@@ -84,6 +94,7 @@ export interface McpServersState {
   readonly pending: string | null
   readonly editor: EditorState | null
   readonly removal: RemovalState | null
+  readonly tools: ToolsState | null
   readonly notice: McpNotice | null
 }
 
@@ -112,6 +123,9 @@ export interface McpServersFace {
   cancelConfirm: () => void
   toggle: (id: McpEntryId, enabled: boolean) => void
   askRemove: (id: McpEntryId) => void
+  openTools: (id: McpEntryId) => void
+  closeTools: () => void
+  reconnect: (id: McpEntryId) => void
   cancelRemove: () => void
   confirmRemove: () => void
   dismissNotice: () => void
@@ -208,7 +222,7 @@ export class McpServersController {
   /** @param ctx - the page plugin's context, whose `remote.mcpServers` namespace answers. */
   constructor(private readonly ctx: ClientContext) {
     this.store = createSnapshotStore<McpServersState>({
-      status: 'idle', rows: [], pending: null, editor: null, removal: null, notice: null,
+      status: 'idle', rows: [], pending: null, editor: null, removal: null, tools: null, notice: null,
     })
   }
 
@@ -254,6 +268,9 @@ export class McpServersController {
     if (this.disposed || generation !== this.generation) return
     if (result.ok) {
       this.patch({ status: 'ready', rows: result.value })
+      // An open tools dialog follows the state the rows just reported.
+      const open = this.getSnapshot().tools
+      if (open !== null) await this.readTools(open.row)
     } else if (this.getSnapshot().status === 'ready') {
       this.notify('refresh-failed')
     } else {
@@ -285,6 +302,9 @@ export class McpServersController {
       toggle: (id, enabled) => { void this.toggle(id, enabled) },
       askRemove: (id) => { this.askRemove(id) },
       cancelRemove: () => { this.patch({ removal: null }) },
+      openTools: (id) => { this.openTools(id) },
+      closeTools: () => { this.patch({ tools: null }) },
+      reconnect: (id) => { void this.reconnect(id) },
       confirmRemove: () => { void this.confirmRemove() },
       dismissNotice: () => { this.patch({ notice: null }) },
     }
@@ -371,6 +391,34 @@ export class McpServersController {
     if (this.disposed) return
     this.patch({ pending: null })
     this.settle(result.ok ? result.value : undefined, enabled ? 'enabled' : 'disabled')
+    await this.read()
+  }
+
+  private openTools(id: McpEntryId): void {
+    const row = this.getSnapshot().rows.find(candidate => candidate.id === id)
+    if (row === undefined) return
+    this.patch({ tools: { row, status: 'loading', tools: [], connection: row.status } })
+    void this.readTools(row)
+  }
+
+  private async readTools(row: McpServerInfo): Promise<void> {
+    const result = await this.ctx.remote.mcpServers.tools(row.id)
+    const open = this.getSnapshot().tools
+    if (this.disposed || open?.row.id !== row.id) return
+    this.patch({
+      tools: result.ok
+        ? { row: open.row, status: 'ready', tools: result.value.tools, connection: result.value.status }
+        : { ...open, status: 'failed' },
+    })
+  }
+
+  private async reconnect(id: McpEntryId): Promise<void> {
+    if (this.getSnapshot().pending !== null) return
+    this.patch({ pending: id })
+    const result = await this.ctx.remote.mcpServers.reconnectServer(id)
+    if (this.disposed) return
+    this.patch({ pending: null })
+    if (!result.ok) this.notify('failed')
     await this.read()
   }
 

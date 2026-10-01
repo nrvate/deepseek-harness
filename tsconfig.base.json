@@ -39,6 +39,8 @@
       "@deepseek-ai/dsh-api-account-controller/types": ["./packages/api/account-controller/src/types.ts"],
       "@deepseek-ai/dsh-api-mcp-controller": ["./packages/api/mcp-controller/src/index.ts"],
       "@deepseek-ai/dsh-api-mcp-controller/types": ["./packages/api/mcp-controller/src/types.ts"],
+      "@deepseek-ai/dsh-mcp-status": ["./packages/mcp/mcp-status/src/index.ts"],
+      "@deepseek-ai/dsh-mcp-status/types": ["./packages/mcp/mcp-status/src/types.ts"],
       "@deepseek-ai/dsh-deepseek-account-platform": ["./packages/credentials/deepseek-account-platform/src/index.ts"],
       "@deepseek-ai/dsh-deepseek-account-platform/types": ["./packages/credentials/deepseek-account-platform/src/types.ts"],
       "@deepseek-ai/dsh-deepseek-account": ["./packages/credentials/deepseek-account/src/index.ts"],

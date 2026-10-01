@@ -6,6 +6,9 @@ export type McpServersLocaleKey =
   | 'add' | 'empty' | 'loadFailed' | 'retry'
   | 'transportStdio' | 'transportHttp'
   | 'phaseLoaded' | 'phaseLoading' | 'phaseFailed' | 'phaseOff'
+  | 'stateConnected' | 'stateConnecting' | 'stateReconnecting' | 'stateFailed' | 'reconnect'
+  | 'toolsButton' | 'toolsTitle' | 'toolsIntro' | 'toolsFilter' | 'toolsEmpty' | 'toolsFailed' | 'toolsNoMatch'
+  | 'toolNoDescription' | 'toolNoParameters' | 'paramName' | 'paramType' | 'paramRequired' | 'paramOptional' | 'paramDescription'
   | 'enableServer' | 'edit' | 'remove'
   | 'readOnlyOutside' | 'readOnlyExpression' | 'readOnlyCredentials'
   | 'addTitle' | 'editTitle' | 'close' | 'cancel' | 'save' | 'saving'
@@ -38,6 +41,25 @@ export const en: Record<McpServersLocaleKey, string> = {
   phaseLoading: 'Loading',
   phaseFailed: 'Failed to load',
   phaseOff: 'Off',
+  stateConnected: 'Connected',
+  stateConnecting: 'Connecting',
+  stateReconnecting: 'Reconnecting ({attempt}/{max})',
+  stateFailed: 'Not connected',
+  reconnect: 'Reconnect',
+  toolsButton: 'Tools ({count})',
+  toolsTitle: 'Tools of {name}',
+  toolsIntro: 'The model sees each tool under the name shown. Select a tool to read its help.',
+  toolsFilter: 'Filter tools',
+  toolsEmpty: 'This server offers no tools right now.',
+  toolsFailed: 'Could not read the tools.',
+  toolsNoMatch: 'No tool matches the filter.',
+  toolNoDescription: 'The server gives no description.',
+  toolNoParameters: 'Takes no parameters.',
+  paramName: 'Parameter',
+  paramType: 'Type',
+  paramRequired: 'Required',
+  paramOptional: 'Optional',
+  paramDescription: 'Description',
   enableServer: 'Enable {name}',
   edit: 'Edit',
   remove: 'Remove',
@@ -120,6 +142,25 @@ export const zh: Record<McpServersLocaleKey, string> = {
   phaseLoading: '加载中',
   phaseFailed: '加载失败',
   phaseOff: '已关闭',
+  stateConnected: '已连接',
+  stateConnecting: '连接中',
+  stateReconnecting: '重连中（{attempt}/{max}）',
+  stateFailed: '未连接',
+  reconnect: '重新连接',
+  toolsButton: '工具（{count}）',
+  toolsTitle: '{name} 的工具',
+  toolsIntro: '模型以所示名称看到每个工具。选择一个工具即可查看其说明。',
+  toolsFilter: '筛选工具',
+  toolsEmpty: '该服务器目前没有提供工具。',
+  toolsFailed: '无法读取工具。',
+  toolsNoMatch: '没有匹配筛选条件的工具。',
+  toolNoDescription: '服务器没有提供说明。',
+  toolNoParameters: '不需要参数。',
+  paramName: '参数',
+  paramType: '类型',
+  paramRequired: '必填',
+  paramOptional: '可选',
+  paramDescription: '说明',
   enableServer: '启用 {name}',
   edit: '编辑',
   remove: '移除',

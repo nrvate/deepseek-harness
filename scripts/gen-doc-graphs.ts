@@ -288,6 +288,15 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Projects the user-settings seam onto the generated Remote namespace: the read is always redacted and every refusal is classified here, not on the seam Definition.',
   },
   {
+    key: 'mcpStatus',
+    pkg: 'mcp-status',
+    title: 'Live MCP server connection state',
+    mode: 'seam',
+    implementations: ['mcp-client'],
+    consumers: ['api-mcp-controller'],
+    note: 'Each MCP client registers a handle reading its own connection state and tools; management surfaces read them and the reconnect action.',
+  },
+  {
     key: 'mcpServersController',
     pkg: 'api-mcp-controller',
     title: 'Host MCP server Remote controller',

@@ -10,6 +10,7 @@ import type { McpServerInfo } from '@deepseek-ai/dsh-api-remotes/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { McpServerEditor, RemoveDialog } from './McpServerEditor.tsx'
+import { McpToolsDialog } from './McpToolsDialog.tsx'
 import type { McpServersFace } from './mcp-servers-controller.ts'
 import type { McpServersLocaleKey } from './locales.ts'
 import css from './McpServers.module.css'
@@ -58,6 +59,7 @@ function McpServersPage(props: McpServersCardProps): ReactNode {
       <ServerList {...props} status={state.status} rows={state.rows} pending={state.pending} />
       <McpServerEditor {...props} editor={state.editor} />
       <RemoveDialog {...props} removal={state.removal} />
+      <McpToolsDialog {...props} tools={state.tools} />
     </div>
   )
 }
@@ -84,28 +86,52 @@ function ServerList(props: McpServersCardProps & {
       {rows.length === 0
         ? <p className={css.empty}>{t('empty')}</p>
         : <ul className={css.list}>{rows.map(row => <ServerRow key={row.id} {...props} row={row} />)}</ul>}
-      <p className={css.note}>{t('statusNote')}</p>
+      {rows.some(row => row.status === undefined) && <p className={css.note}>{t('statusNote')}</p>}
     </>
   )
 }
 
-function ServerRow(props: McpServersCardProps & { row: McpServerInfo; pending: string | null }): ReactNode {
-  const { t, row, pending, toggle, openEdit, askRemove } = props
+/** The dot and label of a row: its client's connection state when it reports one, else the plugin's load phase. */
+function stateOf(row: McpServerInfo, t: McpServersCardProps['t']): { dot: StateDotState; text: string } {
+  const { status } = row
+  if (row.enabled && status !== undefined) {
+    switch (status.state) {
+      case 'connected': return { dot: 'done', text: t('stateConnected') }
+      case 'connecting': return { dot: 'ongoing', text: t('stateConnecting') }
+      case 'reconnecting': return { dot: 'warning', text: t('stateReconnecting', { attempt: status.attempt, max: status.maxAttempts }) }
+      case 'failed': return { dot: 'error', text: t('stateFailed') }
+    }
+  }
   const phase = PHASE[row.enabled ? row.fiberPhase ?? 'off' : 'off']
+  return { dot: phase.dot, text: t(phase.key) }
+}
+
+function ServerRow(props: McpServersCardProps & { row: McpServerInfo; pending: string | null }): ReactNode {
+  const { t, row, pending, toggle, openEdit, askRemove, openTools, reconnect } = props
+  const state = stateOf(row, t)
   const name = row.serverName === '' ? row.id : row.serverName
+  const connection = row.enabled ? row.status : undefined
+  const retryable = connection?.state === 'failed' || connection?.state === 'reconnecting'
   return (
     <li className={css.row}>
-      <StateDot state={phase.dot} />
+      <StateDot state={state.dot} />
       <div className={css.rowBody}>
         <div className={css.rowTitle}>
           <span className={css.name}>{name}</span>
           <Tag>{t(row.transport === 'stdio' ? 'transportStdio' : 'transportHttp')}</Tag>
-          <Tag tone={phase.dot === 'error' ? 'danger' : 'outline'}>{t(phase.key)}</Tag>
+          <Tag tone={state.dot === 'error' ? 'danger' : state.dot === 'warning' ? 'warning' : 'outline'}>{state.text}</Tag>
         </div>
         <div className={css.summary}>{row.summary}</div>
+        {connection?.error !== undefined && connection.state !== 'connected' && <div className={css.problem}>{connection.error}</div>}
         {row.readOnlyReason !== undefined && <div className={css.reason}>{t(REASON[row.readOnlyReason])}</div>}
       </div>
       <div className={css.actions}>
+        {connection !== undefined && connection.toolCount > 0 && (
+          <Button variant="ghost" size="sm" onClick={() => { openTools(row.id) }}>{t('toolsButton', { count: connection.toolCount })}</Button>
+        )}
+        {retryable && (
+          <Button variant="ghost" size="sm" disabled={pending !== null} onClick={() => { reconnect(row.id) }}>{t('reconnect')}</Button>
+        )}
         {row.spec !== undefined && (
           <Button variant="ghost" size="sm" onClick={() => { openEdit(row.id) }}>{t('edit')}</Button>
         )}

@@ -12,6 +12,9 @@ import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import { launchWebScaffold, watchConsole, type WebScaffold } from './scaffold.ts'
 import { ZH_BROWSER_LOCALE, saveFailureShot } from './support.ts'
 
+/** The official reference MCP server, installed for the mcp-client package's own tests. */
+const EVERYTHING = fileURLToPath(new URL('../../../packages/mcp/mcp-client/node_modules/.bin/mcp-server-everything', import.meta.url))
+
 describe('web e2e: MCP servers page', () => {
   let scaffold: WebScaffold
   let browser: Browser
@@ -79,7 +82,8 @@ describe('web e2e: MCP servers page', () => {
     expect(saved).toContain('Authorization: !!js "`Bearer ${process.env.E2E_MCP_TOKEN}`"')
     const row = panel.getByRole('listitem').filter({ hasText: 'web' })
     await row.getByText('HTTP 端点', { exact: true }).waitFor({ timeout: 10_000 })
-    await row.getByText('已加载', { exact: true }).waitFor({ timeout: 15_000 })
+    // Nothing listens on that port, so the client reports the failed attempt instead of "loaded".
+    await row.getByText(/^(重连中|未连接)/).first().waitFor({ timeout: 15_000 })
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
@@ -176,6 +180,55 @@ describe('web e2e: MCP servers page', () => {
     await removal.waitFor({ state: 'detached', timeout: 15_000 })
     await expect.poll(async () => (await patch()).includes('id: mcp-web'), { timeout: 15_000 }).toBe(false)
     expect(await patch()).toContain('id: mcp-files')
+    expect(tripwire.pageErrors).toEqual([])
+  }, 90_000)
+
+  it('reports a real server as connected and shows its tools with expandable help', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-mcp-servers-tools'))
+    const panel = await openPage()
+    await panel.getByRole('button', { name: '添加服务器', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '添加 MCP 服务器' })
+    await dialog.getByLabel('名称', { exact: true }).fill('everything')
+    await dialog.getByLabel('命令', { exact: true }).fill(EVERYTHING)
+    await dialog.getByLabel('参数', { exact: true }).fill('stdio')
+    await dialog.getByRole('button', { name: '保存', exact: true }).click()
+    const confirm = page.getByRole('dialog', { name: '运行此命令？' })
+    await confirm.getByLabel('我信任此命令').check()
+    await confirm.getByRole('button', { name: '保存服务器', exact: true }).click()
+    await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 15_000 })
+
+    const row = panel.getByRole('listitem').filter({ hasText: 'everything' }).first()
+    await row.getByText('已连接', { exact: true }).waitFor({ timeout: 60_000 })
+    await row.getByRole('button', { name: /^工具（\d+）$/ }).click()
+
+    const tools = page.getByRole('dialog', { name: 'everything 的工具' })
+    const echo = tools.getByText('mcp__everything__echo', { exact: true })
+    await echo.waitFor({ timeout: 10_000 })
+    const details = tools.locator('details').filter({ has: page.getByText('mcp__everything__echo', { exact: true }) })
+    expect(await details.evaluate(element => (element as HTMLDetailsElement).open)).toBe(false)
+    await echo.click()
+    expect(await details.evaluate(element => (element as HTMLDetailsElement).open)).toBe(true)
+    await details.getByRole('columnheader', { name: '参数' }).waitFor()
+    await details.getByText('message', { exact: true }).waitFor()
+
+    await tools.getByLabel('筛选工具').fill('zzz-no-such-tool')
+    await tools.getByText('没有匹配筛选条件的工具。').waitFor()
+    await tools.getByLabel('筛选工具').fill('echo')
+    await tools.getByText('mcp__everything__echo', { exact: true }).waitFor()
+    await tools.getByRole('button', { name: '关闭', exact: true }).last().click()
+    await tools.waitFor({ state: 'detached' })
+    expect(tripwire.pageErrors).toEqual([])
+  }, 120_000)
+
+  it('shows why a server that cannot connect is not connected, and reconnects on request', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-mcp-servers-failed-state'))
+    const panel = await openPage()
+    const row = panel.getByRole('listitem').filter({ hasText: 'files' }).first()
+    // `mcp-e2e-missing` does not exist, so every attempt fails and the row says so.
+    await row.getByText(/^(重连中|未连接)/).first().waitFor({ timeout: 30_000 })
+    await row.getByRole('button', { name: '重新连接', exact: true }).waitFor()
+    await row.getByRole('button', { name: '重新连接', exact: true }).click()
+    await row.getByText(/^(连接中|重连中|未连接)/).first().waitFor({ timeout: 30_000 })
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 })

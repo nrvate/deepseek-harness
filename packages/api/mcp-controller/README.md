@@ -26,10 +26,12 @@ The [web bundle](../../bundle/web-app/README.md) mounts the controller as `mcp-s
 
 | Method | Effect |
 |---|---|
-| `list()` | Every MCP row of the running profile, including rows from bundles, the home patch, and command-line overlays, with `owned`, `readOnlyReason`, `enabled`, and the live `fiberPhase` |
+| `list()` | Every MCP row of the running profile, including rows from bundles, the home patch, and command-line overlays, with `owned`, `readOnlyReason`, `enabled`, the live `fiberPhase`, and the client's `status` (connection state, last error, attempt count, tool count) when the [status service](../../mcp/mcp-status/README.md) is mounted |
 | `upsert(spec, { id?, confirmedCommand? })` | Add `mcp-<serverName>`, or replace the managed keys of the row `id` names |
 | `setEnabled(id, enabled)` | Write `disabled` on a row the profile patch owns |
 | `removeServer(id)` | Delete a row the profile patch owns |
+| `tools(id)` | The tools the server offers right now, with its connection state |
+| `reconnectServer(id)` | Ask the server's client to connect now; returns whether an attempt started |
 
 Every write returns `{ changed, application, target, error?, warnings? }`. `application` is `applied` after the Loader reconciled the change, `restart-required` when the profile has no hot reload, and `failed` with an `error.code` otherwise: `invalid-config`, `duplicate-server`, `confirmation-required`, `literal-secret`, `unknown-server`, `read-only`, `unreadable-patch`, or `operation-error`. A failed change leaves the patch file as it was.
 
@@ -71,7 +73,7 @@ A change that adds, removes, or reconnects a server changes the tool definitions
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- Connection state is not reported: a saved server whose first connection fails is listed with `fiberPhase: 'active'`, and its error appears only in the logs.
+- Connection state needs the status service: without it a row has no `status`, and a saved server whose first connection fails is listed with `fiberPhase: 'active'`.
 - Only rows the profile patch inserts can be edited, enabled, disabled, or removed; a row with a `!!js` value outside `env` and `headers` can be removed or toggled but not edited.
 - The form manages `transport`, `serverName`, the command or URL, `args`, `env`, `headers`, `cwd`, `toolCallTimeoutMs`, and `failOnStartupError`. Other keys such as `reconnect` stay as the file holds them.
 - A URL that carries a token in its query string is stored as typed and shown in the editable `spec`; the list summary omits the query.
@@ -83,6 +85,6 @@ A change that adds, removes, or reconnects a server changes the tool definitions
 <details>
 <summary>Working context for maintainers — click to expand</summary>
 
-The [MCP servers on the Plugins page](../../../.agents/notes/implemented/feature/2026-10-01-mcp-servers-on-the-plugins-page.md) Agent Note records the design and the rejected alternatives. A status feed from `mcp-client` is the open follow-up.
+The [MCP servers on the Plugins page](../../../.agents/notes/implemented/feature/2026-10-01-mcp-servers-on-the-plugins-page.md) Agent Note records the design and the rejected alternatives.
 
 </details>

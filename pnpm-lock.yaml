@@ -1187,6 +1187,9 @@ importers:
       '@deepseek-ai/dsh-mcp-client':
         specifier: workspace:*
         version: link:../../mcp/mcp-client
+      '@deepseek-ai/dsh-mcp-status':
+        specifier: workspace:*
+        version: link:../../mcp/mcp-status
       '@deepseek-ai/dsh-plugin-manager':
         specifier: workspace:*
         version: link:../../boot/plugin-manager
@@ -2054,6 +2057,9 @@ importers:
       '@deepseek-ai/dsh-mcp-resources':
         specifier: workspace:*
         version: link:../../mcp/mcp-resources
+      '@deepseek-ai/dsh-mcp-status':
+        specifier: workspace:*
+        version: link:../../mcp/mcp-status
       '@deepseek-ai/dsh-otel':
         specifier: workspace:*
         version: link:../../telemetry/otel
@@ -10098,6 +10104,9 @@ importers:
       '@deepseek-ai/dsh-mcp-resources':
         specifier: workspace:*
         version: link:../mcp-resources
+      '@deepseek-ai/dsh-mcp-status':
+        specifier: workspace:*
+        version: link:../mcp-status
       '@deepseek-ai/dsh-scope':
         specifier: workspace:*
         version: link:../../core/scope
@@ -10156,6 +10165,12 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: workspace:*
         version: link:../../core/tools
+
+  packages/mcp/mcp-status:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:~
+        version: link:../../../vendor/cordis
 
   packages/plan/plan-mode:
     dependencies:

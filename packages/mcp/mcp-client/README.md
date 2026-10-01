@@ -92,6 +92,10 @@ The server's tools appear before the harness starts its first turn. When the ser
 
 When a server connection drops — for example a local server process crashes — the plugin reconnects automatically with delays that double from 500 ms up to 30 s and then refreshes the tool set; reconnect progress is visible in the logs. During an outage the last known tools stay listed but calls to them fail until the server recovers. After ten consecutive failed attempts the server's tools are removed and reconnection stops until you reload the configuration or restart the harness; a server that stays connected for a while resets that counter. Set `reconnect.enabled: false` to disable automatic reconnection — tools then stay listed but fail until you reload. Editing the configuration entry reloads the server connection in place, and unchanged names stay unchanged.
 
+### Connection state
+
+Where the shipped [status service](../mcp-status/README.md) is mounted, every connection publishes its state — connecting, connected, reconnecting (with the attempt count), or failed — with the last error and the tools it registered, and the Plugins page shows them. A failed or waiting connection can be asked to connect now, which skips the retry delay and restarts the attempt budget.
+
 -----
 
 <a id="understand-the-implementation"></a>

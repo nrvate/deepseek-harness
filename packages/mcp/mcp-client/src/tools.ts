@@ -23,6 +23,7 @@ import type { ToolDefinition, ToolExecution, ToolExecutionResult } from '@deepse
 import { assertSupportedJsonSchema } from '@deepseek-ai/dsh-tools'
 import type { JsonSchemaNode } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
+import type { McpToolInfo, McpToolParameter } from '@deepseek-ai/dsh-mcp-status'
 
 /** Resolved options relevant to tool bridging. */
 export interface ToolBridgeOptions {
@@ -30,6 +31,8 @@ export interface ToolBridgeOptions {
   registrationFailure: 'contain' | 'throw'
   serverName: string
   toolCallTimeoutMs: number
+  /** Told which tools a synchronization registered, once they are registered; empty after a rollback. */
+  onTools?: (tools: McpToolInfo[]) => void
 }
 
 /** State for one sync generation: the current set of disposers keyed by public name. */
@@ -86,6 +89,42 @@ export function publicToolName(serverName: string, rawName: string): string {
   return `${normalized.slice(0, MAX_PUBLIC_NAME_LENGTH - HASH_LENGTH - 1)}_${hash}`
 }
 
+/** `type` of one schema property, several joined with `|`, `any` when the schema gives none. */
+function schemaType(property: Record<string, unknown>): string {
+  const { type } = property
+  if (typeof type === 'string') return type
+  if (Array.isArray(type)) return type.filter((item): item is string => typeof item === 'string').join('|') || 'any'
+  return 'any'
+}
+
+/**
+ * Describe one server tool for display: its description and the parameters of its input schema.
+ * @param publicName - the name the model sees.
+ * @param tool - the server's tool definition.
+ * @returns the tool's name, description, and parameters.
+ */
+export function describeTool(
+  publicName: string,
+  tool: { name: string; description?: string | undefined; inputSchema: Record<string, unknown> },
+): McpToolInfo {
+  const properties = isPlainObject(tool.inputSchema.properties) ? tool.inputSchema.properties : {}
+  const required = Array.isArray(tool.inputSchema.required) ? tool.inputSchema.required : []
+  const parameters = Object.entries(properties).map(([name, property]): McpToolParameter => {
+    const schema = isPlainObject(property) ? property : {}
+    return {
+      name,
+      type: schemaType(schema),
+      required: required.includes(name),
+      description: typeof schema.description === 'string' ? schema.description : '',
+    }
+  })
+  return { name: tool.name, publicName, description: tool.description ?? '', parameters }
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 /**
  * Sync the MCP server's tool list into the harness ToolRuntime.
  *
@@ -118,6 +157,7 @@ export async function syncTools(
 ): Promise<ToolDisposers> {
   // Phase 1: fetch and build the next generation without touching the registry.
   const definitions = new Map<string, ToolDefinition>()
+  const infos: McpToolInfo[] = []
   const response = client.getServerCapabilities()?.tools === undefined
     ? { tools: [] }
     : await client.listTools(undefined, { cacheMode: 'refresh' })
@@ -128,6 +168,7 @@ export async function syncTools(
         `mcp-client(${opts.serverName}): server listed tool "${tool.name}" more than once — invalid tool list`,
       )
     }
+    infos.push(describeTool(publicName, tool))
     definitions.set(publicName, createMcpToolDefinition(ctx, {
       name: publicName,
       rawName: tool.name,
@@ -155,9 +196,11 @@ export async function syncTools(
     // sees either the full generation or none of it — never a partial set.
     for (const dispose of disposers.values()) dispose()
     ctx.logger.error(`mcp-client(${opts.serverName}): tool registration failed, no tools registered: ${String(error)}`)
+    opts.onTools?.([])
     if (opts.registrationFailure === 'throw') throw error
     return new Map()
   }
+  opts.onTools?.(infos)
   return disposers
 }
 

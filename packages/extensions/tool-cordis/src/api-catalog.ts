@@ -1509,8 +1509,8 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the persisted change and whether the running profile applied it.',
       },
       {
-        signature: '@Remote remove(id: McpEntryId): Promise<McpChangeResult>',
-        description: 'Remove one server row from the profile patch.',
+        signature: '@Remote removeServer(id: McpEntryId): Promise<McpChangeResult>',
+        description: 'Remove one server row from the profile patch. The name is not `remove`: a Remote method may not share a name with a member of its namespace service.',
         parameters: [{ name: 'id', description: 'row id returned by `list`.' }],
         returns: 'the persisted change and whether the running profile applied it.',
       },
@@ -1519,6 +1519,55 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Enable or disable one server row the profile patch owns.',
         parameters: [{ name: 'id', description: 'row id returned by `list`.' }, { name: 'enabled', description: 'whether the row loads.' }],
         returns: 'the persisted change and whether the running profile applied it.',
+      },
+      {
+        signature: '@Remote async tools(id: McpEntryId): Promise<McpToolsResult>',
+        description: 'Read the tools one server offers, with its connection state.',
+        parameters: [{ name: 'id', description: 'row id returned by `list`.' }],
+        returns: 'the tools registered from the server right now; empty when it is not connected or has no client.',
+      },
+      {
+        signature: '@Remote async reconnectServer(id: McpEntryId): Promise<McpReconnectResult>',
+        description: 'Ask one server\'s client to connect now instead of waiting out its retry delay, restarting its retry budget.',
+        parameters: [{ name: 'id', description: 'row id returned by `list`.' }],
+        returns: 'whether a new attempt started.',
+      },
+    ],
+  },
+  {
+    key: 'mcpStatus',
+    summary: 'The shared registry the MCP clients register into.',
+    description: 'The shared registry the MCP clients register into.',
+    methods: [
+      {
+        signature: 'register(server: string, handle: McpServerHandle): () => void',
+        description: 'Publish one server and relay its changes as `mcp-status/changed`.',
+        parameters: [{ name: 'server', description: 'configured server name.' }, { name: 'handle', description: 'live reads and the reconnect action for the server.' }],
+        returns: 'the disposer that removes this registration.',
+      },
+      {
+        signature: 'list(): McpServerStatus[]',
+        description: 'Read every registered server\'s state.',
+        parameters: [],
+        returns: 'one status per registration, in registration order.',
+      },
+      {
+        signature: 'get(server: string): McpServerStatus | undefined',
+        description: 'Read one server\'s state.',
+        parameters: [{ name: 'server', description: 'configured server name.' }],
+        returns: 'its status, or undefined when no client registered it.',
+      },
+      {
+        signature: 'tools(server: string): readonly McpToolInfo[]',
+        description: 'Read one server\'s tools.',
+        parameters: [{ name: 'server', description: 'configured server name.' }],
+        returns: 'the tools registered from it, empty when no client registered it.',
+      },
+      {
+        signature: 'async reconnect(server: string): Promise<boolean>',
+        description: 'Ask one server\'s client to connect now.',
+        parameters: [{ name: 'server', description: 'configured server name.' }],
+        returns: 'whether a new attempt started; false for an unknown server or one already live or connecting.',
       },
     ],
   },
@@ -4165,6 +4214,14 @@ export const EVENT_API: readonly EventApiEntry[] = [
     parameters: [{ name: 'options', description: 'the full request. A LOOP-built request carries the process-local {@link markAgentLoopRequest} identity and arrives deep-frozen (mutation throws): its content is a pure function of the session log (the reconstructability Agent Note), so listeners read it, never rewrite it. Hand-built calls do not carry that marker; callers own their request inputs and must keep them unchanged until the stream settles.' }],
   },
   {
+    name: 'mcp-status/changed',
+    mode: 'emit',
+    signature: '\'mcp-status/changed\'(server: string): void',
+    summary: 'A registered server\'s connection state or tool list changed, or a server was registered or removed.',
+    description: 'A registered server\'s connection state or tool list changed, or a server was registered or removed.',
+    parameters: [{ name: 'server', description: 'the configured `serverName`.' }],
+  },
+  {
     name: 'permission-presets/catalog-changed',
     mode: 'emit',
     signature: '\'permission-presets/catalog-changed\'(): void',
@@ -5733,6 +5790,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface McpChangeResult {\n    changed: boolean;\n    application: \'applied\' | \'restart-required\' | \'failed\';\n    target: string;\n    error?: McpError;\n    warnings?: string[];\n}',
   },
   {
+    name: 'McpConnectionState',
+    declaration: 'export type McpConnectionState = \'connecting\' | \'connected\' | \'reconnecting\' | \'failed\';',
+  },
+  {
     name: 'McpEntryId',
     declaration: 'export type McpEntryId = Branded<\'McpEntryId\'>;',
   },
@@ -5753,6 +5814,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type McpReadOnlyReason = \'unaddressable\' | \'custom-expression\' | \'embedded-credentials\';',
   },
   {
+    name: 'McpReconnectResult',
+    declaration: 'export interface McpReconnectResult {\n    started: boolean;\n}',
+  },
+  {
     name: 'McpResourceProvider',
     declaration: 'export interface McpResourceProvider {\n    request(request: McpResourceRequest, exec: ToolExecution): Promise<JsonValue>;\n}',
   },
@@ -5761,12 +5826,20 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export type McpResourceRequest = {\n    method: \'resources/list\' | \'resources/templates/list\';\n    cursor?: string;\n} | {\n    method: \'resources/read\';\n    uri: string;\n};',
   },
   {
+    name: 'McpServerHandle',
+    declaration: 'export interface McpServerHandle {\n    status(): McpServerStatus;\n    tools(): readonly McpToolInfo[];\n    reconnect(): Promise<boolean>;\n    subscribe(listener: () => void): () => void;\n}',
+  },
+  {
     name: 'McpServerInfo',
-    declaration: 'export interface McpServerInfo {\n    id: McpEntryId;\n    serverName: string;\n    transport: McpServerSpec[\'transport\'];\n    summary: string;\n    enabled: boolean;\n    fiberPhase: PluginFiberPhase;\n    spec?: McpServerSpec;\n    readOnlyReason?: McpReadOnlyReason;\n    owned: boolean;\n}',
+    declaration: 'export interface McpServerInfo {\n    id: McpEntryId;\n    serverName: string;\n    transport: McpServerSpec[\'transport\'];\n    summary: string;\n    enabled: boolean;\n    fiberPhase: PluginFiberPhase;\n    status?: McpServerStatus;\n    spec?: McpServerSpec;\n    readOnlyReason?: McpReadOnlyReason;\n    owned: boolean;\n}',
   },
   {
     name: 'McpServerSpec',
     declaration: 'export type McpServerSpec = McpStdioSpec | McpHttpSpec;',
+  },
+  {
+    name: 'McpServerStatus',
+    declaration: 'export interface McpServerStatus {\n    serverName: string;\n    state: McpConnectionState;\n    attempt: number;\n    maxAttempts: number;\n    error?: string;\n    connectedAt?: number;\n    toolCount: number;\n}',
   },
   {
     name: 'McpSpecBase',
@@ -5775,6 +5848,18 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'McpStdioSpec',
     declaration: 'export interface McpStdioSpec extends McpSpecBase {\n    transport: \'stdio\';\n    command: string;\n    args: string[];\n    env: Record<string, McpValue>;\n    cwd?: string;\n}',
+  },
+  {
+    name: 'McpToolInfo',
+    declaration: 'export interface McpToolInfo {\n    name: string;\n    publicName: string;\n    description: string;\n    parameters: readonly McpToolParameter[];\n}',
+  },
+  {
+    name: 'McpToolParameter',
+    declaration: 'export interface McpToolParameter {\n    name: string;\n    type: string;\n    required: boolean;\n    description: string;\n}',
+  },
+  {
+    name: 'McpToolsResult',
+    declaration: 'export interface McpToolsResult {\n    status?: McpServerStatus;\n    tools: readonly McpToolInfo[];\n}',
   },
   {
     name: 'McpUpsertOptions',

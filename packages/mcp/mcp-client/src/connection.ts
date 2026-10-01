@@ -93,6 +93,44 @@ export function resolveReconnectPolicy(config: ReconnectConfig | undefined, path
   return Object.freeze({ enabled, initialDelayMs, maxDelayMs, maxAttempts })
 }
 
+/**
+ * Reject server settings that no reconnect attempt can repair. Programmatic
+ * construction may bypass Schemastery normalization, so the bounds are
+ * re-judged here and a failure rejects the plugin instance at load instead of
+ * spending the reconnect budget.
+ *
+ * @param config - Resolved plugin config.
+ * @param path - Diagnostic prefix naming the server in thrown messages.
+ */
+export function validateServerConfig(config: Config, path: string): void {
+  if (!Number.isFinite(config.toolCallTimeoutMs) || config.toolCallTimeoutMs <= 0 || config.toolCallTimeoutMs > MAX_TIMER_DELAY_MS) {
+    throw new Error(`${path}.toolCallTimeoutMs must be a positive finite number no greater than ${MAX_TIMER_DELAY_MS}`)
+  }
+  if (config.maxInstructionBytes !== undefined && (!Number.isInteger(config.maxInstructionBytes) || config.maxInstructionBytes < 1)) {
+    throw new Error(`${path}.maxInstructionBytes must be a positive integer`)
+  }
+  switch (config.transport) {
+    case 'stdio':
+      if (config.command.trim() === '') throw new Error(`${path}.command must not be empty`)
+      break
+    case 'streamable-http': {
+      let url: URL
+      try {
+        url = new URL(config.url)
+      } catch (_error) {
+        throw new Error(`${path}.url is not a valid URL: ${JSON.stringify(config.url)}`)
+      }
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        throw new Error(`${path}.url must use http: or https:, got ${url.protocol}`)
+      }
+      break
+    }
+    /* v8 ignore next 2 -- transport is the closed Config discriminant */
+    default:
+      assertNever(config)
+  }
+}
+
 /** Result from the initial connection attempt, for startup-await semantics. */
 export interface ConnectionOutcome {
   /** If the initial connection or tool sync failed, the error; otherwise absent. */

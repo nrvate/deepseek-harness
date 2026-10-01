@@ -218,6 +218,27 @@ describe('apply (plugin lifecycle)', () => {
     expect(ctx.tools.get('mcp__srv__remote')).toBeDefined()
   })
 
+  it.each([
+    ['an unparsable url', { transport: 'streamable-http', serverName: 'srv', url: 'not a url', headers: {}, toolCallTimeoutMs: 60_000, failOnStartupError: false }, /url is not a valid URL/],
+    ['a non-http url', { transport: 'streamable-http', serverName: 'srv', url: 'file:///tmp/mcp', headers: {}, toolCallTimeoutMs: 60_000, failOnStartupError: false }, /url must use http: or https:/],
+    ['an empty command', { ...stdioConfig, command: ' ' }, /command must not be empty/],
+    ['a zero tool timeout', { ...stdioConfig, toolCallTimeoutMs: 0 }, /toolCallTimeoutMs must be a positive finite number/],
+    ['a NaN tool timeout', { ...stdioConfig, toolCallTimeoutMs: Number.NaN }, /toolCallTimeoutMs must be a positive finite number/],
+    ['an oversized tool timeout', { ...stdioConfig, toolCallTimeoutMs: 2 ** 31 }, /toolCallTimeoutMs must be a positive finite number/],
+    ['a fractional instruction limit', { ...stdioConfig, maxInstructionBytes: 1.5 }, /maxInstructionBytes must be a positive integer/],
+  ] as const)('rejects %s at load without connecting', async (_label, config, message) => {
+    await expect(apply(ctx, config as Config)).rejects.toThrow(message)
+    expect(mockConnect).not.toHaveBeenCalled()
+  })
+
+  it('Config schema rejects out-of-range toolCallTimeoutMs', () => {
+    for (const toolCallTimeoutMs of [0, -1, 2 ** 31]) {
+      expect(() => ConfigSchema({
+        transport: 'stdio', serverName: 'srv', command: 'echo', toolCallTimeoutMs,
+      } as never)).toThrow()
+    }
+  })
+
   it('closes the transport when its owner unloads during initial connection', async () => {
     const connecting: PromiseWithResolvers<void> = Promise.withResolvers()
     mockConnect.mockImplementation(() => connecting.promise)

@@ -27,6 +27,8 @@ A user adds an MCP server by writing a `@deepseek-ai/dsh-mcp-client` entry into 
 
 **The Tools dialog is read-only help.** It lists each tool under the name the model sees, with a filter and a native expandable row showing the description and a parameter table derived from the tool's input schema.
 
+**Usage counters ride the same handle, and a status item shows them.** Each client counts its tool calls, failures, call time, and estimated tokens in and out (text length at four characters per token, the density the context meter uses), plus the estimated tokens its tool definitions add to every request. `overview` returns every server's state and counters in one call. A `conversation.composer.dock` entry shows connected servers out of enabled ones and opens a panel of those figures. Counters fire no event, since they change on every call, so the panel polls only while it is open. The item is on by default and a switch on the MCP servers page turns it off; the preference is a live settings field on the companion package's Host half, the mechanism the theme and chat preferences use.
+
 **The browser half is a companion package.** `@deepseek-ai/dsh-client-ui-settings-mcp-servers` follows the other `ui-settings-*` companions: an empty Host `apply`, a `plugins.item` entry, and a dictionary. It injects `remote.mcpServers`, so it is absent where the controller is. Outcome toasts register into `shell.overlay` so they outlive the Plugins panel.
 
 ## Alternatives considered
@@ -46,6 +48,8 @@ A user adds an MCP server by writing a `@deepseek-ai/dsh-mcp-client` entry into 
 Users manage servers without editing files, and every write is validated by the same schema the plugin loads with. Where the status service is not mounted a row reads **Loaded** when the plugin started and shows no connection state. Connection errors are shown as the SDK or transport reported them, unlocalized.
 
 A user can still type a literal token into `args` or `command`; the file is mode 0600 but unencrypted. A URL that carries a token in its query is stored as typed and shown in the editable spec, while the list summary omits the query.
+
+Usage counters are per Host process: they reset on restart and are not attributed to a Session, and token figures are estimates. The status item appears only once a conversation has a message, because the composer dock is not rendered on a blank session's start screen.
 
 The Plugins page is mounted only in the web-app bundle, so launchers that do not use it get no MCP page. Rows from bundles, the home patch, and overlays are listed but cannot be changed here.
 

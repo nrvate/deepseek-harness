@@ -83,6 +83,7 @@ async function fixture(reload: 'live' | 'startup' = 'live', patch = '[]\n', over
     '      status: () => handle.current,',
     "      tools: () => [{ name: 'echo', publicName: `mcp__${config.serverName}__echo`, description: 'Echo it', parameters: [] }],",
     '      reconnect: async () => { handle.reconnects += 1; return handle.reconnectResult },',
+    "      stats: () => ({ calls: 4, errors: 1, inputTokens: 12, outputTokens: 34, totalMs: 50, maxMs: 20, connections: 1, schemaTokens: 9, transport: 'stdio', tools: [] }),",
     '      subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },',
     '    })',
     '  })',
@@ -404,4 +405,25 @@ it('announces a burst of status changes once, after the burst', async () => {
   await vi.waitFor(() => { expect(changes).toEqual([{ reason: 'plugin' }]) }, { timeout: 2000 })
   await new Promise(resolve => setTimeout(resolve, 400))
   expect(changes).toHaveLength(1)
+})
+
+it('reads every server\'s state and usage together, without usage for a row that has no client', async () => {
+  const { controller } = await fixture()
+  await controller.upsert(unreachable)
+  await controller.upsert({ ...unreachable, serverName: 'second', url: 'http://127.0.0.1:9/second' })
+  await controller.setEnabled(id('mcp-second'), false)
+  const before = Date.now()
+  const overview = await controller.overview()
+  expect(overview.readAt).toBeGreaterThanOrEqual(before)
+  const [first, second] = overview.servers
+  expect(first).toMatchObject({ id: 'mcp-web', serverName: 'web', enabled: true })
+  expect(first?.status).toMatchObject({ state: 'connected' })
+  expect(first?.stats).toMatchObject({ calls: 4, errors: 1, inputTokens: 12 })
+  expect(second).toEqual({ id: 'mcp-second', serverName: 'second', enabled: false })
+})
+
+it('reads an overview without usage when no status service is mounted', async () => {
+  const { controller } = await fixture('live', '[]\n', [], false)
+  await controller.upsert(unreachable)
+  expect((await controller.overview()).servers).toEqual([{ id: 'mcp-web', serverName: 'web', enabled: true }])
 })

@@ -1527,6 +1527,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the tools registered from the server right now; empty when it is not connected or has no client.',
       },
       {
+        signature: '@Remote async overview(): Promise<McpOverview>',
+        description: 'Read every configured server\'s connection state and usage counters in one call.',
+        parameters: [],
+        returns: 'one entry per row in composition order, with the Host clock the figures were read at.',
+      },
+      {
         signature: '@Remote async reconnectServer(id: McpEntryId): Promise<McpReconnectResult>',
         description: 'Ask one server\'s client to connect now instead of waiting out its retry delay, restarting its retry budget.',
         parameters: [{ name: 'id', description: 'row id returned by `list`.' }],
@@ -1562,6 +1568,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         description: 'Read one server\'s tools.',
         parameters: [{ name: 'server', description: 'configured server name.' }],
         returns: 'the tools registered from it, empty when no client registered it.',
+      },
+      {
+        signature: 'stats(server: string): McpServerStats | undefined',
+        description: 'Read one server\'s usage counters and connection facts.',
+        parameters: [{ name: 'server', description: 'configured server name.' }],
+        returns: 'its stats, or undefined when no client registered it.',
       },
       {
         signature: 'async reconnect(server: string): Promise<boolean>',
@@ -5810,6 +5822,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface McpHttpSpec extends McpSpecBase {\n    transport: \'streamable-http\';\n    url: string;\n    headers: Record<string, McpValue>;\n}',
   },
   {
+    name: 'McpOverview',
+    declaration: 'export interface McpOverview {\n    readAt: number;\n    servers: McpServerOverview[];\n}',
+  },
+  {
     name: 'McpReadOnlyReason',
     declaration: 'export type McpReadOnlyReason = \'unaddressable\' | \'custom-expression\' | \'embedded-credentials\';',
   },
@@ -5827,15 +5843,23 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'McpServerHandle',
-    declaration: 'export interface McpServerHandle {\n    status(): McpServerStatus;\n    tools(): readonly McpToolInfo[];\n    reconnect(): Promise<boolean>;\n    subscribe(listener: () => void): () => void;\n}',
+    declaration: 'export interface McpServerHandle {\n    status(): McpServerStatus;\n    tools(): readonly McpToolInfo[];\n    stats(): McpServerStats;\n    reconnect(): Promise<boolean>;\n    subscribe(listener: () => void): () => void;\n}',
   },
   {
     name: 'McpServerInfo',
     declaration: 'export interface McpServerInfo {\n    id: McpEntryId;\n    serverName: string;\n    transport: McpServerSpec[\'transport\'];\n    summary: string;\n    enabled: boolean;\n    fiberPhase: PluginFiberPhase;\n    status?: McpServerStatus;\n    spec?: McpServerSpec;\n    readOnlyReason?: McpReadOnlyReason;\n    owned: boolean;\n}',
   },
   {
+    name: 'McpServerOverview',
+    declaration: 'export interface McpServerOverview {\n    id: McpEntryId;\n    serverName: string;\n    enabled: boolean;\n    status?: McpServerStatus;\n    stats?: McpServerStats;\n}',
+  },
+  {
     name: 'McpServerSpec',
     declaration: 'export type McpServerSpec = McpStdioSpec | McpHttpSpec;',
+  },
+  {
+    name: 'McpServerStats',
+    declaration: 'export interface McpServerStats {\n    calls: number;\n    errors: number;\n    inputTokens: number;\n    outputTokens: number;\n    totalMs: number;\n    maxMs: number;\n    lastCallAt?: number;\n    connections: number;\n    schemaTokens: number;\n    serverInfo?: {\n        name: string;\n        version: string;\n    };\n    protocolVersion?: string;\n    transport: \'stdio\' | \'streamable-http\';\n    tools: McpToolUsage[];\n}',
   },
   {
     name: 'McpServerStatus',
@@ -5860,6 +5884,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   {
     name: 'McpToolsResult',
     declaration: 'export interface McpToolsResult {\n    status?: McpServerStatus;\n    tools: readonly McpToolInfo[];\n}',
+  },
+  {
+    name: 'McpToolUsage',
+    declaration: 'export interface McpToolUsage {\n    name: string;\n    calls: number;\n    errors: number;\n    totalMs: number;\n}',
   },
   {
     name: 'McpUpsertOptions',

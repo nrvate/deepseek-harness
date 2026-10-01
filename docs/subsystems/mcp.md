@@ -185,6 +185,12 @@ Remote owner of the profile's MCP server rows.
 @Remote async tools(id: McpEntryId): Promise<McpToolsResult>
 
 /**
+ * Read every configured server's connection state and usage counters in one call.
+ * @returns one entry per row in composition order, with the Host clock the figures were read at.
+ */
+@Remote async overview(): Promise<McpOverview>
+
+/**
  * Ask one server's client to connect now instead of waiting out its retry delay, restarting its retry budget.
  * @param id - row id returned by `list`.
  * @returns whether a new attempt started.
@@ -228,6 +234,13 @@ get(server: string): McpServerStatus | undefined
  * @returns the tools registered from it, empty when no client registered it.
  */
 tools(server: string): readonly McpToolInfo[]
+
+/**
+ * Read one server's usage counters and connection facts.
+ * @param server - configured server name.
+ * @returns its stats, or undefined when no client registered it.
+ */
+stats(server: string): McpServerStats | undefined
 
 /**
  * Ask one server's client to connect now.

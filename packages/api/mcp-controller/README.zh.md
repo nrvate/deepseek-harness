@@ -32,6 +32,7 @@ kind: "package-reference"
 | `removeServer(id)` | 删除 profile 补丁所拥有的行 |
 | `tools(id)` | 服务器当前提供的工具及其连接状态 |
 | `reconnectServer(id)` | 请服务器的客户端立即连接；返回是否开始了尝试 |
+| `overview()` | 一次调用返回每一行的连接状态和用量计数，以及读取时的 Host 时钟 |
 
 每次写入都返回 `{ changed, application, target, error?, warnings? }`。`application` 为 `applied` 表示 Loader 已协调该变更，`restart-required` 表示 profile 没有热重载，`failed` 则带有 `error.code`：`invalid-config`、`duplicate-server`、`confirmation-required`、`literal-secret`、`unknown-server`、`read-only`、`unreadable-patch` 或 `operation-error`。失败的变更会让补丁文件保持原样。
 

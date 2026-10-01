@@ -1,9 +1,11 @@
 /** Records shared by the MCP server Remote and its clients. */
 import type { Branded } from '@deepseek-ai/dsh-brand'
 import type { PluginFiberPhase } from '@deepseek-ai/dsh-host-plugin-inventory/types'
-import type { McpServerStatus, McpToolInfo } from '@deepseek-ai/dsh-mcp-status/types'
+import type { McpServerStats, McpServerStatus, McpToolInfo } from '@deepseek-ai/dsh-mcp-status/types'
 
-export type { McpConnectionState, McpServerStatus, McpToolInfo, McpToolParameter } from '@deepseek-ai/dsh-mcp-status/types'
+export type {
+  McpConnectionState, McpServerStats, McpServerStatus, McpToolInfo, McpToolParameter, McpToolUsage,
+} from '@deepseek-ai/dsh-mcp-status/types'
 
 /** Row id as the profile patch declares it. */
 export type McpEntryId = Branded<'McpEntryId'>
@@ -131,4 +133,23 @@ export interface McpToolsResult {
 export interface McpReconnectResult {
   /** False when the server was already connected or connecting, or no client is registered for the row. */
   started: boolean
+}
+
+/** One configured server with its live state and usage. */
+export interface McpServerOverview {
+  id: McpEntryId
+  serverName: string
+  /** Whether the row loads. */
+  enabled: boolean
+  /** The client's connection state; absent while the plugin is not loaded or no status service is mounted. */
+  status?: McpServerStatus
+  /** Usage counters and connection facts since the client loaded; absent with `status`. */
+  stats?: McpServerStats
+}
+
+/** Every configured server's state and usage, read together. */
+export interface McpOverview {
+  /** Host clock when the figures were read, in epoch milliseconds, for durations such as uptime. */
+  readAt: number
+  servers: McpServerOverview[]
 }

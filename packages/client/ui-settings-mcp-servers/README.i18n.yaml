@@ -3,23 +3,26 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/client/ui-settings-mcp-servers/README.md
 /:
-  en: 4bf5d2ab7a29c093
-  zh: 24076c7440bceb03
+  en: dcde71db9b4fd14f
+  zh: 4f34fea0d4e92f45
 /deepseek-ai-dsh-client-ui-settings-mcp-servers:
   en: 0fecf0e59c3a1733
   zh: 169c7c92a39030dd
 /deepseek-ai-dsh-client-ui-settings-mcp-servers/summary:
-  en: 9f1d81e60c420a51
-  zh: 9d8fb327899dee31
+  en: 77d20ca89025c95b
+  zh: 3932bba320eb8026
 /deepseek-ai-dsh-client-ui-settings-mcp-servers/table-of-contents:
   en: d152484eb41ac6b4
   zh: 09388d293f9be9cb
 /deepseek-ai-dsh-client-ui-settings-mcp-servers/use-this-package:
-  en: 0af33bc26fc2ca57
-  zh: 8d029dc1bf6818b3
+  en: a368f3d759efec52
+  zh: 044f8434e469c7cb
+/deepseek-ai-dsh-client-ui-settings-mcp-servers/use-this-package/status-item:
+  en: d5fcca93190ee5c7
+  zh: 407da213a8b47bcf
 /deepseek-ai-dsh-client-ui-settings-mcp-servers/understand-the-implementation:
-  en: c38ab7a034dbf8d8
-  zh: 5a9cf2444cc4c4f9
+  en: 7f0b5d89e5e70d9b
+  zh: bd4175f2a0ade576
 /deepseek-ai-dsh-client-ui-settings-mcp-servers/further-exploration:
   en: 07d20c8e22f05ed3
   zh: ee6917a0b3ba00e6
@@ -30,8 +33,8 @@
   en: ca75c51c89c2c9b0
   zh: 6c9e01d76d7ff3c7
 /deepseek-ai-dsh-client-ui-settings-mcp-servers/known-limitations-and-deferred-work:
-  en: f1c9703e6b905a69
-  zh: 4dca5880c08a6a94
+  en: 130cdf5e8ab483e2
+  zh: cc104b3da6e60283
 /deepseek-ai-dsh-client-ui-settings-mcp-servers/known-limitations-and-deferred-work/dev-note:
   en: e67f633dc6fe7773
   zh: e88aeb617ffb74ea

@@ -29,9 +29,12 @@ Shipped profiles already mount the service as `mcp-status`; a custom profile add
 | `list()` | The status of every registered server |
 | `get(server)` | One server's `McpServerStatus`, or undefined |
 | `tools(server)` | The tools registered from the server right now |
+| `stats(server)` | The server's `McpServerStats`: usage counters and connection facts, or undefined |
 | `reconnect(server)` | Whether a new attempt started |
 
 An `McpServerStatus` carries `state` (`connecting`, `connected`, `reconnecting`, `failed`), the failed `attempt` count and the configured `maxAttempts`, the last `error`, `connectedAt`, and `toolCount`. `failed` means no attempt is pending: the retry budget is spent, reconnecting is disabled, or a failed connection could not be closed. `reconnect` connects now, skips a pending retry delay, and restarts the retry budget; it does nothing while a connection is live or being made.
+
+An `McpServerStats` counts tool calls and failed calls, sums and maxes call time, and estimates the tokens of the arguments sent and the result text returned, at four characters per token. It also carries the estimated tokens the server's tool definitions add to every model request, the number of connections made, the name and version the server reports, the negotiated protocol revision, the transport, and per-tool call counts. Counters start when the client loads, survive a reconnect, and are read on demand; they fire no event.
 
 The `mcp-status/changed` event fires with the server name after every registration, removal, state change, and tool-list change.
 
@@ -67,6 +70,8 @@ None; this package neither assembles nor sends a provider request.
 
 - **Servers are keyed by their configured name only** — two Agent scopes that reuse one `serverName` both register, and the readers return the first.
 - **The error is the SDK's or the transport's message** — it is not localized and can be long.
+- **Counters are per process** — they reset when the Host restarts or the client plugin reloads, and they are not attributed to a Session.
+- **Token figures are estimates** — text length at four characters per token; images and other binary blocks count as zero.
 
 <a id="dev-note"></a>
 ### Dev Note

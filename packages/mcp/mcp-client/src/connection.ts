@@ -17,7 +17,9 @@
 
 import { Client, type Transport } from '@modelcontextprotocol/client'
 import type { Context } from '@deepseek-ai/cordis'
-import type { McpConnectionState, McpServerHandle, McpServerStatus, McpToolInfo } from '@deepseek-ai/dsh-mcp-status'
+import type {
+  McpConnectionState, McpServerHandle, McpServerStats, McpServerStatus, McpToolInfo, McpToolUsage,
+} from '@deepseek-ai/dsh-mcp-status'
 import { assertNever, type JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { ServerContext } from './server-context.ts'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
@@ -49,10 +51,24 @@ export const RECONNECT_DEFAULTS: Required<ReconnectConfig> = Object.freeze({
 /** Default UTF-8 byte limit for attributed server instructions. */
 export const DEFAULT_MAX_INSTRUCTION_BYTES = 32_768
 
+/** The fixed text density the context meter prices content at; usage counters report the same estimate. */
+const CHARS_PER_TOKEN = 4
+
 // The SDK's stdio transport owns two two-second termination grace periods.
 // Keep one additional second for the process-close event that proves the old
 // generation is gone; timing out fails closed instead of overlapping children.
 const GENERATION_CLOSE_TIMEOUT_MS = 5_000
+
+/** Running usage sums of one connection supervisor, in characters and milliseconds. */
+interface UsageTotals {
+  calls: number
+  errors: number
+  inputChars: number
+  outputChars: number
+  totalMs: number
+  maxMs: number
+  lastCallAt?: number
+}
 
 /** Fully resolved reconnect policy captured at plugin load. */
 export type ResolvedReconnectPolicy = Readonly<Required<ReconnectConfig>>
@@ -170,6 +186,13 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
   let state: McpConnectionState = 'connecting'
   let lastError: string | undefined
   let registeredTools: McpToolInfo[] = []
+  /** Usage since this plugin instance loaded; a reconnect keeps it. */
+  const totals: UsageTotals = { calls: 0, errors: 0, inputChars: 0, outputChars: 0, totalMs: 0, maxMs: 0 }
+  const usage = new Map<string, McpToolUsage>()
+  let schemaChars = 0
+  let connections = 0
+  let serverInfo: McpServerStats['serverInfo']
+  let protocolVersion: string | undefined
   const observers = new Set<() => void>()
   const notify = (): void => { for (const observer of [...observers]) observer() }
   const setState = (next: McpConnectionState): void => {
@@ -181,7 +204,24 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     registrationFailure: 'contain',
     serverName: config.serverName,
     toolCallTimeoutMs: config.toolCallTimeoutMs,
-    onTools: (next) => { registeredTools = next; notify() },
+    onTools: (next, chars) => { registeredTools = next; schemaChars = chars; notify() },
+    onCall: (call) => {
+      // Counters change on every call and are read on demand, so they notify no observer.
+      totals.calls += 1
+      totals.inputChars += call.inputChars
+      totals.outputChars += call.outputChars
+      totals.totalMs += call.ms
+      totals.maxMs = Math.max(totals.maxMs, call.ms)
+      totals.lastCallAt = Date.now() - call.ms
+      const tool = usage.get(call.tool) ?? { name: call.tool, calls: 0, errors: 0, totalMs: 0 }
+      tool.calls += 1
+      tool.totalMs += call.ms
+      if (call.failed) {
+        totals.errors += 1
+        tool.errors += 1
+      }
+      usage.set(call.tool, tool)
+    },
   }
   // The initial sync uses 'throw' when failOnStartupError is configured, so
   // a registration conflict propagates to the startup-await path. Re-syncs
@@ -399,6 +439,10 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     serverInstructions = instructions
     connectedAt = Date.now()
     lastError = undefined
+    connections += 1
+    const reported = generation.getServerVersion()
+    serverInfo = reported === undefined ? undefined : { name: reported.name, version: reported.version }
+    protocolVersion = generation.getNegotiatedProtocolVersion()
     setState('connected')
     if (failedAttempts > 0) ctx.logger.info(`${label}: reconnected and re-synced tools (attempt ${failedAttempts}/${policy.maxAttempts})`)
   }
@@ -434,6 +478,25 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
       }
     },
     tools: () => registeredTools,
+    stats(): McpServerStats {
+      return {
+        calls: totals.calls,
+        errors: totals.errors,
+        inputTokens: Math.ceil(totals.inputChars / CHARS_PER_TOKEN),
+        outputTokens: Math.ceil(totals.outputChars / CHARS_PER_TOKEN),
+        totalMs: totals.totalMs,
+        maxMs: totals.maxMs,
+        ...totals.lastCallAt === undefined ? {} : { lastCallAt: totals.lastCallAt },
+        connections,
+        schemaTokens: Math.ceil(schemaChars / CHARS_PER_TOKEN),
+        ...serverInfo === undefined ? {} : { serverInfo },
+        ...protocolVersion === undefined ? {} : { protocolVersion },
+        transport: config.transport,
+        tools: [...usage.values()]
+          .map(tool => ({ ...tool }))
+          .sort((left, right) => right.calls - left.calls || left.name.localeCompare(right.name)),
+      }
+    },
     reconnect(): Promise<boolean> {
       // A live or in-flight generation owns the connection; only a wait or a stop can be cut short.
       if (disposed || client !== undefined) return Promise.resolve(false)

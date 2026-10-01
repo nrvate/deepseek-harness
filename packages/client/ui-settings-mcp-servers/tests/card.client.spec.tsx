@@ -3,13 +3,14 @@
 import { Context } from '@deepseek-ai/cordis'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { bindSnapshotSelector, makeTranslate, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
+import { bindSnapshotSelector, makeTranslate, stubConfigForm, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import type { McpChangeResult, McpEntryId, McpServerInfo, McpServerSpec, McpServerStatus, McpToolInfo } from '@deepseek-ai/dsh-api-remotes/client'
 import { McpServersCard, type McpServersCardProps } from '../src/client/McpServersCard.tsx'
 import { McpServersToast, type McpServersToastProps } from '../src/client/McpServersToast.tsx'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { McpServersController, type McpServersState } from '../src/client/mcp-servers-controller.ts'
 import { en } from '../src/client/locales.ts'
+import type { McpUiSettings } from '../src/mcp-ui-settings.ts'
 
 afterEach(cleanup)
 
@@ -49,11 +50,13 @@ function mount(rows: McpServerInfo[], view: 'page' | 'summary' = 'page') {
     reconnectServer: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: { started: true } })),
   }
   new TestRemote(ctx, { mcpServers })
-  const controller = new McpServersController(ctx)
+  const settings = stubConfigForm<McpUiSettings>()
+  settings.publish({ value: { statusItem: true }, writable: true })
+  const controller = new McpServersController(ctx, settings.scope)
   const { hooks, ...actions } = controller.inject()
   const props = { ...actions, view, t, useMcpServers: bindSnapshotSelector(hooks.mcpServers) } as McpServersCardProps
   const view_ = render(<McpServersCard {...props} />)
-  return { ...view_, controller, mcpServers, face: controller.inject(), props }
+  return { ...view_, controller, mcpServers, face: controller.inject(), props, settings }
 }
 
 const files = row('mcp-files', { serverName: 'files', spec: stdioSpec })
@@ -320,7 +323,9 @@ describe('McpServersCard', () => {
 
 describe('McpServersToast', () => {
   function mountToast(notice: McpServersState['notice']) {
-    const store = createSnapshotStore<McpServersState>({ status: 'ready', rows: [], pending: null, editor: null, removal: null, tools: null, notice })
+    const store = createSnapshotStore<McpServersState>({
+      status: 'ready', rows: [], pending: null, editor: null, removal: null, tools: null, notice, statusItem: true, statusItemWritable: true,
+    })
     const dismissNotice = vi.fn()
     const props = { dismissNotice, t, useMcpServers: bindSnapshotSelector(store) } as McpServersToastProps
     return { ...render(<McpServersToast {...props} />), dismissNotice }
@@ -452,5 +457,23 @@ describe('connection state and tools', () => {
     mount([row('bare', { serverName: '', status: connected })])
     fireEvent.click(await screen.findByRole('button', { name: 'Tools (2)' }))
     expect(await screen.findByRole('dialog', { name: 'Tools of bare' })).toBeTruthy()
+  })
+})
+
+describe('status item preference switch', () => {
+  it('reflects the accepted preference and writes a change through the form', async () => {
+    const { settings } = mount([])
+    const toggle = await screen.findByRole('switch', { name: en.statusItemToggle })
+    expect(toggle.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(toggle)
+    await waitFor(() => { expect(settings.set).toHaveBeenCalledWith('statusItem', false) })
+  })
+
+  it('locks the switch while the settings document cannot be written', async () => {
+    const { settings } = mount([])
+    settings.publish({ value: { statusItem: false }, writable: false })
+    const toggle = await screen.findByRole('switch', { name: en.statusItemToggle })
+    await waitFor(() => { expect(toggle).toHaveProperty('disabled', true) })
+    expect(toggle.getAttribute('aria-checked')).toBe('false')
   })
 })

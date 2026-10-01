@@ -9,6 +9,8 @@ import type {
   McpChangeResult, McpEntryId, McpErrorCode, McpServerInfo, McpServerSpec, McpServerStatus, McpToolInfo, McpValue,
 } from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
+import { DEFAULT_STATUS_ITEM, STATUS_ITEM_FIELD, type McpUiSettings } from '../mcp-ui-settings.ts'
 
 /** How a staged `env` or `headers` value is written. */
 export type ValueMode = 'env' | 'bearer' | 'literal' | 'kept' | 'expression'
@@ -96,6 +98,10 @@ export interface McpServersState {
   readonly removal: RemovalState | null
   readonly tools: ToolsState | null
   readonly notice: McpNotice | null
+  /** Whether the MCP status item shows below the prompt box, as the Host last accepted it. */
+  readonly statusItem: boolean
+  /** Whether the preference can be written; false while the settings document is read-only or still loading. */
+  readonly statusItemWritable: boolean
 }
 
 /** Draft fields a text input edits directly. */
@@ -126,6 +132,7 @@ export interface McpServersFace {
   openTools: (id: McpEntryId) => void
   closeTools: () => void
   reconnect: (id: McpEntryId) => void
+  setStatusItem: (shown: boolean) => void
   cancelRemove: () => void
   confirmRemove: () => void
   dismissNotice: () => void
@@ -218,12 +225,33 @@ export class McpServersController {
   private generation = 0
   private seq = 0
   private disposed = false
+  private readonly unsubscribe: () => void
 
-  /** @param ctx - the page plugin's context, whose `remote.mcpServers` namespace answers. */
-  constructor(private readonly ctx: ClientContext) {
+  /**
+   * @param ctx - the page plugin's context, whose `remote.mcpServers` namespace answers.
+   * @param form - the plugin's preference form, holding whether the status item shows.
+   */
+  constructor(private readonly ctx: ClientContext, private readonly form: ConfigForm<McpUiSettings>) {
     this.store = createSnapshotStore<McpServersState>({
-      status: 'idle', rows: [], pending: null, editor: null, removal: null, tools: null, notice: null,
+      status: 'idle', rows: [], pending: null, editor: null, removal: null, tools: null, notice: null, ...this.preference(),
     })
+    this.unsubscribe = form.subscribe(() => { this.patch(this.preference()) })
+  }
+
+  private preference(): Pick<McpServersState, 'statusItem' | 'statusItemWritable'> {
+    const snapshot = this.form.getSnapshot()
+    return { statusItem: snapshot.value?.statusItem ?? DEFAULT_STATUS_ITEM, statusItemWritable: snapshot.writable }
+  }
+
+  /** Persist the preference; the switch follows the value the Host accepts, never the click. */
+  private async setStatusItem(shown: boolean): Promise<void> {
+    let accepted = false
+    try {
+      accepted = await this.form.set(STATUS_ITEM_FIELD, shown)
+    } catch (_refusedOrUnreachable) {
+      // The toast below reports the failed write while the form keeps the accepted value.
+    }
+    if (!this.disposed && !accepted) this.notify('failed')
   }
 
   /**
@@ -232,8 +260,11 @@ export class McpServersController {
    */
   getSnapshot(): McpServersState { return this.store.getSnapshot() }
 
-  /** Stop applying answers that arrive after teardown. */
-  dispose(): void { this.disposed = true }
+  /** Stop applying answers that arrive after teardown, and drop the preference subscription. */
+  dispose(): void {
+    this.disposed = true
+    this.unsubscribe()
+  }
 
   /**
    * Re-read the rows when the page has been opened; a page never rendered holds nothing to refresh.
@@ -305,6 +336,7 @@ export class McpServersController {
       openTools: (id) => { this.openTools(id) },
       closeTools: () => { this.patch({ tools: null }) },
       reconnect: (id) => { void this.reconnect(id) },
+      setStatusItem: (shown) => { void this.setStatusItem(shown) },
       confirmRemove: () => { void this.confirmRemove() },
       dismissNotice: () => { this.patch({ notice: null }) },
     }

@@ -18,8 +18,8 @@ import type {} from '@deepseek-ai/dsh-mcp-status'
 import { commandLine, MCP_CLIENT_MODULE, readOwnedRows, removeRow, setRowEnabled, upsertRow, type OwnedRow } from './patch.ts'
 import { displayUrl, hasEmbeddedCredentials, messageOf, redact, validateSpec } from './spec.ts'
 import type {
-  McpChangeResult, McpEntryId, McpError, McpReadOnlyReason, McpReconnectResult, McpServerInfo, McpServerSpec, McpToolsResult,
-  McpUpsertOptions,
+  McpChangeResult, McpEntryId, McpError, McpOverview, McpReadOnlyReason, McpReconnectResult, McpServerInfo, McpServerSpec,
+  McpToolsResult, McpUpsertOptions,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -210,6 +210,26 @@ export class McpServersController extends TypertRemoteService {
     const statuses = this.ctx.get('mcpStatus')
     const status = name === undefined ? undefined : statuses?.get(name)
     return { ...status === undefined ? {} : { status }, tools: name === undefined ? [] : statuses?.tools(name) ?? [] }
+  }
+
+  /**
+   * Read every configured server's connection state and usage counters in one call.
+   * @returns one entry per row in composition order, with the Host clock the figures were read at.
+   */
+  @Remote
+  async overview(): Promise<McpOverview> {
+    const statuses = this.ctx.get('mcpStatus')
+    return {
+      readAt: Date.now(),
+      servers: (await this.list()).map((row) => {
+        const stats = row.status === undefined ? undefined : statuses?.stats(row.serverName)
+        return {
+          id: row.id, serverName: row.serverName, enabled: row.enabled,
+          ...row.status === undefined ? {} : { status: row.status },
+          ...stats === undefined ? {} : { stats },
+        }
+      }),
+    }
   }
 
   /**

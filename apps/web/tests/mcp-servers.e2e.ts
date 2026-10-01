@@ -8,12 +8,17 @@ import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
 import type { Browser, Locator, Page } from 'playwright'
 import { chromium } from 'playwright'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
-import { launchWebScaffold, watchConsole, type WebScaffold } from './scaffold.ts'
+import { launchWebScaffold, seedSession, watchConsole, type WebScaffold } from './scaffold.ts'
 import { ZH_BROWSER_LOCALE, saveFailureShot } from './support.ts'
 
 /** The official reference MCP server, installed for the mcp-client package's own tests. */
 const EVERYTHING = fileURLToPath(new URL('../../../packages/mcp/mcp-client/node_modules/.bin/mcp-server-everything', import.meta.url))
+
+/** A Session with history: the composer dock, where the status item lives, renders only in a conversation. */
+const SESSION_TITLE = 'MCP status session'
+const SEEDED_HISTORY = fileURLToPath(new URL('../../../snapshots/web/seeded-history/session.v3.jsonl', import.meta.url))
 
 describe('web e2e: MCP servers page', () => {
   let scaffold: WebScaffold
@@ -27,6 +32,10 @@ describe('web e2e: MCP servers page', () => {
     scaffold = await launchWebScaffold({
       extraOverlayPath: fileURLToPath(new URL('./pin-browse-picker.overlay.yml', import.meta.url)),
     })
+    const workspace = await scaffold.ctx.workspaceRegistry.create(scaffold.workspaceCwd)
+    const sessionId = await seedSession(scaffold, await readFile(SEEDED_HISTORY, 'utf8'), 'mcp-status-session')
+    await workspace.attachSession(sessionId)
+    await scaffold.ctx.sessionController.rename({ sessionId, title: SESSION_TITLE })
     browser = await chromium.launch()
     page = await browser.newPage({ viewport: { width: 1680, height: 1000 }, locale: ZH_BROWSER_LOCALE })
     tripwire = watchConsole(page)
@@ -231,4 +240,51 @@ describe('web e2e: MCP servers page', () => {
     await row.getByText(/^(连接中|重连中|未连接)/).first().waitFor({ timeout: 30_000 })
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
+
+  it('shows the status item below the prompt box with per-server stats, and hides it from the preference switch', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-mcp-servers-status-item'))
+    // Two real calls through the Host's tool registry, so the counters have something to show without a model.
+    for (const callId of ['mcp-status-1', 'mcp-status-2']) {
+      const result = await scaffold.ctx.tools.execute({
+        name: 'mcp__everything__echo', arguments: { message: 'counted' }, callId: ToolCallId(callId), signal: new AbortController().signal,
+      })
+      expect(result.isError).not.toBe(true)
+    }
+    // The item lives in the composer dock, which a conversation renders.
+    const session = page.getByRole('treeitem').filter({ has: page.getByText(SESSION_TITLE, { exact: true }) })
+    await session.click({ timeout: 20_000 })
+
+    const trigger = page.getByRole('button', { name: /^MCP 服务器：/ })
+    await trigger.waitFor({ timeout: 20_000 })
+    // `everything` is connected; `files` names a command that does not exist.
+    await expect.poll(() => trigger.textContent(), { timeout: 20_000 }).toBe('MCP 1/2')
+    await trigger.click()
+    const panel = page.getByRole('dialog', { name: 'MCP 服务器', exact: true })
+    await panel.getByText('2 个中已连接 1 个', { exact: true }).waitFor({ timeout: 10_000 })
+    const everything = panel.getByRole('listitem').filter({ hasText: 'everything' }).first()
+    await everything.getByText('已连接', { exact: true }).waitFor()
+    // Calls, errors: the two echo calls above, none failed.
+    await expect.poll(() => everything.locator('dd').nth(0).textContent(), { timeout: 10_000 }).toBe('2')
+    expect(await everything.locator('dd').nth(1).textContent()).toBe('0')
+    await everything.getByText('详情', { exact: true }).click()
+    await everything.getByText('本地命令', { exact: true }).waitFor()
+    await everything.getByText('已连接时长', { exact: true }).waitFor()
+    await everything.getByText('最常用的工具', { exact: true }).waitFor()
+    await everything.getByText('echo', { exact: true }).waitFor()
+    await panel.getByText(/^工具定义: 每次请求约 .+ Token$/).waitFor()
+    await page.keyboard.press('Escape')
+    await panel.waitFor({ state: 'detached' })
+
+    const plugins = await openPage()
+    const toggle = plugins.getByRole('switch', { name: '在输入框下方显示 MCP 状态' })
+    expect(await toggle.getAttribute('aria-checked')).toBe('true')
+    await toggle.click()
+    await expect.poll(patch, { timeout: 15_000 }).toContain('statusItem: false')
+    await expect.poll(() => toggle.getAttribute('aria-checked'), { timeout: 10_000 }).toBe('false')
+
+    await session.click()
+    await page.locator('[data-composer-input]').first().waitFor({ timeout: 15_000 })
+    await expect.poll(() => page.getByRole('button', { name: /^MCP 服务器：/ }).count(), { timeout: 10_000 }).toBe(0)
+    expect(tripwire.pageErrors).toEqual([])
+  }, 120_000)
 })

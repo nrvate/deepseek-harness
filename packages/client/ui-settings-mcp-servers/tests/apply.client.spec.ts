@@ -3,11 +3,11 @@ import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
-import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
+import { stubConfigForm, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { apply, inject, NS } from '../src/client/index.ts'
 import type { McpServersToastFace } from '../src/client/McpServersToast.tsx'
-import { apply as hostApply } from '../src/index.ts'
+import type { McpTrayFace } from '../src/client/mcp-tray-controller.ts'
 import { en, zh } from '../src/client/locales.ts'
 
 async function bench(rows: unknown[] = []) {
@@ -17,25 +17,55 @@ async function bench(rows: unknown[] = []) {
   locale.setLocale('zh')
   ctx.provide('locale', locale)
   const list = vi.fn(() => Promise.resolve({ ok: true, value: rows }))
-  const remote = new TestRemote(ctx, { mcpServers: { list } })
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, list, remote }
+  const overview = vi.fn(() => Promise.resolve({ ok: true, value: { readAt: 1, servers: [] } }))
+  const remote = new TestRemote(ctx, { mcpServers: { list, overview } })
+  const settings = stubConfigForm()
+  const forms = vi.fn(() => settings.scope)
+  ctx.provide('configForms', { get: forms })
+  ctx.provide('layout', { selectPanel: vi.fn() })
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, list, overview, remote, forms }
 }
 
 /** The Plugins page's item slot and the shell overlay, as their owners declare them. */
 function declareRoot(slots: SlotRegistry): () => void {
   return slots.register({
     name: 'root',
-    children: { 'plugins.item': { kind: 'list', scope: 'root' }, 'shell.overlay': { kind: 'list', scope: 'root' } },
+    children: {
+      'plugins.item': { kind: 'list', scope: 'root' },
+      'shell.overlay': { kind: 'list', scope: 'root' },
+      'conversation.composer.dock': { kind: 'list', scope: 'root' },
+    },
   } as never, () => null)
 }
 
+/** The injected status-item face, as the registry hands it back. */
+type TrayFace = Pick<McpTrayFace, 'hooks' | 'load'>
+
 describe('ui-settings-mcp-servers apply', () => {
-  it('keeps the host Loader entry inert', () => {
-    expect(hostApply).not.toThrow()
+  it('binds its preference form under its own Loader row id', async () => {
+    const { ctx, slots, forms } = await bench()
+    declareRoot(slots)
+    await ctx.plugin({ inject: [...inject], apply }).await()
+    expect(forms).toHaveBeenCalledWith('ui-settings-mcp-servers')
+  })
+
+  it('refreshes the status item on Host changes once it has mounted', async () => {
+    const { ctx, slots, overview, remote } = await bench()
+    declareRoot(slots)
+    await ctx.plugin({ inject: [...inject], apply }).await()
+    const tray = (slots.entries('conversation.composer.dock')[0]?.inject as () => TrayFace)()
+    remote.emit('plugin-manager/changed', [{ reason: 'plugin' }])
+    await Promise.resolve()
+    expect(overview).not.toHaveBeenCalled()
+    tray.load()
+    await vi.waitFor(() => { expect(tray.hooks.mcpTray.getSnapshot().loaded).toBe(true) })
+    overview.mockClear()
+    remote.emit('plugin-manager/changed', [{ reason: 'plugin' }])
+    await vi.waitFor(() => { expect(overview).toHaveBeenCalledTimes(1) })
   })
 
   it('declares the services it uses', () => {
-    expect(inject).toEqual(['slots', 'locale', 'remote', 'remote.mcpServers'])
+    expect(inject).toEqual(['slots', 'locale', 'remote', 'remote.mcpServers', 'configForms', 'layout'])
   })
 
   it('has a Chinese entry for every English key', () => {
@@ -54,6 +84,10 @@ describe('ui-settings-mcp-servers apply', () => {
     expect(resolveSlotLabel(items[0]?.options.label)).toBe('MCP 服务器')
     expect(items[0]?.locale).toBe(NS)
     expect(slots.entries('shell.overlay')).toHaveLength(1)
+    expect(slots.entries('conversation.composer.dock')).toHaveLength(1)
+    expect(slots.entries('conversation.composer.dock')[0]?.options).toMatchObject({ id: 'mcp-status', order: 20 })
+    const tray = (slots.entries('conversation.composer.dock')[0]?.inject as () => TrayFace)()
+    expect(Object.keys(tray.hooks)).toEqual(['mcpTray'])
     const face = (slots.entries('shell.overlay')[0]?.inject as () => McpServersToastFace)()
     expect(Object.keys(face).sort()).toEqual(['dismissNotice', 'hooks'])
     expect(Object.keys(face.hooks)).toEqual(['mcpServers'])
@@ -89,6 +123,7 @@ describe('ui-settings-mcp-servers apply', () => {
 
     expect(slots.entries('plugins.item')).toHaveLength(0)
     expect(slots.entries('shell.overlay')).toHaveLength(0)
+    expect(slots.entries('conversation.composer.dock')).toHaveLength(0)
   })
 
   it('registers nothing while the Host does not serve the Remote', async () => {

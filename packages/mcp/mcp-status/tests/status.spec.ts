@@ -15,6 +15,7 @@ function handle(serverName: string) {
     status: () => current,
     tools: () => [{ name: 'echo', publicName: `mcp__${serverName}__echo`, description: 'Echo', parameters: [] }],
     reconnect,
+    stats: () => ({ calls: 3, errors: 1, inputTokens: 10, outputTokens: 20, totalMs: 30, maxMs: 15, connections: 1, schemaTokens: 5, transport: 'stdio', tools: [] }),
     subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
   }
   return {
@@ -49,6 +50,8 @@ it('lists registered servers and answers per server', async () => {
   expect(ctx.mcpStatus.get('missing')).toBeUndefined()
   expect(ctx.mcpStatus.tools('a')).toHaveLength(1)
   expect(ctx.mcpStatus.tools('missing')).toEqual([])
+  expect(ctx.mcpStatus.stats('a')).toMatchObject({ calls: 3, errors: 1 })
+  expect(ctx.mcpStatus.stats('missing')).toBeUndefined()
 })
 
 it('relays registrations, changes, and removals as one event naming the server', async () => {

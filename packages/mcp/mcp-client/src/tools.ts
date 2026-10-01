@@ -31,8 +31,37 @@ export interface ToolBridgeOptions {
   registrationFailure: 'contain' | 'throw'
   serverName: string
   toolCallTimeoutMs: number
-  /** Told which tools a synchronization registered, once they are registered; empty after a rollback. */
-  onTools?: (tools: McpToolInfo[]) => void
+  /**
+   * Told which tools a synchronization registered, once they are registered; empty after a rollback.
+   * `schemaChars` is the length of their definitions as the model receives them.
+   */
+  onTools?: (tools: McpToolInfo[], schemaChars: number) => void
+  /** Told about each finished tool call, whether it returned or threw. */
+  onCall?: (call: McpCallRecord) => void
+}
+
+/** One finished tool call, for usage counters. */
+export interface McpCallRecord {
+  /** The server's own name for the tool. */
+  tool: string
+  /** Wall time from the request to its result or failure. */
+  ms: number
+  /** Whether the call threw or the server marked its result as an error. */
+  failed: boolean
+  /** Length of the JSON arguments sent. */
+  inputChars: number
+  /** Length of the text blocks returned; binary blocks are not counted. */
+  outputChars: number
+}
+
+/** Summed length of the text blocks of a raw result, 0 for anything else. */
+function textChars(result: unknown): number {
+  if (!isPlainObject(result) || !Array.isArray(result.content)) return 0
+  let chars = 0
+  for (const block of result.content) {
+    if (isPlainObject(block) && block.type === 'text' && typeof block.text === 'string') chars += block.text.length
+  }
+  return chars
 }
 
 /** State for one sync generation: the current set of disposers keyed by public name. */
@@ -158,6 +187,7 @@ export async function syncTools(
   // Phase 1: fetch and build the next generation without touching the registry.
   const definitions = new Map<string, ToolDefinition>()
   const infos: McpToolInfo[] = []
+  let schemaChars = 0
   const response = client.getServerCapabilities()?.tools === undefined
     ? { tools: [] }
     : await client.listTools(undefined, { cacheMode: 'refresh' })
@@ -169,6 +199,7 @@ export async function syncTools(
       )
     }
     infos.push(describeTool(publicName, tool))
+    schemaChars += JSON.stringify({ name: publicName, description: tool.description ?? '', parameters: tool.inputSchema }).length
     definitions.set(publicName, createMcpToolDefinition(ctx, {
       name: publicName,
       rawName: tool.name,
@@ -176,10 +207,21 @@ export async function syncTools(
       inputSchema: tool.inputSchema,
       outputSchema: tool.outputSchema,
       taskRequired: tool.execution?.taskSupport === 'required',
-      call: (args, execution) => client.callTool(
-        { name: tool.name, arguments: args },
-        { signal: execution.signal, timeout: opts.toolCallTimeoutMs, toolDefinition: tool },
-      ),
+      call: async (args, execution) => {
+        const started = Date.now()
+        const record = { tool: tool.name, failed: true, inputChars: JSON.stringify(args).length, outputChars: 0 }
+        try {
+          const result = await client.callTool(
+            { name: tool.name, arguments: args },
+            { signal: execution.signal, timeout: opts.toolCallTimeoutMs, toolDefinition: tool },
+          )
+          record.failed = isPlainObject(result) && result.isError === true
+          record.outputChars = textChars(result)
+          return result
+        } finally {
+          opts.onCall?.({ ...record, ms: Date.now() - started })
+        }
+      },
     }))
   }
 
@@ -196,11 +238,11 @@ export async function syncTools(
     // sees either the full generation or none of it — never a partial set.
     for (const dispose of disposers.values()) dispose()
     ctx.logger.error(`mcp-client(${opts.serverName}): tool registration failed, no tools registered: ${String(error)}`)
-    opts.onTools?.([])
+    opts.onTools?.([], 0)
     if (opts.registrationFailure === 'throw') throw error
     return new Map()
   }
-  opts.onTools?.(infos)
+  opts.onTools?.(infos, schemaChars)
   return disposers
 }
 

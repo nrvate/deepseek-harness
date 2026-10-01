@@ -305,6 +305,8 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   McpToolsResult: 'mcp.md',
   McpReconnectResult: 'mcp.md',
   McpServerHandle: 'mcp.md',
+  McpServerStats: 'mcp.md',
+  McpOverview: 'mcp.md',
   BundleRowInfo: 'boot.md',
   PluginInstallCancellation: 'boot.md',
   PluginInstallRequestId: 'boot.md',

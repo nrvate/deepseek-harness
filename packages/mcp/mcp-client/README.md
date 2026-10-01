@@ -94,7 +94,7 @@ When a server connection drops — for example a local server process crashes �
 
 ### Connection state
 
-Where the shipped [status service](../mcp-status/README.md) is mounted, every connection publishes its state — connecting, connected, reconnecting (with the attempt count), or failed — with the last error and the tools it registered, and the Plugins page shows them. A failed or waiting connection can be asked to connect now, which skips the retry delay and restarts the attempt budget.
+Where the shipped [status service](../mcp-status/README.md) is mounted, every connection publishes its state — connecting, connected, reconnecting (with the attempt count), or failed — with the last error and the tools it registered, and the Plugins page shows them. A failed or waiting connection can be asked to connect now, which skips the retry delay and restarts the attempt budget. Each connection also counts its tool calls, failures, call time, and estimated tokens in and out, which the status item below the prompt box shows.
 
 -----
 

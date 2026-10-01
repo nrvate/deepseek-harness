@@ -1,12 +1,13 @@
 /** The page's state over a scripted `mcpServers` Remote: reads, the editor, the stdio confirmation, toggles, and removal. */
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
-import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
+import { stubConfigForm, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import type { McpChangeResult, McpEntryId, McpServerInfo, McpServerSpec, McpServerStatus, McpToolInfo } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   draftFromSpec, emptyDraft, McpServersController, specFromDraft,
   type EditorDraft, type McpServersFace,
 } from '../src/client/mcp-servers-controller.ts'
+import type { McpUiSettings } from '../src/mcp-ui-settings.ts'
 
 const id = (value: string): McpEntryId => value as McpEntryId
 
@@ -43,9 +44,10 @@ function bench(rows: McpServerInfo[] = [row('mcp-files', stdioSpec), row('mcp-we
     reconnectServer: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: { started: true } })),
   }
   const remote = new TestRemote(ctx, { mcpServers })
-  const controller = new McpServersController(ctx)
+  const settings = stubConfigForm<McpUiSettings>()
+  const controller = new McpServersController(ctx, settings.scope)
   const face: McpServersFace = controller.inject()
-  return { ctx, controller, face, mcpServers, remote }
+  return { ctx, controller, face, mcpServers, remote, settings }
 }
 
 const failure = { ok: false as const, error: new Error('down') }
@@ -557,5 +559,46 @@ describe('tools and reconnect', () => {
     await slow.promise
     await Promise.resolve()
     expect(controller.getSnapshot().pending).toBe('mcp-files')
+  })
+})
+
+describe('status item preference', () => {
+  it('shows the item by default and follows what the Host accepts', () => {
+    const { controller, settings } = bench()
+    expect(controller.getSnapshot()).toMatchObject({ statusItem: true, statusItemWritable: false })
+    settings.publish({ value: { statusItem: false }, writable: true })
+    expect(controller.getSnapshot()).toMatchObject({ statusItem: false, statusItemWritable: true })
+    settings.publish({ value: { statusItem: true }, writable: true })
+    expect(controller.getSnapshot().statusItem).toBe(true)
+  })
+
+  it('writes the preference through the form and stays quiet when the Host accepts it', async () => {
+    const { controller, face, settings } = bench()
+    face.setStatusItem(false)
+    await vi.waitFor(() => { expect(settings.set).toHaveBeenCalledWith('statusItem', false) })
+    await Promise.resolve()
+    expect(controller.getSnapshot().notice).toBeNull()
+  })
+
+  it('toasts a write the Host refused or never answered', async () => {
+    const { controller, face, settings } = bench()
+    settings.set.mockResolvedValueOnce(false)
+    face.setStatusItem(false)
+    await vi.waitFor(() => { expect(controller.getSnapshot().notice).toMatchObject({ kind: 'failed' }) })
+    face.dismissNotice()
+    settings.set.mockRejectedValueOnce(new Error('down'))
+    face.setStatusItem(false)
+    await vi.waitFor(() => { expect(controller.getSnapshot().notice).toMatchObject({ kind: 'failed' }) })
+  })
+
+  it('stops following the form and reports nothing after teardown', async () => {
+    const { controller, face, settings } = bench()
+    settings.set.mockResolvedValueOnce(false)
+    face.setStatusItem(false)
+    controller.dispose()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(controller.getSnapshot().notice).toBeNull()
+    expect(settings.listenerCount()).toBe(0)
   })
 })

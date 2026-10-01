@@ -32,6 +32,7 @@ The [web bundle](../../bundle/web-app/README.md) mounts the controller as `mcp-s
 | `removeServer(id)` | Delete a row the profile patch owns |
 | `tools(id)` | The tools the server offers right now, with its connection state |
 | `reconnectServer(id)` | Ask the server's client to connect now; returns whether an attempt started |
+| `overview()` | Every row's connection state and usage counters in one call, with the Host clock they were read at |
 
 Every write returns `{ changed, application, target, error?, warnings? }`. `application` is `applied` after the Loader reconciled the change, `restart-required` when the profile has no hot reload, and `failed` with an `error.code` otherwise: `invalid-config`, `duplicate-server`, `confirmation-required`, `literal-secret`, `unknown-server`, `read-only`, `unreadable-patch`, or `operation-error`. A failed change leaves the patch file as it was.
 

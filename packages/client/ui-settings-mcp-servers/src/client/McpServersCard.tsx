@@ -11,6 +11,7 @@ import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-cli
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { McpServerEditor, RemoveDialog } from './McpServerEditor.tsx'
 import { McpToolsDialog } from './McpToolsDialog.tsx'
+import { connectionView } from './server-state.ts'
 import type { McpServersFace } from './mcp-servers-controller.ts'
 import type { McpServersLocaleKey } from './locales.ts'
 import css from './McpServers.module.css'
@@ -56,6 +57,15 @@ function McpServersPage(props: McpServersCardProps): ReactNode {
         <p className={css.intro}>{t('intro')}</p>
         <Button variant="primary" size="sm" onClick={openAdd}>{t('add')}</Button>
       </div>
+      <div className={css.preference}>
+        <span className={css.label}>{t('statusItemToggle')}</span>
+        <Switch
+          label={t('statusItemToggle')}
+          checked={state.statusItem}
+          disabled={!state.statusItemWritable}
+          onChange={props.setStatusItem}
+        />
+      </div>
       <ServerList {...props} status={state.status} rows={state.rows} pending={state.pending} />
       <McpServerEditor {...props} editor={state.editor} />
       <RemoveDialog {...props} removal={state.removal} />
@@ -93,15 +103,7 @@ function ServerList(props: McpServersCardProps & {
 
 /** The dot and label of a row: its client's connection state when it reports one, else the plugin's load phase. */
 function stateOf(row: McpServerInfo, t: McpServersCardProps['t']): { dot: StateDotState; text: string } {
-  const { status } = row
-  if (row.enabled && status !== undefined) {
-    switch (status.state) {
-      case 'connected': return { dot: 'done', text: t('stateConnected') }
-      case 'connecting': return { dot: 'ongoing', text: t('stateConnecting') }
-      case 'reconnecting': return { dot: 'warning', text: t('stateReconnecting', { attempt: status.attempt, max: status.maxAttempts }) }
-      case 'failed': return { dot: 'error', text: t('stateFailed') }
-    }
-  }
+  if (row.enabled && row.status !== undefined) return connectionView(row.status, t)
   const phase = PHASE[row.enabled ? row.fiberPhase ?? 'off' : 'off']
   return { dot: phase.dot, text: t(phase.key) }
 }

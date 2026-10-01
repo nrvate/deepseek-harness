@@ -1,5 +1,5 @@
 ---
-description: "dsh Web 客户端插件页上的 MCP 服务器页：添加、编辑、启用、停用和移除为模型提供 MCP 工具的服务器。"
+description: "dsh Web 客户端插件页上的 MCP 服务器页，以及输入框下方的 MCP 状态项：管理服务器并查看其状态和用量。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-在侧栏打开**插件**，在官方分组里选择 **MCP 服务器**，即可在不编辑文件的情况下添加、编辑、启用、停用和移除当前 profile 的 MCP 服务器。每个服务器是一个本地命令或一个 HTTP 端点。密钥以环境变量的形式选择，从不直接键入 profile 文件。页面只在 Host 提供 `mcpServers` Remote 期间存在。
+在侧栏打开**插件**，在官方分组里选择 **MCP 服务器**，即可在不编辑文件的情况下添加、编辑、启用、停用和移除当前 profile 的 MCP 服务器。每个服务器是一个本地命令或一个 HTTP 端点。密钥以环境变量的形式选择，从不直接键入 profile 文件。输入框下方的状态项显示已连接的服务器数量，并可打开它们的用量数据。页面和状态项只在 Host 提供 `mcpServers` Remote 期间存在。
 
 ## 目录
 
@@ -33,6 +33,12 @@ kind: "package-reference"
 
 **工具**对话框按模型看到的名称列出每个工具，附带说明的第一行和一个筛选框。选择一个工具即可查看完整说明，以及列出各参数类型和是否必填的参数表。对话框打开期间列表会随之更新。
 
+### 状态项
+
+在对话中，输入框下方、其他读数旁边会出现 **MCP 2/3** 一项：已启用的服务器中已连接的数量，其圆点在服务器连接中时变为琥珀色，在有服务器失败时变为红色。选择它会打开一个面板。顶部显示所有服务器的合计：调用次数、错误次数、估算的输入和输出 Token 数，以及工具定义为每次请求增加的估算 Token 数。随后每个服务器显示其状态、同样的四个数字，以及一个**详情**行，包含服务器自报的名称和版本、协议版本、类型、已连接时长、连接次数、工具数量、平均和最慢调用耗时、上次调用时间，以及最常用的五个工具。面板打开期间数据每两秒刷新一次。**管理服务器**会打开插件页。
+
+MCP 服务器页上的**在输入框下方显示 MCP 状态**用于打开或关闭该项。这一选择随 profile 的设置保存，默认开启。没有配置任何服务器时该项不会显示。
+
 在支持热重载的 profile 上更改会立即生效，否则提示需要重启。来自 bundle、家目录补丁或命令行覆盖的行会列出，但不能在此更改；使用表达式的行或带凭证的 URL 的行可以移除或切换，但不能编辑。
 
 -----
@@ -45,7 +51,9 @@ kind: "package-reference"
 
 Host 部分是一个空的 `apply`，仅用于让包拥有一个 Loader 行，客户端模块系统据此为其提供浏览器部分。浏览器部分由 `McpServersController` 维护页面：读取 `mcpServers.list`，把表单暂存为 `EditorDraft`，并用 `specFromDraft` 把草稿转换为 `McpServerSpec`。被拒绝的保存会回到表单，显示针对 Host 错误码的本地化语句，并在旁边附上 Host 自己的说明。本地命令要保存两次：第一次调用被 `confirmation-required` 拒绝并返回 Host 的命令行；用户确认信任后，第二次带着这段完全相同的文本作为 `confirmedCommand` 重复提交，因此用户读到的文本就是 Host 校验的文本。控制器在每次更改之后，以及收到 `plugin-manager/changed` 和 `connection/reset` 时重新读取，但只在页面打开之后才这样做。
 
-页面把 `McpServersCard` 注册到插件页的 `plugins.item` 插槽，把 `McpServersToast` 注册到 `shell.overlay`，使结果提示在插件面板关闭后依然存在。包注入 `remote.mcpServers`，因此没有该控制器的部署中不会出现这个页面。
+页面把 `McpServersCard` 注册到插件页的 `plugins.item` 插槽，把 `McpServersToast` 注册到 `shell.overlay`，使结果提示在插件面板关闭后依然存在。状态项是注册在输入框 `conversation.composer.dock` 插槽中的 `McpStatusItem`，由 `McpTrayController` 驱动：它在挂载时和 Host 报告变化时读取 `mcpServers.overview`，并且只在面板打开期间轮询，因为用量计数不触发事件。偏好设置是本包 Host 部分的 `statusItem` 字段，这是一个实时设置字段，通过 `ctx.configForms` 以命名空间 `ui-settings-mcp-servers` 读写。
+
+包注入 `remote.mcpServers`，因此没有该控制器的部署中不会出现这个页面和状态项。
 
 </details>
 
@@ -78,6 +86,8 @@ Host 部分是一个空的 `apply`，仅用于让包拥有一个 Loader 行，�
 - **错误是服务器自己的文本** — 连接错误按 SDK 或传输层的原样显示，未经本地化。
 - **并非所有值都可编辑** — 在 `env` 和 `headers` 之外使用表达式的行，或 URL 内嵌凭证的行，可以移除或切换，但不能编辑。
 - **浏览器侧校验很少** — 完整配置由 Host 校验，表单会显示 Host 拒绝的内容。
+- **状态项需要一个对话** — 空白会话的起始界面不渲染输入框下方的区域，因此对话有了消息之后该项才会出现。
+- **用量数据以进程为单位且为估算** — 计数在 harness 重启时清零，且不按 Session 拆分；Token 数是按每 Token 四个字符的文本长度计算的。
 - **运行时 invariant：** 不发布伴生包。页面不持有自己拥有的关系：显示的内容来自 `mcpServers.list`，写入的内容由 Host 校验。
 
 <a id="dev-note"></a>

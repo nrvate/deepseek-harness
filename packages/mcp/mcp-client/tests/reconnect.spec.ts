@@ -31,6 +31,8 @@ const { mockConnect, mockClose, mockListTools, mockCallTool, mockSetNotification
     close = mockClose
     getServerCapabilities = () => ({ tools: {} })
     getInstructions(): string | undefined { return undefined }
+    getServerVersion(): { name: string; version: string } | undefined { return undefined }
+    getNegotiatedProtocolVersion(): string | undefined { return undefined }
     listResources = async () => ({ resources: [] })
     listTools = mockListTools
     callTool = mockCallTool

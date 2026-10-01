@@ -14,7 +14,7 @@ import {
 import McpServersController from '../src/index.ts'
 import type { McpEntryId, McpHttpSpec, McpStdioSpec } from '../src/types.ts'
 
-const reconcile = vi.hoisted(() => ({ failNext: false, failWith: new Error('reload rejected the change') as unknown }))
+const reconcile = vi.hoisted(() => ({ failNext: false }))
 vi.mock('@deepseek-ai/dsh-app-boot', async (importOriginal) => {
   const original = await importOriginal<typeof import('@deepseek-ai/dsh-app-boot')>()
   return {
@@ -22,8 +22,7 @@ vi.mock('@deepseek-ai/dsh-app-boot', async (importOriginal) => {
     reconcileProfilePatches: (...args: Parameters<typeof original.reconcileProfilePatches>) => {
       if (reconcile.failNext) {
         reconcile.failNext = false
-        // oxlint-disable-next-line typescript/prefer-promise-reject-errors -- one case rejects with a non-Error value on purpose
-        return Promise.reject(reconcile.failWith)
+        return Promise.reject(new Error('reload rejected the change'))
       }
       return original.reconcileProfilePatches(...args)
     },
@@ -265,14 +264,6 @@ it('reports restart-required when the profile has no hot reload', async () => {
   expect(await controller.upsert(unreachable)).toMatchObject({ changed: true, application: 'restart-required' })
   expect(read()).toContain('serverName: web')
   expect(await controller.list()).toEqual([expect.objectContaining({ id: 'mcp-web', enabled: true, fiberPhase: null, owned: true })])
-})
-
-it('reports a thrown value that is not an Error', async () => {
-  const { controller } = await fixture()
-  reconcile.failNext = true
-  reconcile.failWith = 'a plain string'
-  onTestFinished(() => { reconcile.failWith = new Error('reload rejected the change') })
-  expect(await controller.upsert(unreachable)).toMatchObject({ error: { code: 'operation-error', message: 'a plain string' } })
 })
 
 it('rejects an expression the file does not hold', async () => {

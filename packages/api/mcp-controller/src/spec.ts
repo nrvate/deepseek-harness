@@ -86,14 +86,19 @@ function invalid(message: string): McpError {
  * Check a spec the way the plugin will when it loads: the credential rules of this
  * form, the plugin's Config schema, and its load-time checks.
  * @param spec - configuration received from a client.
+ * @param env - the environment the Loader evaluates `process.env` references against.
  * @returns the first failure, or undefined when the plugin would accept the spec.
  */
-export async function validateSpec(spec: McpServerSpec): Promise<McpError | undefined> {
+export async function validateSpec(spec: McpServerSpec, env: NodeJS.ProcessEnv = process.env): Promise<McpError | undefined> {
   const values = valueMap(spec)
   for (const [key, value] of Object.entries(values)) {
     if (key.trim() === '') return invalid('A name must not be empty')
     if (value.kind === 'env' && !ENV_NAME.test(value.name)) {
       return invalid(`"${value.name}" is not an environment variable name`)
+    }
+    // An unset variable makes the plugin refuse its config (env) or send "Bearer undefined" (headers).
+    if (value.kind === 'env' && env[value.name] === undefined) {
+      return invalid(`The environment variable "${value.name}" is not set in the harness environment`)
     }
     if (value.kind === 'literal' && value.value !== '' && isSecretKey(spec, key)) {
       return { code: 'literal-secret', message: `"${key}" looks like a credential; reference an environment variable instead of typing the value` }

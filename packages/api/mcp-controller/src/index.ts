@@ -144,11 +144,12 @@ export class McpServersController extends TypertRemoteService {
 
   /**
    * Remove one server row from the profile patch.
+   * The name is not `remove`: a Remote method may not share a name with a member of its namespace service.
    * @param id - row id returned by `list`.
    * @returns the persisted change and whether the running profile applied it.
    */
   @Remote
-  remove(id: McpEntryId): Promise<McpChangeResult> {
+  removeServer(id: McpEntryId): Promise<McpChangeResult> {
     return this.change(id, async () => {
       requireOwned(await this.list(), id)
       return text => removeRow(text, id)

@@ -35,7 +35,7 @@ function bench(rows: McpServerInfo[] = [row('mcp-files', stdioSpec), row('mcp-we
     list: vi.fn(() => Promise.resolve({ ok: true as const, value: rows })),
     upsert: vi.fn((_spec: McpServerSpec, _options?: unknown) => Promise.resolve({ ok: true as const, value: applied })),
     setEnabled: vi.fn((_id: McpEntryId, _enabled: boolean) => Promise.resolve({ ok: true as const, value: applied })),
-    remove: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: applied })),
+    removeServer: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: applied })),
   }
   const remote = new TestRemote(ctx, { mcpServers })
   const controller = new McpServersController(ctx)
@@ -427,25 +427,25 @@ describe('toggling and removing', () => {
   it('removes the confirmed row once, toasts, and re-reads', async () => {
     const { controller, face, mcpServers } = await loaded()
     face.confirmRemove()
-    expect(mcpServers.remove).not.toHaveBeenCalled()
+    expect(mcpServers.removeServer).not.toHaveBeenCalled()
     face.askRemove(id('mcp-files'))
     face.confirmRemove()
     face.confirmRemove()
     await vi.waitFor(() => { expect(controller.getSnapshot().notice).toMatchObject({ kind: 'removed' }) })
-    expect(mcpServers.remove).toHaveBeenCalledTimes(1)
-    expect(mcpServers.remove).toHaveBeenCalledWith('mcp-files')
+    expect(mcpServers.removeServer).toHaveBeenCalledTimes(1)
+    expect(mcpServers.removeServer).toHaveBeenCalledWith('mcp-files')
     expect(controller.getSnapshot().removal).toBeNull()
   })
 
   it('reports a removal the Host refused, and ignores an answer after teardown', async () => {
     const { controller, face, mcpServers } = await loaded()
-    mcpServers.remove.mockResolvedValueOnce(failure as never)
+    mcpServers.removeServer.mockResolvedValueOnce(failure as never)
     face.askRemove(id('mcp-files'))
     face.confirmRemove()
     await vi.waitFor(() => { expect(controller.getSnapshot().notice).toMatchObject({ kind: 'failed' }) })
 
     const pending = Promise.withResolvers<{ ok: true; value: McpChangeResult }>()
-    mcpServers.remove.mockReturnValueOnce(pending.promise)
+    mcpServers.removeServer.mockReturnValueOnce(pending.promise)
     face.dismissNotice()
     face.askRemove(id('mcp-files'))
     face.confirmRemove()

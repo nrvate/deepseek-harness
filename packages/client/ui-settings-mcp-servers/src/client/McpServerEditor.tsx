@@ -72,9 +72,16 @@ function EditorDialog(props: McpServersCardProps & { editor: EditorState }): Rea
       title={t(draft.rowId === undefined ? 'addTitle' : 'editTitle')}
       closeLabel={t('close')}
       onClose={closeEditor}
+      className={clsx(css.dialog)}
       contentClassName={clsx(css.dialogBody)}
       footer={(
         <>
+          {error !== null && (
+            <p className={css.footerError} role="alert">
+              {t(ERROR_TEXT[error.code])}
+              {error.detail !== '' && <span className={css.detail}> {error.detail}</span>}
+            </p>
+          )}
           <Button variant="outline" onClick={closeEditor}>{t('cancel')}</Button>
           <Button variant="primary" disabled={!complete || saving} onClick={save}>
             {t(saving ? 'saving' : 'save')}
@@ -133,12 +140,6 @@ function EditorDialog(props: McpServersCardProps & { editor: EditorState }): Rea
           <span className={css.label}>{t('failOnStartup')}</span>
           <Switch label={t('failOnStartup')} checked={draft.failOnStartupError} onChange={setFailOnStartup} />
         </div>
-        {error !== null && (
-          <p className={css.error} role="alert">
-            {t(ERROR_TEXT[error.code])}
-            {error.detail !== '' && <span className={css.detail}> {error.detail}</span>}
-          </p>
-        )}
       </form>
     </Modal>
   )
@@ -194,6 +195,7 @@ function ConfirmDialog(props: McpServersCardProps & { editor: EditorState }): Re
       title={t('confirmTitle')}
       closeLabel={t('close')}
       onClose={cancelConfirm}
+      className={clsx(css.dialog)}
       footer={(
         <>
           <Button variant="outline" onClick={cancelConfirm}>{t('cancel')}</Button>

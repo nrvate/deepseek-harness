@@ -19,6 +19,8 @@ describe('web e2e: MCP servers page', () => {
   let tripwire: ReturnType<typeof watchConsole>
 
   beforeAll(async () => {
+    // The Host evaluates `process.env` references in its own process, so the referenced variable must exist here.
+    process.env.E2E_MCP_TOKEN = 'e2e-only-value'
     scaffold = await launchWebScaffold({
       extraOverlayPath: fileURLToPath(new URL('./pin-browse-picker.overlay.yml', import.meta.url)),
     })
@@ -30,6 +32,7 @@ describe('web e2e: MCP servers page', () => {
   }, 120_000)
 
   afterAll(async () => {
+    Reflect.deleteProperty(process.env, 'E2E_MCP_TOKEN')
     await browser?.close()
     await scaffold?.close()
   })
@@ -62,7 +65,7 @@ describe('web e2e: MCP servers page', () => {
     await dialog.getByLabel('名称', { exact: true }).fill('web')
     await dialog.getByRole('tab', { name: 'HTTP 端点' }).click()
     await dialog.getByLabel('URL', { exact: true }).fill('http://127.0.0.1:9/mcp')
-    await dialog.getByRole('button', { name: '添加', exact: true }).click()
+    await dialog.getByRole('button', { name: '添加一项', exact: true }).click()
     await dialog.getByLabel('条目名称').fill('Authorization')
     await dialog.getByLabel('取值类型').selectOption('bearer')
     await dialog.getByLabel('值', { exact: true }).fill('E2E_MCP_TOKEN')
@@ -89,7 +92,7 @@ describe('web e2e: MCP servers page', () => {
     await dialog.getByLabel('名称', { exact: true }).fill('leaky')
     await dialog.getByRole('tab', { name: 'HTTP 端点' }).click()
     await dialog.getByLabel('URL', { exact: true }).fill('http://127.0.0.1:9/leaky')
-    await dialog.getByRole('button', { name: '添加', exact: true }).click()
+    await dialog.getByRole('button', { name: '添加一项', exact: true }).click()
     await dialog.getByLabel('条目名称').fill('Authorization')
     await dialog.getByLabel('取值类型').selectOption('literal')
     await dialog.getByLabel('值', { exact: true }).fill('Bearer hunter2')
@@ -97,6 +100,27 @@ describe('web e2e: MCP servers page', () => {
     await dialog.getByRole('alert').getByText('不能在此直接输入凭证', { exact: false }).waitFor({ timeout: 10_000 })
     expect(await patch()).toBe(before)
     expect(await patch()).not.toContain('hunter2')
+    await dialog.getByRole('button', { name: '取消', exact: true }).click()
+  }, 60_000)
+
+  it('refuses a reference to a variable the harness has not set, in view beside the buttons', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-mcp-servers-unset-variable'))
+    const panel = await openPage()
+    const before = await patch()
+    await panel.getByRole('button', { name: '添加服务器', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: '添加 MCP 服务器' })
+    await dialog.getByLabel('名称', { exact: true }).fill('unset')
+    await dialog.getByRole('tab', { name: 'HTTP 端点' }).click()
+    await dialog.getByLabel('URL', { exact: true }).fill('http://127.0.0.1:9/unset')
+    await dialog.getByRole('button', { name: '添加一项', exact: true }).click()
+    await dialog.getByLabel('条目名称').fill('X-Api-Version')
+    await dialog.getByLabel('取值类型').selectOption('env')
+    await dialog.getByLabel('值', { exact: true }).fill('E2E_MCP_NEVER_SET')
+    await dialog.getByRole('button', { name: '保存', exact: true }).click()
+    const alert = dialog.getByRole('alert')
+    await alert.getByText('E2E_MCP_NEVER_SET', { exact: false }).waitFor({ timeout: 10_000 })
+    expect(await alert.isVisible()).toBe(true)
+    expect(await patch()).toBe(before)
     await dialog.getByRole('button', { name: '取消', exact: true }).click()
   }, 60_000)
 

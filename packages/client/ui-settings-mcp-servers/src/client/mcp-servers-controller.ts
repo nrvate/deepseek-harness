@@ -383,7 +383,7 @@ export class McpServersController {
     const removal = this.getSnapshot().removal
     if (removal === null || removal.saving) return
     this.patch({ removal: { ...removal, saving: true } })
-    const result = await this.ctx.remote.mcpServers.remove(removal.row.id)
+    const result = await this.ctx.remote.mcpServers.removeServer(removal.row.id)
     if (this.disposed) return
     this.patch({ removal: null })
     this.settle(result.ok ? result.value : undefined, 'removed')

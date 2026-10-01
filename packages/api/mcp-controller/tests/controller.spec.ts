@@ -182,14 +182,14 @@ it('disables and re-enables a row, and removes it', async () => {
   expect(await controller.setEnabled(id('mcp-web'), false)).toMatchObject({ changed: false })
   expect(await controller.setEnabled(id('mcp-web'), true)).toMatchObject({ changed: true })
   expect((await controller.list())[0]).toMatchObject({ enabled: true, fiberPhase: 'active' })
-  expect(await controller.remove(id('mcp-web'))).toMatchObject({ changed: true, application: 'applied' })
+  expect(await controller.removeServer(id('mcp-web'))).toMatchObject({ changed: true, application: 'applied' })
   expect(await controller.list()).toEqual([])
   expect(read()).not.toContain('mcp-web')
 })
 
 it('reports an unknown row', async () => {
   const { controller } = await fixture()
-  expect(await controller.remove(id('missing'))).toMatchObject({ application: 'failed', error: { code: 'unknown-server' } })
+  expect(await controller.removeServer(id('missing'))).toMatchObject({ application: 'failed', error: { code: 'unknown-server' } })
   expect(await controller.setEnabled(id('missing'), true)).toMatchObject({ error: { code: 'unknown-server' } })
   expect(await controller.upsert(unreachable, { id: id('missing') })).toMatchObject({ error: { code: 'unknown-server' } })
 })
@@ -203,7 +203,7 @@ it('lists rows from an overlay as read-only and refuses to change them', async (
   expect(await controller.list()).toEqual([expect.objectContaining({
     id: 'overlay-mcp', serverName: 'overlay', owned: false, readOnlyReason: 'unaddressable',
   })])
-  expect(await controller.remove(id('overlay-mcp'))).toMatchObject({ error: { code: 'read-only' } })
+  expect(await controller.removeServer(id('overlay-mcp'))).toMatchObject({ error: { code: 'read-only' } })
   expect(await controller.setEnabled(id('overlay-mcp'), false)).toMatchObject({ error: { code: 'read-only' } })
   expect(await controller.upsert({ ...unreachable, serverName: 'overlay2' }, { id: id('overlay-mcp') })).toMatchObject({ error: { code: 'read-only' } })
   expect(await controller.upsert({ ...unreachable, serverName: 'overlay' })).toMatchObject({ error: { code: 'duplicate-server' } })
@@ -246,7 +246,7 @@ it('lists an owned row with an expression as not editable but removable', async 
   const { controller } = await fixture('live', patch)
   expect((await controller.list())[0]).toMatchObject({ readOnlyReason: 'custom-expression', owned: true, enabled: false })
   expect(await controller.upsert({ ...stdio, serverName: 'x' }, { id: id('mcp-x') })).toMatchObject({ error: { code: 'read-only' } })
-  expect(await controller.remove(id('mcp-x'))).toMatchObject({ changed: true })
+  expect(await controller.removeServer(id('mcp-x'))).toMatchObject({ changed: true })
 })
 
 it('restores the file when the reload rejects the change', async () => {

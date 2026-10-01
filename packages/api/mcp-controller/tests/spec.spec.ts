@@ -8,7 +8,15 @@ const http: McpHttpSpec = { transport: 'streamable-http', serverName: 'srv', url
 
 it('accepts specs the plugin accepts', async () => {
   expect(await validateSpec(stdio)).toBeUndefined()
-  expect(await validateSpec({ ...http, headers: { Authorization: { kind: 'env', name: 'TOKEN', scheme: 'Bearer' } } })).toBeUndefined()
+  expect(await validateSpec({ ...http, headers: { Authorization: { kind: 'env', name: 'TOKEN', scheme: 'Bearer' } } }, { TOKEN: 'x' })).toBeUndefined()
+})
+
+it('refuses a reference to a variable the harness environment does not set', async () => {
+  const refusal = await validateSpec({ ...stdio, env: { API: { kind: 'env', name: 'MISSING_VAR' } } }, {})
+  expect(refusal).toMatchObject({ code: 'invalid-config' })
+  expect(refusal?.message).toContain('MISSING_VAR')
+  expect(await validateSpec({ ...http, headers: { Authorization: { kind: 'env', name: 'MISSING_VAR', scheme: 'Bearer' } } }, {})).toMatchObject({ code: 'invalid-config' })
+  expect(await validateSpec({ ...stdio, env: { API: { kind: 'env', name: 'SET_VAR' } } }, { SET_VAR: '' })).toBeUndefined()
 })
 
 it.each([

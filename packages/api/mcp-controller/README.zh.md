@@ -29,7 +29,7 @@ kind: "package-reference"
 | `list()` | 运行中 profile 的所有 MCP 行，包括来自 bundle、家目录补丁和命令行覆盖的行，附带 `owned`、`readOnlyReason`、`enabled` 和实时的 `fiberPhase` |
 | `upsert(spec, { id?, confirmedCommand? })` | 添加 `mcp-<serverName>`，或替换 `id` 所指行中受托管的键 |
 | `setEnabled(id, enabled)` | 在 profile 补丁所拥有的行上写入 `disabled` |
-| `remove(id)` | 删除 profile 补丁所拥有的行 |
+| `removeServer(id)` | 删除 profile 补丁所拥有的行 |
 
 每次写入都返回 `{ changed, application, target, error?, warnings? }`。`application` 为 `applied` 表示 Loader 已协调该变更，`restart-required` 表示 profile 没有热重载，`failed` 则带有 `error.code`：`invalid-config`、`duplicate-server`、`confirmation-required`、`literal-secret`、`unknown-server`、`read-only`、`unreadable-patch` 或 `operation-error`。失败的变更会让补丁文件保持原样。
 
@@ -37,7 +37,7 @@ stdio 服务器会以 Host 的权限运行命令。在 `confirmedCommand` 等于
 
 ### 密钥
 
-`env` 或 `headers` 的值可以是字面量、环境变量引用（`{ kind: 'env', name, scheme? }`，写为 `!!js process.env.NAME` 或 `Bearer` 模板）、文件中已有的 `expression`，或 `kept`。形似凭证的键下的字面量会以 `literal-secret` 被拒绝（`env` 为 `KEY`、`PASSWORD`、`SECRET`、`TOKEN`；`headers` 除这些外还有 `authorization`、`cookie`），含用户名或密码的 URL 同样被拒绝。当手写文件中已存在此类字面量时，`list` 以 `kept` 代替返回，`upsert` 接受 `kept` 以保持已存储的值不变。`expression` 仅在与同一键下已存储的源码一致时才被接受，因此客户端无法提交代码。URL 内嵌凭证的行会以 `embedded-credentials` 只读列出，并显示不含凭证的 URL。
+`env` 或 `headers` 的值可以是字面量、环境变量引用（`{ kind: 'env', name, scheme? }`，写为 `!!js process.env.NAME` 或 `Bearer` 模板）、文件中已有的 `expression`，或 `kept`。环境变量引用必须指向保存变更时 Host 环境中已设置的变量：Loader 会拒绝 `env` 值未定义的配置，`Bearer` 请求头则会发送文本 `undefined`，因此 `upsert` 会以 `invalid-config` 拒绝。形似凭证的键下的字面量会以 `literal-secret` 被拒绝（`env` 为 `KEY`、`PASSWORD`、`SECRET`、`TOKEN`；`headers` 除这些外还有 `authorization`、`cookie`），含用户名或密码的 URL 同样被拒绝。当手写文件中已存在此类字面量时，`list` 以 `kept` 代替返回，`upsert` 接受 `kept` 以保持已存储的值不变。`expression` 仅在与同一键下已存储的源码一致时才被接受，因此客户端无法提交代码。URL 内嵌凭证的行会以 `embedded-credentials` 只读列出，并显示不含凭证的 URL。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现
@@ -83,6 +83,6 @@ stdio 服务器会以 Host 的权限运行命令。在 `confirmedCommand` 等于
 <details>
 <summary>维护者的工作上下文——点击展开</summary>
 
-[插件页面中的 MCP 服务器](../../../.agents/notes/proposed/feature/2026-10-01-mcp-servers-on-the-plugins-page.zh.md)提案记录了设计和被否决的备选方案。来自 `mcp-client` 的状态反馈是尚未完成的后续工作。
+[插件页面中的 MCP 服务器](../../../.agents/notes/implemented/feature/2026-10-01-mcp-servers-on-the-plugins-page.zh.md)提案记录了设计和被否决的备选方案。来自 `mcp-client` 的状态反馈是尚未完成的后续工作。
 
 </details>

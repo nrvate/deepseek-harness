@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-10-01-mcp-servers-on-the-plugins-page.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-01-mcp-servers-on-the-plugins-page.md
+/agent-note-mcp-servers-on-the-plugins-page:
+  en: 79a0f74d95ccdc5b
+  zh: 2babc610200aef79
+/agent-note-mcp-servers-on-the-plugins-page/problem:
+  en: 886f8b5af2ceeb3b
+  zh: 969f86f7e7d8157d
+/agent-note-mcp-servers-on-the-plugins-page/decision:
+  en: 2730ed5daf44787e
+  zh: 99febfdf5722bfd0
+/agent-note-mcp-servers-on-the-plugins-page/alternatives-considered:
+  en: 8eab035262b3ebb7
+  zh: d4dfe5f1d8cb88fb
+/agent-note-mcp-servers-on-the-plugins-page/consequences:
+  en: e6e0e6d53147213e
+  zh: 6235ce1a07a0f242
+/agent-note-mcp-servers-on-the-plugins-page/testing:
+  en: e9378c23bdbf1b7a
+  zh: 212d35cf612f5610

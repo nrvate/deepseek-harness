@@ -29,7 +29,7 @@ The [web bundle](../../bundle/web-app/README.md) mounts the controller as `mcp-s
 | `list()` | Every MCP row of the running profile, including rows from bundles, the home patch, and command-line overlays, with `owned`, `readOnlyReason`, `enabled`, and the live `fiberPhase` |
 | `upsert(spec, { id?, confirmedCommand? })` | Add `mcp-<serverName>`, or replace the managed keys of the row `id` names |
 | `setEnabled(id, enabled)` | Write `disabled` on a row the profile patch owns |
-| `remove(id)` | Delete a row the profile patch owns |
+| `removeServer(id)` | Delete a row the profile patch owns |
 
 Every write returns `{ changed, application, target, error?, warnings? }`. `application` is `applied` after the Loader reconciled the change, `restart-required` when the profile has no hot reload, and `failed` with an `error.code` otherwise: `invalid-config`, `duplicate-server`, `confirmation-required`, `literal-secret`, `unknown-server`, `read-only`, `unreadable-patch`, or `operation-error`. A failed change leaves the patch file as it was.
 
@@ -37,7 +37,7 @@ A stdio server runs a command with the Host's privileges. `upsert` refuses to ad
 
 ### Secrets
 
-An `env` or `headers` value is a literal, an environment variable reference (`{ kind: 'env', name, scheme? }`, written as `!!js process.env.NAME` or the `Bearer` template), an `expression` the file already holds, or `kept`. A literal under a credential-shaped key (`KEY`, `PASSWORD`, `SECRET`, `TOKEN` for `env`; those plus `authorization`, `cookie` for `headers`) is refused with `literal-secret`, as is a URL with a user name or password. When a hand-written file already holds such a literal, `list` returns `kept` in its place and `upsert` accepts `kept` to leave the stored value unchanged. An `expression` is accepted only when it matches the source already stored under the same key, so a client cannot submit code. A row whose URL embeds credentials is listed read-only with `embedded-credentials` and a URL without them.
+An `env` or `headers` value is a literal, an environment variable reference (`{ kind: 'env', name, scheme? }`, written as `!!js process.env.NAME` or the `Bearer` template), an `expression` the file already holds, or `kept`. An environment reference must name a variable that is set in the Host environment when the change is saved: the Loader refuses a config whose `env` value is undefined, and a `Bearer` header would send the text `undefined`, so `upsert` refuses it with `invalid-config`. A literal under a credential-shaped key (`KEY`, `PASSWORD`, `SECRET`, `TOKEN` for `env`; those plus `authorization`, `cookie` for `headers`) is refused with `literal-secret`, as is a URL with a user name or password. When a hand-written file already holds such a literal, `list` returns `kept` in its place and `upsert` accepts `kept` to leave the stored value unchanged. An `expression` is accepted only when it matches the source already stored under the same key, so a client cannot submit code. A row whose URL embeds credentials is listed read-only with `embedded-credentials` and a URL without them.
 
 <a id="understand-the-implementation"></a>
 ## Understand the implementation
@@ -83,6 +83,6 @@ A change that adds, removes, or reconnects a server changes the tool definitions
 <details>
 <summary>Working context for maintainers — click to expand</summary>
 
-The [MCP servers on the Plugins page](../../../.agents/notes/proposed/feature/2026-10-01-mcp-servers-on-the-plugins-page.md) proposal records the design and the rejected alternatives. A status feed from `mcp-client` is the open follow-up.
+The [MCP servers on the Plugins page](../../../.agents/notes/implemented/feature/2026-10-01-mcp-servers-on-the-plugins-page.md) Agent Note records the design and the rejected alternatives. A status feed from `mcp-client` is the open follow-up.
 
 </details>

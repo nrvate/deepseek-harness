@@ -107,6 +107,11 @@
   gap: 8px;
 }
 
+/* Wider than the default 380px dialog: the value rows hold a name, a type, and a value side by side. */
+.dialog {
+  width: min(560px, 100%);
+}
+
 .dialogBody {
   max-height: min(70vh, 640px);
   overflow: auto;
@@ -170,8 +175,12 @@
   gap: 8px;
   min-width: 0;
   margin: 0;
-  padding: 0;
+  padding: 0 0 8px;
   border: 0;
+}
+
+.values > legend {
+  padding: 0;
 }
 
 .valueRow {
@@ -185,6 +194,12 @@
   grid-column: 1 / -1;
 }
 
+@media (max-width: 600px) {
+  .valueRow {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
 .addValue {
   align-self: flex-start;
 }
@@ -196,11 +211,18 @@
   gap: 12px;
 }
 
-.error {
+/* Beside the footer buttons so a failed save stays visible however far the form is scrolled. */
+.footerError {
+  flex: 1;
+  min-width: 0;
+  max-height: 96px;
   margin: 0;
+  overflow: auto;
   font-size: 13px;
   line-height: 20px;
   color: var(--dsw-alias-state-error-primary);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .detail {

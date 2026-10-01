@@ -4,7 +4,7 @@
 - button "刷新"
 - button "添加插件"
 - heading "官方" [level=3]
-- text: "8"
+- text: "9"
 - list:
   - listitem:
     - button "查看 智能体团队": 智能体团队
@@ -34,6 +34,9 @@
   - listitem:
     - button "查看 网页搜索": 网页搜索
     - text: 设置 DeepSeek 的搜索提供方。
+  - listitem:
+    - button "查看 MCP 服务器": MCP 服务器
+    - text: 通过 Model Context Protocol 服务器连接外部工具和数据。
 - heading "已安装" [level=3]
 - text: "2"
 - list:

@@ -34,7 +34,7 @@ function mount(rows: McpServerInfo[], view: 'page' | 'summary' = 'page') {
     list: vi.fn(() => Promise.resolve({ ok: true as const, value: rows })),
     upsert: vi.fn((_spec: McpServerSpec, _options?: unknown) => Promise.resolve({ ok: true as const, value: applied })),
     setEnabled: vi.fn((_id: McpEntryId, _enabled: boolean) => Promise.resolve({ ok: true as const, value: applied })),
-    remove: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: applied })),
+    removeServer: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: applied })),
   }
   new TestRemote(ctx, { mcpServers })
   const controller = new McpServersController(ctx)
@@ -296,7 +296,7 @@ describe('McpServersCard', () => {
     expect(screen.queryByRole('dialog')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: en.remove }))
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: en.removeAction }))
-    await waitFor(() => { expect(mcpServers.remove).toHaveBeenCalledWith('mcp-files') })
+    await waitFor(() => { expect(mcpServers.removeServer).toHaveBeenCalledWith('mcp-files') })
   })
 
   it('names a server without a name by its row id in the removal dialog', async () => {

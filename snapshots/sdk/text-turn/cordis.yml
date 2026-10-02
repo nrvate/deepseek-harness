@@ -7,6 +7,12 @@
   config:
     includeDefaultRoots: false
 
+# The recording carries upload acceptance events, so this scenario opts in; upload is off by default.
+- id: session-log-deepseek
+  name: '@deepseek-ai/dsh-session-log-deepseek'
+  config:
+    enabled: true
+
 - id: llm-deepseek
   name: '@deepseek-ai/dsh-llm-deepseek-api-key'
   config:

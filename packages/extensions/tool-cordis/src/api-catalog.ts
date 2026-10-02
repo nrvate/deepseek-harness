@@ -1559,6 +1559,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the persisted change and whether the running profile applied it.',
       },
       {
+        signature: '@Remote setToolPolicy(id: McpEntryId, policy: McpToolPolicy): Promise<McpChangeResult>',
+        description: 'Replace the tool-call policy of one editable server row. Changing it runs no command, so it needs no confirmation.',
+        parameters: [{ name: 'id', description: 'row id returned by `list`.' }, { name: 'policy', description: 'the server\'s default mode and its per-tool modes.' }],
+        returns: 'the persisted change and whether the running profile applied it.',
+      },
+      {
         signature: '@Remote async tools(id: McpEntryId): Promise<McpToolsResult>',
         description: 'Read the tools one server offers, with its connection state.',
         parameters: [{ name: 'id', description: 'row id returned by `list`.' }],
@@ -1985,6 +1991,11 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
       {
         signature: 'readonly workspaceRoot: string',
         description: 'The absolute `workspace-write` fallback root for calls without a session cwd.',
+        parameters: [],
+      },
+      {
+        signature: 'readonly protectedPaths: readonly string[]',
+        description: 'Absolute paths every resolved policy protects.',
         parameters: [],
       },
       {
@@ -5902,7 +5913,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'McpServerInfo',
-    declaration: 'export interface McpServerInfo {\n    id: McpEntryId;\n    serverName: string;\n    transport: McpServerSpec[\'transport\'];\n    summary: string;\n    enabled: boolean;\n    defaultActive: boolean;\n    fiberPhase: PluginFiberPhase;\n    status?: McpServerStatus;\n    spec?: McpServerSpec;\n    readOnlyReason?: McpReadOnlyReason;\n    owned: boolean;\n}',
+    declaration: 'export interface McpServerInfo {\n    id: McpEntryId;\n    serverName: string;\n    transport: McpServerSpec[\'transport\'];\n    summary: string;\n    enabled: boolean;\n    defaultActive: boolean;\n    toolPolicy: McpToolPolicy;\n    fiberPhase: PluginFiberPhase;\n    status?: McpServerStatus;\n    spec?: McpServerSpec;\n    readOnlyReason?: McpReadOnlyReason;\n    owned: boolean;\n}',
   },
   {
     name: 'McpServerOverview',
@@ -5926,7 +5937,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'McpSpecBase',
-    declaration: 'export interface McpSpecBase {\n    serverName: string;\n    toolCallTimeoutMs?: number;\n    failOnStartupError?: boolean;\n    defaultActive?: boolean;\n}',
+    declaration: 'export interface McpSpecBase {\n    serverName: string;\n    toolCallTimeoutMs?: number;\n    failOnStartupError?: boolean;\n    defaultActive?: boolean;\n    toolPolicy?: McpToolPolicy;\n}',
   },
   {
     name: 'McpStdioSpec',
@@ -6526,7 +6537,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SandboxExecutionPolicy',
-    declaration: 'export interface SandboxExecutionPolicy {\n    mode: SandboxMode;\n    workspaceRoot: string;\n    sessionId?: SessionId;\n}',
+    declaration: 'export interface SandboxExecutionPolicy {\n    mode: SandboxMode;\n    workspaceRoot: string;\n    sessionId?: SessionId;\n    protectedPaths?: readonly string[];\n}',
   },
   {
     name: 'SandboxMode',

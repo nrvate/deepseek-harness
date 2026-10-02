@@ -1,6 +1,6 @@
 /** Patch text edits keep comments, unmanaged keys, and the `!!js` tag. */
 import { expect, it } from 'vitest'
-import { commandLine, readOwnedRows, removeRow, setRowEnabled, upsertRow } from '../src/patch.ts'
+import { commandLine, readOwnedRows, readToolPolicy, removeRow, setRowEnabled, setRowToolPolicy, upsertRow } from '../src/patch.ts'
 import type { McpHttpSpec, McpStdioSpec } from '../src/types.ts'
 
 const http: McpHttpSpec = {
@@ -110,6 +110,8 @@ it.each([
   ['a non-number timeout', 'transport: stdio\n        command: c\n        toolCallTimeoutMs: soon'],
   ['a non-boolean startup flag', 'transport: stdio\n        command: c\n        failOnStartupError: maybe'],
   ['a non-boolean default selection', 'transport: stdio\n        command: c\n        defaultActive: sometimes'],
+  ['an unknown tool-call mode', 'transport: stdio\n        command: c\n        toolPolicy:\n          default: maybe'],
+  ['a tool-call policy expression', 'transport: stdio\n        command: c\n        toolPolicy: !!js "({ default: \'allow\' })"'],
   ['an unknown transport', 'transport: carrier-pigeon'],
 ])('reads %s as not editable', (_label, config) => {
   const text = `- insert:\n    - id: mcp-a\n      name: "@deepseek-ai/dsh-mcp-client"\n      config:\n        serverName: a\n        ${config}\n`
@@ -190,4 +192,36 @@ it('reads a row without a server name as not editable', () => {
 
 it('skips patch items that are not maps', () => {
   expect(readOwnedRows('- just text\n- insert:\n    - id: mcp-a\n      name: "@deepseek-ai/dsh-mcp-client"\n      config:\n        serverName: a\n        transport: stdio\n        command: c\n')).toHaveLength(1)
+})
+
+it('writes a tool-call policy only when it differs from asking before every call, and reads it back', () => {
+  const asking = upsertRow('[]\n', 'mcp-a', { ...stdio, serverName: 'a', toolPolicy: { default: 'ask', tools: {} } })
+  expect(asking).not.toContain('toolPolicy')
+  const policy = { default: 'allow' as const, tools: { send_email: 'deny' as const, search: 'ask' as const } }
+  const written = upsertRow('[]\n', 'mcp-a', { ...stdio, serverName: 'a', toolPolicy: policy })
+  expect(readOwnedRows(written)[0]?.spec?.toolPolicy).toEqual(policy)
+  const plain = upsertRow('[]\n', 'mcp-a', { ...stdio, serverName: 'a', toolPolicy: { default: 'deny', tools: {} } })
+  expect(plain).not.toContain('tools:')
+  expect(readOwnedRows(plain)[0]?.spec?.toolPolicy).toEqual({ default: 'deny', tools: {} })
+  expect(() => upsertRow('[]\n', 'mcp-a', { ...stdio, serverName: 'a', toolPolicy: { default: 'allow', tools: { x: 'often' as never } } }))
+    .toThrow('"x" has no tool-call mode "often"')
+})
+
+it('replaces only the tool-call policy of a row', () => {
+  const added = upsertRow('[]\n', 'mcp-a', { ...stdio, serverName: 'a', toolCallTimeoutMs: 5 })
+  const changed = setRowToolPolicy(added, 'mcp-a', { default: 'ask', tools: { read: 'allow' } })
+  expect(readOwnedRows(changed)[0]?.spec).toMatchObject({ toolCallTimeoutMs: 5, toolPolicy: { default: 'ask', tools: { read: 'allow' } } })
+  expect(setRowToolPolicy(changed, 'mcp-a', { default: 'ask', tools: {} })).toBe(added)
+  expect(() => setRowToolPolicy(added, 'missing', { default: 'ask', tools: {} })).toThrow('no MCP server row "missing"')
+  const bare = '- insert:\n    - id: mcp-b\n      name: "@deepseek-ai/dsh-mcp-client"\n'
+  expect(() => setRowToolPolicy(bare, 'mcp-b', { default: 'ask', tools: {} })).toThrow('has no configuration to change')
+})
+
+it('reads tool-call policies from composed values, and refuses other shapes', () => {
+  expect(readToolPolicy(undefined)).toEqual({ default: 'ask', tools: {} })
+  expect(readToolPolicy(null)).toEqual({ default: 'ask', tools: {} })
+  expect(readToolPolicy({ tools: { a: 'deny' } })).toEqual({ default: 'ask', tools: { a: 'deny' } })
+  for (const value of ['allow', [], { default: 'sometimes' }, { tools: [] }, { tools: null }, { tools: { a: 1 } }, { extra: true }]) {
+    expect(readToolPolicy(value)).toBeUndefined()
+  }
 })

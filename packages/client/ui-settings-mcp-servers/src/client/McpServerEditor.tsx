@@ -10,6 +10,8 @@ import { Button, Checkbox, Input, Modal, SegmentedControl, Switch } from '@deeps
 import type { McpServersCardProps } from './McpServersCard.tsx'
 import type { EditorError, EditorState, McpServersState, ValueDraft, ValueMode } from './mcp-servers-controller.ts'
 import type { McpServersLocaleKey } from './locales.ts'
+import { TOOL_MODE_LABEL, TOOL_MODES } from './tool-modes.ts'
+import type { McpToolMode } from '@deepseek-ai/dsh-api-remotes/client'
 import css from './McpServers.module.css'
 
 const MODES: readonly ValueMode[] = ['env', 'bearer', 'literal', 'kept', 'expression']
@@ -62,7 +64,7 @@ function Field(props: { id: string; label: string; hint?: string; children: Reac
 }
 
 function EditorDialog(props: McpServersCardProps & { editor: EditorState }): ReactNode {
-  const { t, editor, closeEditor, save, editField, setTransport, setFailOnStartup, setDefaultActive } = props
+  const { t, editor, closeEditor, save, editField, setTransport, setFailOnStartup, setDefaultActive, setToolDefault } = props
   const { draft, saving, error } = editor
   const stdio = draft.transport === 'stdio'
   const complete = draft.serverName.trim() !== '' && (stdio ? draft.command.trim() !== '' : draft.url.trim() !== '')
@@ -140,6 +142,16 @@ function EditorDialog(props: McpServersCardProps & { editor: EditorState }): Rea
           <span className={css.label}>{t('failOnStartup')}</span>
           <Switch label={t('failOnStartup')} checked={draft.failOnStartupError} onChange={setFailOnStartup} />
         </div>
+        <Field id="mcp-server-tool-policy" label={t('toolPolicy')} hint={t('toolPolicyHint')}>
+          <select
+            id="mcp-server-tool-policy"
+            className={css.select}
+            value={draft.toolPolicy.default}
+            onChange={(event) => { setToolDefault(event.target.value as McpToolMode) }}
+          >
+            {TOOL_MODES.map(mode => <option key={mode} value={mode}>{t(TOOL_MODE_LABEL[mode])}</option>)}
+          </select>
+        </Field>
         <div className={css.switchRow}>
           <span className={css.switchText}>
             <span className={css.label}>{t('defaultActive')}</span>

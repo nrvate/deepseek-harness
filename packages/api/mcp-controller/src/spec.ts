@@ -10,6 +10,15 @@ const SENSITIVE_HEADER_PATTERN = /authorization|cookie|token|key|secret|password
 
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
 
+/** URL query parameter and command-line option names whose values are credentials. */
+const SENSITIVE_PARAMETER_PATTERN = /token|key|secret|passw|auth|credential|signature/i
+
+/** A command-line option, with the value it carries after `=`. */
+const OPTION = /^--?([A-Za-z0-9_.-]+)(?:=(.*))?$/s
+
+/** What a credential in a displayed command line is replaced by. */
+const MASK = '***'
+
 /**
  * Whether a literal value under this key would store a credential in the patch file.
  * @param spec - the server the key belongs to; its transport selects the name pattern.
@@ -56,17 +65,50 @@ export function displayUrl(url: string): string {
 }
 
 /**
- * Whether a URL embeds a user name or password.
+ * Whether a URL embeds a credential: a user name, a password, or a query parameter with a credential-shaped name.
  * @param url - configured endpoint; text that is not a URL has none.
- * @returns true when a user name or password is present.
+ * @returns true when the URL carries one.
  */
 export function hasEmbeddedCredentials(url: string): boolean {
   try {
     const parsed = new URL(url)
     return parsed.username !== '' || parsed.password !== ''
+      || [...parsed.searchParams.keys()].some(name => SENSITIVE_PARAMETER_PATTERN.test(name))
   } catch (_error) {
     return false
   }
+}
+
+/**
+ * Find the command-line arguments that carry a credential: an option with a credential-shaped name
+ * and its value, either after `=` or as the next argument that is not itself an option.
+ * @param args - the command's arguments.
+ * @returns the indexes of the arguments that hold the values, each with the option that names it.
+ */
+export function credentialArguments(args: readonly string[]): Array<{ index: number; option: string }> {
+  const found: Array<{ index: number; option: string }> = []
+  args.forEach((arg, index) => {
+    const option = OPTION.exec(arg)
+    if (option === null || !SENSITIVE_PARAMETER_PATTERN.test(option[1] as string)) return
+    if (option[2] !== undefined) found.push({ index, option: option[1] as string })
+    else if (index + 1 < args.length && !(args[index + 1] as string).startsWith('-')) found.push({ index: index + 1, option: option[1] as string })
+  })
+  return found
+}
+
+/**
+ * The command line shown next to a row, with every credential argument value masked.
+ * @param spec - the command and its arguments.
+ * @returns the executable and arguments, space separated.
+ */
+export function maskedCommandLine(spec: { command: string; args: string[] }): string {
+  const hidden = new Map(credentialArguments(spec.args).map(({ index }) => [index, true]))
+  const args = spec.args.map((arg, index) => {
+    if (!hidden.has(index)) return arg
+    const option = OPTION.exec(arg)
+    return option?.[2] === undefined ? MASK : `${arg.slice(0, arg.length - option[2].length)}${MASK}`
+  })
+  return [spec.command, ...args].join(' ')
 }
 
 /**
@@ -105,7 +147,17 @@ export async function validateSpec(spec: McpServerSpec, env: NodeJS.ProcessEnv =
     }
   }
   if (spec.transport === 'streamable-http' && hasEmbeddedCredentials(spec.url)) {
-    return { code: 'literal-secret', message: 'The URL must not contain a user name or password; use a header that references an environment variable' }
+    return {
+      code: 'literal-secret',
+      message: 'The URL must not contain a user name, a password, or a credential in its query; use a header that references an environment variable',
+    }
+  }
+  const argument = spec.transport === 'stdio' ? credentialArguments(spec.args)[0] : undefined
+  if (argument !== undefined) {
+    return {
+      code: 'literal-secret',
+      message: `The argument "${argument.option}" looks like it carries a credential; pass it in an environment variable that references the harness environment`,
+    }
   }
   const strings = (map: Record<string, McpValue>): Record<string, string> => Object.fromEntries(
     Object.entries(map).map(([key, value]) => [key, value.kind === 'literal' ? value.value : 'x']),
@@ -115,6 +167,7 @@ export async function validateSpec(spec: McpServerSpec, env: NodeJS.ProcessEnv =
     ...spec.toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs: spec.toolCallTimeoutMs },
     ...spec.failOnStartupError === undefined ? {} : { failOnStartupError: spec.failOnStartupError },
     ...spec.defaultActive === undefined ? {} : { defaultActive: spec.defaultActive },
+    ...spec.toolPolicy === undefined ? {} : { toolPolicy: spec.toolPolicy },
   }
   const raw = spec.transport === 'stdio'
     ? { transport: spec.transport, command: spec.command, args: spec.args, env: strings(spec.env), cwd: spec.cwd ?? '', ...common }

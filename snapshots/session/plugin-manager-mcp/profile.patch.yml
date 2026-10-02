@@ -7,3 +7,6 @@
         transport: streamable-http
         url: !!js process.env.DSH_MCP_DEMO_URL
         failOnStartupError: true
+        # The recorded run called the tool without a person present to approve.
+        toolPolicy:
+          default: allow

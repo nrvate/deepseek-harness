@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, readlinkSync, rmSync } from 'node:fs'
+import { existsSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -68,6 +68,22 @@ describe.skipIf(!bwrapUsable)('sandbox-local: real bwrap confinement', () => {
     // The wrap's denialSignatures must be what the kernel actually prints.
     expect(result.stderr.toLowerCase()).toContain('read-only file system')
     expect(existsSync(join(workdir, 'denied.txt'))).toBe(false)
+  })
+
+  it.each(['read-only', 'workspace-write'] as const)('%s hides protected files and directories from the confined command', async (mode) => {
+    const workdir = await tempDir(tmpdir())
+    const store = await tempDir(tmpdir())
+    writeFileSync(join(store, 'credentials'), 'secret-in-a-protected-directory')
+    const file = join(workdir, '.netrc')
+    writeFileSync(file, 'secret-in-a-protected-file')
+    const sandbox = await provider()
+    const { result } = await runConfined(
+      sandbox,
+      `cat ${store}/credentials ${file}; ls -A ${store}; echo done`,
+      { mode, workspaceRoot: workdir, protectedPaths: [store, file] },
+    )
+    expect(result.stdout).not.toContain('secret-in-a-')
+    expect(result.stdout.trim()).toBe('done')
   })
 
   it('read-only keeps the tree readable/executable and the fresh /dev/null writable', async () => {

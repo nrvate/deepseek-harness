@@ -22,12 +22,13 @@ kind: "package-group"
 <a id="packages"></a>
 ## 包
 
-两个小插件分别覆盖两种模式；下文每个 README 都说明何时保留、调优或移除它。
+两个小插件分别覆盖两种模式，第三个插件让凭证不出现在工具结果中；下文每个 README 都说明何时保留、调优或移除它。
 
 | 包 | 提供什么 |
 |---|---|
 | [`repeat-tool-reminder/`](repeat-tool-reminder/README.zh.md) | 在模型重复完全相同的工具调用时提醒它，使其改变方法或结束任务 |
 | [`timeout-policy/`](timeout-policy/README.zh.md) | 为声明了限时的工具调用设置超时，让模型得到清晰错误而不是无限等待 |
+| [`secret-redaction/`](secret-redaction/README.zh.md) | 在模型或会话日志看到工具结果之前，替换其中已知的凭证和令牌格式 |
 
 -----
 

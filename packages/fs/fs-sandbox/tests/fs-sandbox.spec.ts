@@ -29,10 +29,10 @@ let ctx: Context
 let fs: SandboxedFileSystem
 let fiber: Awaited<ReturnType<Context['plugin']>>
 
-async function boot(mode: SandboxMode): Promise<void> {
+async function boot(mode: SandboxMode, protectedPaths: string[] = []): Promise<void> {
   ctx = new Context()
   await ctx.plugin(SessionProjectionRegistry)
-  await ctx.plugin(SandboxPolicyService, { mode, workspaceRoot: workspace })
+  await ctx.plugin(SandboxPolicyService, { mode, workspaceRoot: workspace, protectedPaths })
   fiber = await ctx.plugin(SandboxedFileSystem, { cwd: workspace })
   fs = ctx.fs as SandboxedFileSystem
 }
@@ -239,5 +239,24 @@ describe('FsError identity', () => {
     const error = await fs.writeText(await target(join(workspace, 'x.txt')), 'x').catch((e: unknown) => e)
     expect(error).toBeInstanceOf(FsError)
     expect((error as FsError).code).toBe('FS_SANDBOX_DENIED')
+  })
+})
+
+describe('protected paths', () => {
+  it.each(['read-only', 'workspace-write', 'danger-full-access'] as const)('refuses a protected file or anything under a protected directory in %s', async (mode) => {
+    const store = join(outside, 'store')
+    await mkdir(store)
+    await writeFile(join(store, 'credentials'), 'secret')
+    await writeFile(join(workspace, '.netrc'), 'secret')
+    await boot(mode, [store, join(workspace, '.netrc'), join(outside, 'not-yet')])
+    for (const path of [store, join(store, 'credentials'), join(store, 'missing'), join(workspace, '.netrc'), join(outside, 'not-yet', 'x')]) {
+      const refusal = await fs.resolve(path).then(() => undefined, (error: unknown) => error as FsError)
+      expect(refusal?.code).toBe('FS_PERMISSION_DENIED')
+      expect(refusal?.message).toContain('protected credential location')
+    }
+    // Through a link the target is the canonical path, so the link does not reach around the protection.
+    await symlink(store, join(workspace, 'link'))
+    await expect(fs.resolve(join(workspace, 'link', 'credentials'))).rejects.toMatchObject({ code: 'FS_PERMISSION_DENIED' })
+    expect((await fs.resolve(join(workspace, 'ordinary.txt'))).displayPath).toContain('ordinary.txt')
   })
 })

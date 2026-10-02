@@ -1248,7 +1248,7 @@ export interface Config {
 
 - `inject`: `sandboxPolicy`
 - `refs`: [`LocalConfig`](#deepseek-aidsh-fs-local)
-- `source`: [`packages/fs/fs-sandbox/src/index.ts:45`](../packages/fs/fs-sandbox/src/index.ts)
+- `source`: [`packages/fs/fs-sandbox/src/index.ts:61`](../packages/fs/fs-sandbox/src/index.ts)
 
 ```ts config-catalog
 /**
@@ -2016,7 +2016,7 @@ export interface LspLocalServerConfig {
 ## `@deepseek-ai/dsh-mcp-client`
 
 - `inject`: `tools`
-- `source`: [`packages/mcp/mcp-client/src/index.ts:109`](../packages/mcp/mcp-client/src/index.ts)
+- `source`: [`packages/mcp/mcp-client/src/index.ts:117`](../packages/mcp/mcp-client/src/index.ts)
 
 ```ts config-catalog
 /** Configuration for one stdio or Streamable HTTP MCP server. */
@@ -2048,6 +2048,8 @@ export interface StdioConfig {
   maxInstructionBytes?: number
   /** Whether a Session that has made no selection of its own uses this server (default true). */
   defaultActive?: boolean
+  /** Whether each tool runs, asks the person first, or is refused; omission asks before every call. */
+  toolPolicy?: McpToolPolicyInput
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
 }
@@ -2074,9 +2076,14 @@ export interface StreamableHttpConfig {
   maxInstructionBytes?: number
   /** Whether a Session that has made no selection of its own uses this server (default true). */
   defaultActive?: boolean
+  /** Whether each tool runs, asks the person first, or is refused; omission asks before every call. */
+  toolPolicy?: McpToolPolicyInput
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
 }
+
+/** Policy fields as configuration supplies them; omitted fields take the defaults. */
+export type McpToolPolicyInput = Partial<McpToolPolicy>
 
 /** Automatic reconnect policy for one MCP server connection. */
 export interface ReconnectConfig {
@@ -2089,6 +2096,17 @@ export interface ReconnectConfig {
   /** Consecutive failed attempts per outage before giving up for good (default 10). */
   maxAttempts?: number
 }
+
+/** One server's tool-call policy. */
+export interface McpToolPolicy {
+  /** Mode of every tool the policy does not name. */
+  default: McpToolMode
+  /** Modes by the server's own tool name; they override `default`. */
+  tools: Record<string, McpToolMode>
+}
+
+/** What happens when the model calls a tool: run it, ask the person first, or refuse it. */
+export type McpToolMode = 'allow' | 'ask' | 'deny'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-mcp-client -->
 
@@ -2471,7 +2489,7 @@ export interface Config {
 
 - `inject`: `sessionProjections`
 - `refs`: [`SandboxMode`](subsystems/sandbox.zh.md)
-- `source`: [`packages/sandbox/sandbox-policy/src/index.ts:71`](../packages/sandbox/sandbox-policy/src/index.ts)
+- `source`: [`packages/sandbox/sandbox-policy/src/index.ts:97`](../packages/sandbox/sandbox-policy/src/index.ts)
 
 ```ts config-catalog
 /**
@@ -2489,6 +2507,11 @@ export interface Config {
    * `process.cwd()`). Normal agent calls use their session cwd instead.
    */
   workspaceRoot?: string
+  /**
+   * Paths no confined execution or sandboxed filesystem operation may read or write; `~/` and
+   * `$DSH_HOME/` prefixes expand. Defaults to {@link DEFAULT_PROTECTED_PATHS}; an empty list protects nothing.
+   */
+  protectedPaths?: string[]
 }
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-sandbox-policy -->
@@ -2559,6 +2582,33 @@ export interface JsonRpcConfig {
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-sdk-jsonrpc-server -->
 
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-secret-redaction -->
+<a id="deepseek-aidsh-secret-redaction"></a>
+
+## `@deepseek-ai/dsh-secret-redaction`
+
+- `inject`: `tools`
+- `source`: [`packages/guard/secret-redaction/src/index.ts:30`](../packages/guard/secret-redaction/src/index.ts)
+
+```ts config-catalog
+/** Which secrets the guard redacts. */
+export interface Config {
+  /** Redact the values of harness environment variables whose names look like credentials. */
+  environment: boolean
+  /** Redact the values the credential provider stores and resolves. */
+  credentials: boolean
+  /** Credential references resolved and redacted on each call, in addition to the stored records. */
+  credentialRefs: string[]
+  /** Redact private keys and well-known provider token formats wherever they appear. */
+  patterns: boolean
+  /** Shortest known value redacted, in characters; shorter values would match ordinary text. */
+  minLength: number
+  /** Further environment variable names whose values are secrets. */
+  extraNames: string[]
+}
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-secret-redaction -->
+
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-session-log-deepseek -->
 <a id="deepseek-aidsh-session-log-deepseek"></a>
 
@@ -2571,7 +2621,7 @@ export interface JsonRpcConfig {
 ```ts config-catalog
 /** Session-log request contribution configuration. */
 export interface Config {
-  /** Contribute `dsh_session_log` to official DeepSeek requests. Defaults to `true`. */
+  /** Contribute `dsh_session_log` to official DeepSeek requests. Defaults to `false`: the log leaves the machine only on opt-in. */
   enabled: Volatile<boolean>
   /**
    * Largest serialized `dsh_session_log` field, in UTF-8 bytes, that one request carries.
@@ -3936,7 +3986,7 @@ export interface Config {
 ## `@deepseek-ai/dsh-tool-web`
 
 - `inject`: `tools` · `web` · `systemPrompt`
-- `source`: [`packages/web/tool-web/src/index.ts:37`](../packages/web/tool-web/src/index.ts)
+- `source`: [`packages/web/tool-web/src/index.ts:40`](../packages/web/tool-web/src/index.ts)
 
 ```ts config-catalog
 /** Plugin config: which web tools to register, search bounds, per-tool budgets, and the fetch output cap. */
@@ -3955,7 +4005,14 @@ export interface Config {
   searchTimeoutMs?: number
   /** Cap on source characters converted and complete `web_fetch` output characters. Defaults to 200000. */
   fetchMaxOutputChars?: number
+  /** `ask` (default): fetching a host outside `fetchAllowedHosts` asks the person first; `allow`: every fetch runs without asking. */
+  fetchApproval?: FetchApproval
+  /** Hosts `web_fetch` reaches without asking: exact names, or `*.` and a domain for its subdomains. Defaults to none. */
+  fetchAllowedHosts?: string[]
 }
+
+/** Whether `web_fetch` asks before fetching a host outside the allow-list, or fetches every URL without asking. */
+export type FetchApproval = 'ask' | 'allow'
 ```
 <!-- END GENERATED config-catalog:@deepseek-ai/dsh-tool-web -->
 

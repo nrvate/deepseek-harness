@@ -101,6 +101,8 @@ function stdioConfig(reconnect?: Config['reconnect']): Config {
     cwd: '',
     toolCallTimeoutMs: 60_000,
     failOnStartupError: false,
+    // These calls run without an approval channel; the policy's own tests cover asking.
+    toolPolicy: { default: 'allow' },
     ...reconnect === undefined ? {} : { reconnect },
   }
 }

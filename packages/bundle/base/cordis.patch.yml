@@ -409,6 +409,12 @@
       config:
         maxInlineTokens: 12500
 
+    # Replaces known credentials and token formats in tool results before the
+    # session log or a model request sees them; mounted after spill-policy so
+    # spilled output is built from redacted content.
+    - id: secret-redaction
+      name: '@deepseek-ai/dsh-secret-redaction'
+
     # Durability checkpoints before each model request and top-level dispatch.
     - id: session-checkpoint-policy
       name: '@deepseek-ai/dsh-session-checkpoint-policy'

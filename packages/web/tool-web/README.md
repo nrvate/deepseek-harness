@@ -50,6 +50,8 @@ Load the web service, at least one backend, and this package; both tools registe
 | `fetchTimeoutMs` | `30000` | Cooperative tool-call timeout budget (ms) for `web_fetch` |
 | `searchTimeoutMs` | `30000` | Cooperative tool-call timeout budget (ms) for `web_search` |
 | `fetchMaxOutputChars` | `200000` | Cap on source characters converted synchronously and on one complete `web_fetch` output |
+| `fetchApproval` | `ask` | `ask`: fetching a host outside `fetchAllowedHosts` asks the person first; `allow`: every fetch runs without asking |
+| `fetchAllowedHosts` | `[]` | Hosts fetched without asking: exact names, or `*.` and a domain for its subdomains |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-tool-web) is the exhaustive source for every accepted field and its JSDoc. `searchMaxQueries` bounds the accepted array before exact-string deduplication and provider fan-out; validation rejects an oversized array before any search starts. The timeout budgets attach to each tool definition and are enforced by [`@deepseek-ai/dsh-tool-call-timeout-policy`](../../guard/timeout-policy/README.md); the model-facing schemas expose no timeout argument.
 
@@ -70,6 +72,10 @@ Call `web_fetch` with one `url`. HTML bodies are filtered and rendered to markdo
 ```text
 web_fetch({ url: 'https://example.com' })
 ```
+
+### Approving fetches
+
+A fetched URL is data leaving the machine: a prompt-injected model can put conversation content into a query string. With `fetchApproval: ask`, a fetch to a host outside `fetchAllowedHosts` goes through the approval service with the exact URL shown. A Session running with full access fetches without asking, a caller with no approval channel is refused, and an unparsable URL is left to the fetch itself, which refuses it. The gate is a `tools/pre-execute` listener, so PTC and subagent calls pass through it too.
 
 ### Stable registration
 

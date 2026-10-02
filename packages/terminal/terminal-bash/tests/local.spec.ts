@@ -64,7 +64,7 @@ async function harness(
   await ctx.plugin(TerminalSessionService)
   await ctx.plugin(PassthroughSandbox)
   await ctx.plugin(SessionProjectionRegistry)
-  await ctx.plugin(SandboxPolicyService, { mode, workspaceRoot: root })
+  await ctx.plugin(SandboxPolicyService, { protectedPaths: [], mode, workspaceRoot: root })
   await ctx.plugin(LocalSubprocessRuntime)
   const fiber = await ctx.plugin(ptyLocal, {
     shellDialect: dialect,

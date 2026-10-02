@@ -25,7 +25,7 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
-Mount this backend instead of `fs-local` when the model's file writes and edits must be confined by the session's sandbox mode, while reads stay unconfined. The fence applies per call: the tool layer resolves the calling session's mode and workspace root into the same policy the bash runner receives, so the filesystem and shell families never confine to different roots.
+Mount this backend instead of `fs-local` when the model's file writes and edits must be confined by the session's sandbox mode, while reads stay unconfined outside the protected credential paths. The fence applies per call: the tool layer resolves the calling session's mode and workspace root into the same policy the bash runner receives, so the filesystem and shell families never confine to different roots.
 
 ### Minimal composition
 
@@ -45,9 +45,13 @@ The backend's config is unchanged from the local backend's (`cwd` resolution def
 
 The effective mode comes from the calling session's override or escalation grant, falling back to the deployment default when neither is in force. `read-only` denies every mutation with the structured `FS_SANDBOX_DENIED`. `workspace-write` allows a mutation only when the target canonicalizes under the workspace root or a platform temp area (`/tmp`, `os.tmpdir()`) — the same writable set the Seatbelt profile grants. `danger-full-access` delegates unfenced.
 
+### Protected paths
+
+Every path the policy protects (`protectedPaths` in [sandbox-policy](../../sandbox/sandbox-policy/README.md), credential stores by default) is refused at resolution in every mode, so no read, listing, metadata read, or mutation of it starts. The target is canonicalized first, so a link into a protected directory is refused too. The refusal is `FS_PERMISSION_DENIED` with `it is a protected credential location`; no escalation lifts it.
+
 ### Observable success and failures
 
-Reads, listings, metadata, and read-only watches work exactly as with `fs-local`; the mutation fence does not restrict observation. A denied mutation returns an `FS_SANDBOX_DENIED` error carrying the effective mode; through the tools the model sees `[sandbox: file access denied under <mode> mode]` plus the one-approved-wider retry hint, identical to bash's denials. A session with an approved escalation may retry the same operation at a strictly wider mode for that one call.
+Outside protected paths, reads, listings, metadata, and read-only watches work exactly as with `fs-local`; the mutation fence does not restrict observation. A denied mutation returns an `FS_SANDBOX_DENIED` error carrying the effective mode; through the tools the model sees `[sandbox: file access denied under <mode> mode]` plus the one-approved-wider retry hint, identical to bash's denials. A session with an approved escalation may retry the same operation at a strictly wider mode for that one call.
 
 -----
 

@@ -1,6 +1,8 @@
 /** Wire specs are checked the way the plugin checks them at load, and secrets never leave the Host. */
 import { expect, it } from 'vitest'
-import { displayUrl, hasEmbeddedCredentials, messageOf, redact, validateSpec } from '../src/spec.ts'
+import {
+  credentialArguments, displayUrl, hasEmbeddedCredentials, maskedCommandLine, messageOf, redact, validateSpec,
+} from '../src/spec.ts'
 import type { McpHttpSpec, McpStdioSpec } from '../src/types.ts'
 
 const stdio: McpStdioSpec = { transport: 'stdio', serverName: 'srv', command: 'echo', args: [], env: {} }
@@ -73,9 +75,38 @@ it('displays a URL without credentials, query, or a trailing root slash', () => 
 it('accepts a startup flag', async () => {
   expect(await validateSpec({ ...stdio, failOnStartupError: true })).toBeUndefined()
   expect(await validateSpec({ ...stdio, defaultActive: false })).toBeUndefined()
+  expect(await validateSpec({ ...stdio, toolPolicy: { default: 'deny', tools: { read: 'allow' } } })).toBeUndefined()
 })
 
 it('reads the message of any thrown value', () => {
   expect(messageOf(new Error('boom'))).toBe('boom')
   expect(messageOf('plain')).toBe('plain')
+})
+
+it('finds credentials in a URL query by parameter name', () => {
+  for (const url of ['https://h/mcp?api_key=x', 'https://h/mcp?token=x', 'https://h/mcp?AUTH=x', 'https://h/mcp?sig=1&X-Amz-Signature=x', 'https://h/mcp?password=x']) {
+    expect(hasEmbeddedCredentials(url)).toBe(true)
+  }
+  for (const url of ['https://h/mcp?page=2', 'https://h/mcp', 'not a url']) expect(hasEmbeddedCredentials(url)).toBe(false)
+})
+
+it('finds credential arguments after = or as the next argument, and masks them in the shown command line', () => {
+  const args = ['--root', '/tmp', '--api-key', 'sk-1', '--token=ghp_2', '-v', '--auth', '--verbose', '--password', 'last', '--secret']
+  expect(credentialArguments(args)).toEqual([
+    { index: 3, option: 'api-key' },
+    { index: 4, option: 'token' },
+    { index: 9, option: 'password' },
+  ])
+  expect(maskedCommandLine({ command: 'srv', args })).toBe('srv --root /tmp --api-key *** --token=*** -v --auth --verbose --password *** --secret')
+  expect(credentialArguments(['plain', '--', '-'])).toEqual([])
+})
+
+it('refuses a credential in a URL query or in the arguments', async () => {
+  const query = await validateSpec({ ...http, url: 'https://example.test/mcp?api_key=x' })
+  expect(query?.code).toBe('literal-secret')
+  expect(query?.message).toContain('in its query')
+  const argument = await validateSpec({ ...stdio, args: ['--github-token', 'ghp_x'] })
+  expect(argument?.code).toBe('literal-secret')
+  expect(argument?.message).toContain('"github-token"')
+  expect(await validateSpec({ ...stdio, args: ['--root', '/tmp'] })).toBeUndefined()
 })

@@ -20,7 +20,9 @@
  * @module @deepseek-ai/dsh-sandbox-policy
  */
 
-import { isAbsolute } from 'node:path'
+import { isAbsolute, join } from 'node:path'
+import { homedir } from 'node:os'
+import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { z as zod } from 'zod'
 import z from '@deepseek-ai/schemastery'
@@ -36,6 +38,30 @@ export { SANDBOX_MODES, setSandboxMode } from './session-mode.ts'
 function resolveWorkspaceRoot(path: string): string {
   if (!isAbsolute(path)) throw new Error('sandbox-policy: workspace root must be an absolute execution-world path')
   return path
+}
+
+/**
+ * Credential stores the sandbox keeps unreadable by default: SSH, cloud, container, and
+ * package-registry credentials, and the harness's own credential file. `~/` names the
+ * person's home directory and `$DSH_HOME/` the harness home.
+ */
+export const DEFAULT_PROTECTED_PATHS: readonly string[] = [
+  '~/.ssh', '~/.gnupg', '~/.aws', '~/.azure', '~/.config/gcloud', '~/.kube', '~/.docker/config.json',
+  '~/.netrc', '~/.npmrc', '~/.pypirc', '~/.git-credentials', '~/.config/gh/hosts.yml',
+  '$DSH_HOME/.credentials.yaml', '$DSH_HOME/.env',
+]
+
+/**
+ * Expand one configured protected path to an absolute path.
+ * @param entry - an absolute path, or one that starts with `~/` or `$DSH_HOME/`.
+ * @returns the absolute path.
+ * @throws when the entry is relative.
+ */
+export function expandProtectedPath(entry: string): string {
+  if (entry.startsWith('~/')) return join(homedir(), entry.slice(2))
+  if (entry.startsWith('$DSH_HOME/')) return dshHomePath(entry.slice('$DSH_HOME/'.length))
+  if (!isAbsolute(entry)) throw new Error(`sandbox-policy: protected path "${entry}" must be absolute or start with "~/" or "$DSH_HOME/"`)
+  return entry
 }
 
 /** Render the policy without claiming which capabilities are mounted. */
@@ -76,6 +102,11 @@ export interface Config {
    * `process.cwd()`). Normal agent calls use their session cwd instead.
    */
   workspaceRoot?: string
+  /**
+   * Paths no confined execution or sandboxed filesystem operation may read or write; `~/` and
+   * `$DSH_HOME/` prefixes expand. Defaults to {@link DEFAULT_PROTECTED_PATHS}; an empty list protects nothing.
+   */
+  protectedPaths?: string[]
 }
 
 /** Inputs that select the sandbox policy for one capability call. */
@@ -114,6 +145,7 @@ export class SandboxPolicyService extends Service {
     // No schema default: process.cwd() is resolved in the constructor so the
     // stored root is always absolute regardless of how it was supplied.
     workspaceRoot: z.string(),
+    protectedPaths: z.array(String).default([...DEFAULT_PROTECTED_PATHS]),
   })
 
   static inject = ['sessionProjections']
@@ -122,6 +154,8 @@ export class SandboxPolicyService extends Service {
   readonly defaultMode: SandboxMode
   /** The absolute `workspace-write` fallback root for calls without a session cwd. */
   readonly workspaceRoot: string
+  /** Absolute paths every resolved policy protects. */
+  readonly protectedPaths: readonly string[]
   constructor(ctx: Context, config: Config) {
     super(ctx, 'sandboxPolicy')
     // schemastery (static Config) already filled `mode`; the cast records that
@@ -129,6 +163,8 @@ export class SandboxPolicyService extends Service {
     // the process cwd is real branching, resolved absolute either way.
     this.defaultMode = config.mode as SandboxMode
     this.workspaceRoot = resolveWorkspaceRoot(config.workspaceRoot ?? process.cwd())
+    // schemastery (static Config) already filled `protectedPaths`; the cast records that runtime fact.
+    this.protectedPaths = (config.protectedPaths as string[]).map(expandProtectedPath)
 
     ctx.sessionProjections.register({
       key: 'sandboxMode',
@@ -167,6 +203,7 @@ export class SandboxPolicyService extends Service {
       mode: request.mode ?? (session === undefined ? undefined : this.overrideOf(session)) ?? this.defaultMode,
       workspaceRoot: resolveWorkspaceRoot(session?.header.cwd ?? this.workspaceRoot),
       ...session === undefined ? {} : { sessionId: session.id },
+      ...this.protectedPaths.length === 0 ? {} : { protectedPaths: this.protectedPaths },
     }
   }
 

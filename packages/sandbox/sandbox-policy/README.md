@@ -46,6 +46,7 @@ Load the package with a default mode; the fail-safe default is `read-only`, and 
 |---|---|---|
 | `mode` | `read-only` | The deployment default mode a session starts from, validated at load |
 | `workspaceRoot` | `process.cwd()` | Absolute fallback root for agentless calls or sessions without a cwd; relative values fail at load. Normal agent calls use the session's immutable cwd |
+| `protectedPaths` | credential stores | Paths no confined execution or sandboxed filesystem operation may read or write. The default covers `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.config/gcloud`, `~/.kube`, `~/.docker/config.json`, `~/.netrc`, `~/.npmrc`, `~/.pypirc`, `~/.git-credentials`, `~/.config/gh/hosts.yml`, `$DSH_HOME/.credentials.yaml`, and `$DSH_HOME/.env`. `~/` and `$DSH_HOME/` expand; other entries must be absolute; `[]` protects nothing |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-sandbox-policy) is the exhaustive source for every accepted field and its JSDoc.
 
@@ -144,6 +145,7 @@ The stable system prompt remains byte-identical across mode changes. A changed f
 
 These limits define the policy surface this package provides. They are current package constraints, not a general sandbox comparison or a task backlog.
 
+- **Protected paths are enforced per backend** — bwrap and Seatbelt hide them from confined commands and the sandboxed filesystem refuses them in every mode; Landlock, the Windows ACL runner, and `danger-full-access` shells leave them readable.
 - **One primary workspace root per session** — policy resolves `SessionHeader.cwd`; extra writable roots are not part of `SandboxExecutionPolicy`.
 - **File-effect modes only** — `SandboxMode` governs file effects; network and process policy are outside its vocabulary, so no knob here restricts them.
 - **Temporary areas are deliberately summarized** — enforcing backends grant different platform temporary areas, which are selected after policy resolution and therefore cannot be enumerated truthfully in the current context.

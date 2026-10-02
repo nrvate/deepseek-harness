@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-10-02-least-privilege-tool-defaults.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-02-least-privilege-tool-defaults.md
+/agent-note-least-privilege-defaults-for-tools-and-outbound-data:
+  en: 2f09fa4a4263e06a
+  zh: 88e428fffcb404bf
+/agent-note-least-privilege-defaults-for-tools-and-outbound-data/problem:
+  en: 9dab4f03970db3e4
+  zh: 25d318088d83c88b
+/agent-note-least-privilege-defaults-for-tools-and-outbound-data/decision:
+  en: da1850b06f688921
+  zh: 351925eb4aba7e21
+/agent-note-least-privilege-defaults-for-tools-and-outbound-data/alternatives-considered:
+  en: 299db9b68b475560
+  zh: 80389c57633f6db5
+/agent-note-least-privilege-defaults-for-tools-and-outbound-data/consequences:
+  en: 6c603c927a347eaa
+  zh: cf124c2b798fdbdd
+/agent-note-least-privilege-defaults-for-tools-and-outbound-data/testing:
+  en: 98f4408cdbf49e21
+  zh: e5f79d0c74fdcda2

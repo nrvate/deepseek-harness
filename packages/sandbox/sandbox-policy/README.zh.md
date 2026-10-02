@@ -46,6 +46,7 @@ kind: "package-reference"
 |---|---|---|
 | `mode` | `read-only` | 会话起始的部署默认模式，加载时验证 |
 | `workspaceRoot` | `process.cwd()` | 无 agent 调用或没有 cwd 的会话所用的绝对回退根目录；相对值在加载时拒绝。普通 agent 调用使用会话的不可变 cwd |
+| `protectedPaths` | 凭证存储 | 受限执行和沙箱文件系统操作都不得读写的路径。默认包括 `~/.ssh`、`~/.gnupg`、`~/.aws`、`~/.azure`、`~/.config/gcloud`、`~/.kube`、`~/.docker/config.json`、`~/.netrc`、`~/.npmrc`、`~/.pypirc`、`~/.git-credentials`、`~/.config/gh/hosts.yml`、`$DSH_HOME/.credentials.yaml` 和 `$DSH_HOME/.env`。`~/` 与 `$DSH_HOME/` 会展开；其他条目必须是绝对路径；`[]` 不保护任何路径 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-sandbox-policy)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
@@ -144,6 +145,7 @@ Current DSH file policy: danger-full-access. The DSH file sandbox does not restr
 
 这些限制界定了本包提供的策略范围。它们是当前的包级约束，并非通用沙箱对比，也不是待办事项清单。
 
+- **受保护路径由各后端分别强制执行**——bwrap 和 Seatbelt 对受限命令隐藏它们，沙箱文件系统在所有模式下拒绝访问它们；Landlock、Windows ACL runner 以及 `danger-full-access` 下的 shell 仍可读取它们。
 - **每个会话只有一个主要工作区根目录**——策略解析 `SessionHeader.cwd`；额外可写根目录不属于 `SandboxExecutionPolicy`。
 - **仅限文件操作模式**——`SandboxMode` 管控文件操作；网络和进程策略不在其词汇中，因此这里没有限制它们的旋钮。
 - **有意概述临时区域**——强制执行后端会授予不同的平台临时区域，这些区域在策略解析后才会选定，因此无法在当前上下文中如实枚举。

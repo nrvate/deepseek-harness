@@ -72,7 +72,7 @@ kind: "package-reference"
 
 ### 平台 profile
 
-bwrap profile 组合只读宿主根目录、全新 `/dev` 与私有 PID 命名空间中的 `/proc`——命令可管理其后代，但看不到宿主进程，因此 procfs 魔法链接无法绕过挂载；`workspace-write` 另加临时的 `/tmp` 与可写工作区绑定挂载。[私有 PID 笔记](../../../.agents/notes/implemented/bug-fix/2026-08-06-bwrap-private-pid-namespace.zh.md)记录该边界。
+bwrap profile 组合只读宿主根目录、全新 `/dev` 与私有 PID 命名空间中的 `/proc`——命令可管理其后代，但看不到宿主进程，因此 procfs 魔法链接无法绕过挂载；`workspace-write` 另加临时的 `/tmp` 与可写工作区绑定挂载。[私有 PID 笔记](../../../.agents/notes/implemented/bug-fix/2026-08-06-bwrap-private-pid-namespace.zh.md)记录该边界。在其他所有挂载之后，策略中每个已存在的受保护路径都会被隐藏：目录被空的 tmpfs 覆盖，文件被 `/dev/null` 覆盖。Seatbelt profile 末尾对每个受保护路径的配置拼写和规范拼写拒绝读写。Landlock 只能授予访问权限，因此在该档中受保护路径仍可读取。
 
 `@deepseek-ai/node-addon-system/landlock-run` API 提供平台 launcher、功能探测与授权词汇；此提供方只做模式到授权的映射，把路径解析与探测解析保留在带版本的 binary 中。
 
@@ -130,6 +130,7 @@ Windows 档为每个工作区保留一个确定性写入 SID 和常驻 ACE，同
 这些限制说明提供方何时不合适，或何时需要特别运维。它们是当前包约束，不是通用平台对比或任务积压。
 
 - **Windows ACL 只能实现部分强制执行**——NTFS 硬链接会使工作区路径与外部路径指向同一个文件对象，读取仍不受限，且被其他 AppContainer 工具以包 SID 标记过的目录树对 Low 完整性子进程不可读。提供方报告 `enforcement: 'partial'`，而不会把该边界夸大为完整强制执行。
+- **Landlock 不隐藏受保护路径**——它授予的可读根目录包含这些路径；在受保护路径很重要的场合请使用 bwrap 档。
 - **Landlock 可能只实现部分强制执行**——较旧且受支持的内核 ABI 只能限制自身公开的访问类别，因此报告 `enforcement: 'partial'`，不会夸大为完整强制执行。
 - **Seatbelt 依赖已弃用的 `sandbox-exec`**——macOS 仍会提供它，但若 Apple 移除该私有策略引擎，该提供方无法替换或探测。
 - **runner 选择在提供方生命周期内缓存**——安装、移除或修复 runner 后，必须重载插件才能改变选择。

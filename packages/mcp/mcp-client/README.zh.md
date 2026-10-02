@@ -62,6 +62,7 @@ kind: "package-reference"
 | `maxInstructionBytes` | `32,768` | 包括服务器归属信息在内的服务器指令 UTF-8 字节上限；超出时连接失败 |
 | `failOnStartupError` | `false` | 初始连接或工具同步失败时拒绝插件激活 |
 | `defaultActive` | `true` | 尚未自行选择服务器的会话是否使用该服务器；参见[按会话选择](../mcp-selection/README.zh.md) |
+| `toolPolicy` | `{ default: ask }` | 每个工具是直接运行（`allow`）、先询问用户（`ask`）还是被拒绝（`deny`）：`default` 适用于所有工具，`tools` 按服务器自己的工具名称指定各自的模式 |
 | `reconnect.enabled` | `true` | 连接丢失后自动重新连接 |
 | `reconnect.initialDelayMs` | `500` | 首次重连延迟；每次连续失败尝试翻倍 |
 | `reconnect.maxDelayMs` | `30,000` | 退避上限；同时是重置尝试预算所需的正常运行时长 |
@@ -86,6 +87,18 @@ kind: "package-reference"
 模型调用 MCP 工具时，调用会以每次调用超时（默认 60 秒）发往远程服务器，并像其他工具调用一样可以取消。结果按块顺序以普通文本返回；资源链接以文本形式显示名称与 URI。如果服务器报告错误，调用会明确失败——模型不会看到虚假的成功。
 
 当前模型接受图片输入且 harness 启用了附件功能时支持图片；图片会像其他图片一样出现在对话中。不支持图片时——以及服务器返回音频或嵌入资源时——模型会看到清晰的诊断消息，而不是什么都没有。
+
+### 工具调用策略
+
+对该服务器任一工具的每次调用都会在工具注册表的 `tools/pre-execute` waterfall 中经过其 `toolPolicy`，因此原生调用、PTC 调用和子 agent 调用都受其约束。`deny` 拒绝调用，并给出模型可以据此行动的原因。`ask` 通过审批服务发起审批并指明服务器和工具；以完全访问权限（`danger-full-access`）运行的会话不询问直接运行，而没有审批渠道的调用方（例如审批策略固定为 `never` 的委派子级）会被拒绝。`allow` 把调用交给 waterfall 的其余部分，因此 hook 和其他策略仍然生效。后续监听器的拒绝永远不会被放宽。
+
+```yaml
+toolPolicy:
+  default: ask
+  tools:
+    search: allow
+    send_email: deny
+```
 
 ### 启动、工具更新与重连
 

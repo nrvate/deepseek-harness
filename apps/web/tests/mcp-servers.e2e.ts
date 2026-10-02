@@ -223,6 +223,13 @@ describe('web e2e: MCP servers page', () => {
     await details.getByRole('columnheader', { name: '参数' }).waitFor()
     await details.getByText('message', { exact: true }).waitFor()
 
+    // Calls ask first by default; this tool is allowed outright, and the profile patch records it.
+    const mode = details.getByLabel('模型调用此工具时')
+    expect(await mode.inputValue()).toBe('inherit')
+    await mode.selectOption('allow')
+    await expect.poll(patch, { timeout: 15_000 }).toContain('echo: allow')
+    await expect.poll(() => details.locator('summary').textContent(), { timeout: 10_000 }).toContain('允许')
+
     await tools.getByLabel('筛选工具').fill('zzz-no-such-tool')
     await tools.getByText('没有匹配筛选条件的工具。').waitFor()
     await tools.getByLabel('筛选工具').fill('echo')

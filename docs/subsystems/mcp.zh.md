@@ -230,6 +230,14 @@ Remote owner of the profile's MCP server rows.
 @Remote setEnabled(id: McpEntryId, enabled: boolean): Promise<McpChangeResult>
 
 /**
+ * Replace the tool-call policy of one editable server row. Changing it runs no command, so it needs no confirmation.
+ * @param id - row id returned by `list`.
+ * @param policy - the server's default mode and its per-tool modes.
+ * @returns the persisted change and whether the running profile applied it.
+ */
+@Remote setToolPolicy(id: McpEntryId, policy: McpToolPolicy): Promise<McpChangeResult>
+
+/**
  * Read the tools one server offers, with its connection state.
  * @param id - row id returned by `list`.
  * @returns the tools registered from the server right now; empty when it is not connected or has no client.

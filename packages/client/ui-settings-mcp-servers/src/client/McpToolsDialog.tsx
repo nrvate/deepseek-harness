@@ -1,12 +1,14 @@
 /**
  * The tools dialog: every tool one server offers, filterable by name or
- * description, each expandable to its description and parameters.
+ * description, each expandable to its description, its parameters, and what
+ * happens when the model calls it.
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
-import { Button, Input, Modal, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { McpToolInfo } from '@deepseek-ai/dsh-api-remotes/client'
+import { Button, Input, Modal, StateDot, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { McpToolInfo, McpToolMode } from '@deepseek-ai/dsh-api-remotes/client'
+import { TOOL_MODE_LABEL, TOOL_MODES } from './tool-modes.ts'
 import type { McpServersCardProps } from './McpServersCard.tsx'
 import type { McpServersState } from './mcp-servers-controller.ts'
 import css from './McpServers.module.css'
@@ -53,24 +55,49 @@ function ToolsBody(props: McpServersCardProps & { tools: NonNullable<McpServersS
   return (
     <div className={css.form}>
       <p className={css.body}>{t('toolsIntro')}</p>
+      {tools.row.spec === undefined && <p className={css.hint}>{t('toolsPolicyReadOnly')}</p>}
       <Input aria-label={t('toolsFilter')} placeholder={t('toolsFilter')} value={filter} onChange={(event) => { setFilter(event.target.value) }} />
       {shown.length === 0
         ? <p className={css.body}>{t('toolsNoMatch')}</p>
-        : <ul className={css.toolList}>{shown.map(tool => <ToolItem key={tool.name} {...props} tool={tool} />)}</ul>}
+        : <ul className={css.toolList}>{shown.map(tool => <ToolItem key={tool.name} {...props} tools={tools} tool={tool} />)}</ul>}
     </div>
   )
 }
 
-function ToolItem(props: McpServersCardProps & { tool: McpToolInfo }): ReactNode {
-  const { t, tool } = props
+/** The select value that follows the server default. */
+const INHERIT = 'inherit'
+
+function ToolItem(props: McpServersCardProps & { tools: NonNullable<McpServersState['tools']>; tool: McpToolInfo }): ReactNode {
+  const { t, tools, tool, setToolMode } = props
+  const policy = tools.row.toolPolicy
+  const own = policy.tools[tool.name]
+  const effective = own ?? policy.default
+  const selectId = `mcp-tool-mode-${tool.name}`
   return (
     <li>
       <details className={css.tool}>
         <summary className={css.toolSummary}>
           <span className={css.toolName}>{tool.publicName}</span>
           {tool.description !== '' && <span className={css.toolBrief}>{firstLine(tool.description)}</span>}
+          <Tag tone={effective === 'allow' ? 'warning' : 'outline'} className={css.toolMode}>{t(TOOL_MODE_LABEL[effective])}</Tag>
         </summary>
         <div className={css.toolHelp}>
+          <div className={css.toolModeRow}>
+            <label className={css.label} htmlFor={selectId}>{t('toolMode')}</label>
+            <select
+              id={selectId}
+              className={css.select}
+              value={own ?? INHERIT}
+              disabled={tools.row.spec === undefined || tools.savingTool !== null}
+              onChange={(event) => {
+                const value = event.target.value
+                setToolMode(tool.name, value === INHERIT ? null : value as McpToolMode)
+              }}
+            >
+              <option value={INHERIT}>{t('toolModeInherit', { mode: t(TOOL_MODE_LABEL[policy.default]) })}</option>
+              {TOOL_MODES.map(mode => <option key={mode} value={mode}>{t(TOOL_MODE_LABEL[mode])}</option>)}
+            </select>
+          </div>
           <p className={css.toolText}>{tool.description === '' ? t('toolNoDescription') : tool.description}</p>
           {tool.parameters.length === 0
             ? <p className={css.hint}>{t('toolNoParameters')}</p>

@@ -62,6 +62,7 @@ Add one entry per server; nothing else is required. After the harness starts, th
 | `maxInstructionBytes` | `32,768` | Maximum UTF-8 bytes of server instructions including attribution; an oversized value rejects the connection |
 | `failOnStartupError` | `false` | Reject plugin activation when the initial connection or tool synchronization fails |
 | `defaultActive` | `true` | Whether a Session that has not selected its own servers uses this one; see [per-Session selection](../mcp-selection/README.md) |
+| `toolPolicy` | `{ default: ask }` | Whether each tool runs (`allow`), asks the person first (`ask`), or is refused (`deny`): `default` covers every tool, `tools` maps the server's own tool names to their own modes |
 | `reconnect.enabled` | `true` | Reconnect automatically after a lost connection |
 | `reconnect.initialDelayMs` | `500` | First reconnect delay; doubles per consecutive failed attempt |
 | `reconnect.maxDelayMs` | `30,000` | Backoff ceiling; also the uptime after which the attempt budget resets |
@@ -86,6 +87,18 @@ The model sees each tool under a stable server-qualified name: `mcp__<serverName
 When the model calls an MCP tool, the call runs against the remote server with a per-call timeout (default 60 seconds) and can be cancelled like any other tool call. The result comes back as ordinary text in block order; resource links appear as text with their name and URI. If the server reports an error, the call fails visibly — the model does not see a fake success.
 
 Images are supported when the current model accepts image input and the harness attachment feature is enabled; they then appear in the conversation like other images. Otherwise — and for audio or embedded resources — the model sees a clear diagnostic message instead of nothing.
+
+### Tool-call policy
+
+Every call to one of the server's tools passes its `toolPolicy` in the tool registry's `tools/pre-execute` waterfall, so native, PTC, and subagent calls are all covered. `deny` refuses the call with a reason the model can act on. `ask` sends it through the approval service with the server and tool named; a Session running with full access (`danger-full-access`) runs it without asking, and a caller with no approval channel, such as a delegated child with its approval policy pinned to `never`, is refused. `allow` leaves the call to the rest of the waterfall, so hooks and other policies still apply. A later listener's refusal is never relaxed.
+
+```yaml
+toolPolicy:
+  default: ask
+  tools:
+    search: allow
+    send_email: deny
+```
 
 ### Startup, updates, and reconnection
 

@@ -57,7 +57,7 @@ beforeEach(async () => {
   await ctx.plugin(WebFetchLocal, { maxBodyChars: 500_000 })
   await ctx.plugin(LocalSpillStore, { root: spillRoot })
   await ctx.plugin(SpillPolicy, { maxInlineTokens: MAX_INLINE_TOKENS })
-  await ctx.plugin(ToolWeb)
+  await ctx.plugin(ToolWeb, { fetchApproval: 'allow' })
 })
 
 afterEach(async () => {

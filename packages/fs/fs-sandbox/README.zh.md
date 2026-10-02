@@ -25,7 +25,7 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-当模型的文件写入与编辑必须受会话沙箱模式约束、而读取保持不受约束时，挂载此后端以替代 `fs-local`。围栏按调用生效：工具层把调用会话的模式与工作区根目录解析为与 bash runner 收到的相同策略，因此文件系统与 shell 两个能力族绝不会约束到不同根目录。
+当模型的文件写入与编辑必须受会话沙箱模式约束、而读取（受保护的凭证路径除外）保持不受约束时，挂载此后端以替代 `fs-local`。围栏按调用生效：工具层把调用会话的模式与工作区根目录解析为与 bash runner 收到的相同策略，因此文件系统与 shell 两个能力族绝不会约束到不同根目录。
 
 ### 最小组合
 
@@ -45,9 +45,13 @@ kind: "package-reference"
 
 有效模式来自调用会话的覆盖值或升级授权，两者都未生效时才回退到部署默认值。`read-only` 以结构化 `FS_SANDBOX_DENIED` 拒绝所有变更。`workspace-write` 只允许目标规范化后位于工作区根目录或平台临时区域（`/tmp`、`os.tmpdir()`）之下的变更——与 Seatbelt profile 授权的可写集合相同。`danger-full-access` 不加围栏直接委托。
 
+### 受保护路径
+
+策略保护的每个路径（[sandbox-policy](../../sandbox/sandbox-policy/README.zh.md) 中的 `protectedPaths`，默认为凭证存储）在任何模式下都会在解析时被拒绝，因此对它的读取、列目录、元数据读取或修改都不会开始。目标会先被规范化，因此指向受保护目录的链接同样会被拒绝。拒绝结果为 `FS_PERMISSION_DENIED`，附带 `it is a protected credential location`；任何提权都无法解除它。
+
 ### 可观察的成功与失败
 
-读取、列出、元数据操作与只读监听均与 `fs-local` 完全一致；变更围栏不限制观察。被拒绝的变更返回携带有效模式的 `FS_SANDBOX_DENIED` 错误；经工具，模型会看到 `[sandbox: file access denied under <mode> mode]` 及唯一一次获批更宽权限的重试提示，与 bash 的拒绝完全相同。获得批准升级的会话可以在该次调用中以严格更宽的模式重试同一操作。
+受保护路径之外，读取、列出、元数据操作与只读监听均与 `fs-local` 完全一致；变更围栏不限制观察。被拒绝的变更返回携带有效模式的 `FS_SANDBOX_DENIED` 错误；经工具，模型会看到 `[sandbox: file access denied under <mode> mode]` 及唯一一次获批更宽权限的重试提示，与 bash 的拒绝完全相同。获得批准升级的会话可以在该次调用中以严格更宽的模式重试同一操作。
 
 -----
 

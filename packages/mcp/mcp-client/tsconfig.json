@@ -49,6 +49,9 @@
     },
     {
       "path": "../../core/agent"
+    },
+    {
+      "path": "../../sandbox/sandbox-policy"
     }
   ]
 }

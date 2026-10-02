@@ -17,11 +17,13 @@ import type {} from '@deepseek-ai/dsh-plugin-manager'
 import type {} from '@deepseek-ai/dsh-mcp-status'
 import type {} from '@deepseek-ai/dsh-mcp-selection'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { commandLine, MCP_CLIENT_MODULE, readOwnedRows, removeRow, setRowEnabled, upsertRow, type OwnedRow } from './patch.ts'
-import { displayUrl, hasEmbeddedCredentials, messageOf, redact, validateSpec } from './spec.ts'
+import {
+  commandLine, MCP_CLIENT_MODULE, readOwnedRows, readToolPolicy, removeRow, setRowEnabled, setRowToolPolicy, upsertRow, type OwnedRow,
+} from './patch.ts'
+import { credentialArguments, displayUrl, hasEmbeddedCredentials, maskedCommandLine, messageOf, redact, validateSpec } from './spec.ts'
 import type {
   McpChangeResult, McpEntryId, McpError, McpOverview, McpReadOnlyReason, McpReconnectResult, McpServerInfo, McpServerSpec,
-  McpSessionServers, McpToolsResult, McpUpsertOptions,
+  McpSessionServers, McpToolPolicy, McpToolsResult, McpUpsertOptions,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -106,12 +108,15 @@ export class McpServersController extends TypertRemoteService {
       }
       const mine = owned.get(row.id)
       if (mine?.spec !== undefined) {
-        const reason = mine.spec.transport === 'streamable-http' && hasEmbeddedCredentials(mine.spec.url)
-          ? 'embedded-credentials' as const : undefined
+        const embedded = mine.spec.transport === 'streamable-http'
+          ? hasEmbeddedCredentials(mine.spec.url)
+          : credentialArguments(mine.spec.args).length > 0
+        const reason = embedded ? 'embedded-credentials' as const : undefined
         return {
           ...base, serverName: mine.spec.serverName, transport: mine.spec.transport, owned: true,
           defaultActive: mine.spec.defaultActive ?? true,
-          summary: mine.spec.transport === 'stdio' ? commandLine(mine.spec) : displayUrl(mine.spec.url),
+          toolPolicy: mine.spec.toolPolicy ?? { default: 'ask', tools: {} },
+          summary: mine.spec.transport === 'stdio' ? maskedCommandLine(mine.spec) : displayUrl(mine.spec.url),
           ...reason === undefined ? { spec: redact(mine.spec) } : { readOnlyReason: reason },
         }
       }
@@ -121,6 +126,8 @@ export class McpServersController extends TypertRemoteService {
       return {
         ...base, serverName: text(config.serverName), transport, owned: mine !== undefined,
         defaultActive: config.defaultActive !== false,
+        // A value the form cannot read is shown as the plugin default; the plugin itself validates it at load.
+        toolPolicy: readToolPolicy(config.toolPolicy) ?? { default: 'ask', tools: {} },
         summary: transport === 'stdio' ? text(config.command) : displayUrl(text(config.url)),
         readOnlyReason: (mine === undefined ? 'unaddressable' : 'custom-expression') satisfies McpReadOnlyReason,
       }
@@ -200,6 +207,23 @@ export class McpServersController extends TypertRemoteService {
     return this.change(id, async () => {
       requireOwned(await this.list(), id)
       return text => setRowEnabled(text, id, enabled)
+    })
+  }
+
+  /**
+   * Replace the tool-call policy of one editable server row. Changing it runs no command, so it needs no confirmation.
+   * @param id - row id returned by `list`.
+   * @param policy - the server's default mode and its per-tool modes.
+   * @returns the persisted change and whether the running profile applied it.
+   */
+  @Remote
+  setToolPolicy(id: McpEntryId, policy: McpToolPolicy): Promise<McpChangeResult> {
+    return this.change(id, async () => {
+      const row = requireOwned(await this.list(), id)
+      if (row.readOnlyReason !== undefined) {
+        throw new ChangeRefused({ code: 'read-only', message: 'This server holds values the form cannot edit; change it in the profile patch' })
+      }
+      return text => setRowToolPolicy(text, id, policy)
     })
   }
 

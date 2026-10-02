@@ -159,7 +159,8 @@ export function validateServerConfig(config: Config, path: string): void {
       try {
         url = new URL(config.url)
       } catch (_error) {
-        throw new Error(`${path}.url is not a valid URL: ${JSON.stringify(config.url)}`)
+        // The text is not echoed: a malformed URL can still hold a token.
+        throw new Error(`${path}.url is not a valid URL`)
       }
       if (url.protocol !== 'http:' && url.protocol !== 'https:') {
         throw new Error(`${path}.url must use http: or https:, got ${url.protocol}`)

@@ -151,6 +151,8 @@ export function mountSessionMcp(ctx: Context, options: SessionMcpOptions): void 
             ...options.toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs: options.toolCallTimeoutMs },
             failOnStartupError: true,
             reconnect: { enabled: false },
+            // Enabling browser use is the person's consent to its browser tools, which this provider already scopes per Session.
+            toolPolicy: { default: 'allow' },
           }))
           signal.throwIfAborted()
           return {

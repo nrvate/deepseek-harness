@@ -16,3 +16,5 @@
   name: '@deepseek-ai/dsh-tool-web'
   config:
     search: false
+    # The recorded run fetched without a person present to approve.
+    fetchApproval: allow

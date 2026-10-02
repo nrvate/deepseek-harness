@@ -50,6 +50,8 @@ kind: "package-reference"
 | `fetchTimeoutMs` | `30000` | `web_fetch` 的协作式工具调用超时预算（ms） |
 | `searchTimeoutMs` | `30000` | `web_search` 的协作式工具调用超时预算（ms） |
 | `fetchMaxOutputChars` | `200000` | 同步转换的源字符数与单次完整 `web_fetch` 输出的上限 |
+| `fetchApproval` | `ask` | `ask`：获取 `fetchAllowedHosts` 之外的主机前先询问用户；`allow`：所有获取都不询问直接运行 |
+| `fetchAllowedHosts` | `[]` | 不询问即可获取的主机：精确名称，或以 `*.` 加域名表示其子域名 |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-tool-web)是每个受支持字段及其 JSDoc 的穷尽式真源。`searchMaxQueries` 在完全相同的字符串去重与提供方请求扇出之前限制可接受的数组；校验会在任何搜索开始前拒绝超限数组。超时预算附加到每个工具定义，由 [`@deepseek-ai/dsh-tool-call-timeout-policy`](../../guard/timeout-policy/README.zh.md) 强制执行；面向模型的 schema 不公开超时参数。
 
@@ -70,6 +72,10 @@ web_search({ queries: ['deepseek harness documentation'] })
 ```text
 web_fetch({ url: 'https://example.com' })
 ```
+
+### 审批获取
+
+获取的 URL 就是离开本机的数据：受提示词注入的模型可以把对话内容放进查询字符串。在 `fetchApproval: ask` 下，获取 `fetchAllowedHosts` 之外的主机会通过审批服务发起审批，并显示完整 URL。以完全访问权限运行的会话不询问直接获取，没有审批渠道的调用方会被拒绝，无法解析的 URL 交给获取本身处理并被拒绝。该关卡是一个 `tools/pre-execute` 监听器，因此 PTC 调用和子 agent 调用也会经过它。
 
 ### 稳定注册
 

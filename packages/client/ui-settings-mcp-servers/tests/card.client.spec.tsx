@@ -4,7 +4,7 @@ import { Context } from '@deepseek-ai/cordis'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bindSnapshotSelector, makeTranslate, stubConfigForm, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
-import type { McpChangeResult, McpEntryId, McpServerInfo, McpServerSpec, McpServerStatus, McpToolInfo } from '@deepseek-ai/dsh-api-remotes/client'
+import type { McpChangeResult, McpEntryId, McpServerInfo, McpServerSpec, McpServerStatus, McpToolInfo, McpToolPolicy } from '@deepseek-ai/dsh-api-remotes/client'
 import { McpServersCard, type McpServersCardProps } from '../src/client/McpServersCard.tsx'
 import { McpServersToast, type McpServersToastProps } from '../src/client/McpServersToast.tsx'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
@@ -24,7 +24,7 @@ const stdioSpec: McpServerSpec = {
 const httpSpec: McpServerSpec = { transport: 'streamable-http', serverName: 'web', url: 'https://example.test/mcp', headers: {} }
 
 function row(rowId: string, rest: Partial<McpServerInfo> = {}): McpServerInfo {
-  return { id: id(rowId), serverName: rowId, transport: 'stdio', summary: 'mcp-files --root /tmp', enabled: true, defaultActive: true, fiberPhase: 'active', owned: true, ...rest }
+  return { id: id(rowId), serverName: rowId, transport: 'stdio', summary: 'mcp-files --root /tmp', enabled: true, defaultActive: true, toolPolicy: { default: 'ask', tools: {} }, fiberPhase: 'active', owned: true, ...rest }
 }
 
 const applied: McpChangeResult = { changed: true, application: 'applied', target: 'x' }
@@ -48,6 +48,7 @@ function mount(rows: McpServerInfo[], view: 'page' | 'summary' = 'page') {
     removeServer: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: applied })),
     tools: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: { tools: [echo], status: connected } })),
     reconnectServer: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: { started: true } })),
+    setToolPolicy: vi.fn((_id: McpEntryId, _policy: McpToolPolicy) => Promise.resolve({ ok: true as const, value: applied })),
   }
   new TestRemote(ctx, { mcpServers })
   const settings = stubConfigForm<McpUiSettings>()
@@ -153,6 +154,10 @@ describe('McpServersCard', () => {
     expect(within(dialog).getByRole('switch', { name: en.defaultActive }).getAttribute('aria-checked')).toBe('true')
     expect(within(dialog).getByText(en.defaultActiveHint)).toBeTruthy()
     fireEvent.click(within(dialog).getByRole('switch', { name: en.defaultActive }))
+    const calls = within(dialog).getByLabelText(en.toolPolicy) as HTMLSelectElement
+    expect(calls.value).toBe('ask')
+    expect([...calls.options].map(option => option.textContent)).toEqual([en.modeAsk, en.modeAllow, en.modeDeny])
+    fireEvent.change(calls, { target: { value: 'deny' } })
     fireEvent.click(save)
 
     const confirm = await screen.findByRole('dialog', { name: en.confirmTitle })
@@ -164,7 +169,9 @@ describe('McpServersCard', () => {
 
     await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })
     expect(mcpServers.upsert).toHaveBeenLastCalledWith(
-      expect.objectContaining({ transport: 'stdio', serverName: 'new', command: 'run', args: ['--flag'], cwd: '/work', toolCallTimeoutMs: 5000, failOnStartupError: true, defaultActive: false }),
+      expect.objectContaining({ transport: 'stdio', serverName: 'new', command: 'run', args: ['--flag'], cwd: '/work', toolCallTimeoutMs: 5000, failOnStartupError: true, defaultActive: false,
+        toolPolicy: { default: 'deny', tools: {} },
+      }),
       { confirmedCommand: 'run --flag' },
     )
   })
@@ -481,5 +488,58 @@ describe('status item preference switch', () => {
     const toggle = await screen.findByRole('switch', { name: en.statusItemToggle })
     await waitFor(() => { expect(toggle).toHaveProperty('disabled', true) })
     expect(toggle.getAttribute('aria-checked')).toBe('false')
+  })
+})
+
+describe('tool-call policy', () => {
+  const live = (info: Partial<McpServerInfo> = {}) =>
+    row('mcp-files', { serverName: 'files', spec: stdioSpec, status: connected, ...info })
+
+  it('tags a server whose calls run without asking, or are blocked, and nothing for the default', async () => {
+    mount([
+      live(),
+      row('mcp-open', { serverName: 'open', toolPolicy: { default: 'allow', tools: {} } }),
+      row('mcp-shut', { serverName: 'shut', toolPolicy: { default: 'deny', tools: {} } }),
+    ])
+    const tags = (name: string): string => (screen.getByText(name, { selector: 'span' }).closest('li')?.textContent ?? '')
+    await screen.findByText('open')
+    expect(tags('open')).toContain(en.rowCallsAllowed)
+    expect(tags('shut')).toContain(en.rowCallsBlocked)
+    expect(tags('files')).not.toContain(en.rowCallsAllowed)
+    expect(tags('files')).not.toContain(en.rowCallsBlocked)
+  })
+
+  it('shows each tool\'s mode and gives one tool its own mode or returns it to the server default', async () => {
+    const { mcpServers } = mount([live({ toolPolicy: { default: 'ask', tools: { search: 'allow' } } })])
+    mcpServers.tools.mockResolvedValue({ ok: true, value: { tools: [echo, search], status: connected } })
+    fireEvent.click(await screen.findByRole('button', { name: 'Tools (2)' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Tools of files' })
+    const echoRow = (await within(dialog).findByText('mcp__files__echo')).closest('li') as HTMLElement
+    const searchRow = within(dialog).getByText('mcp__files__search').closest('li') as HTMLElement
+    // The collapsed row names the mode the tool runs under.
+    expect(echoRow.querySelector('summary')?.textContent).toContain(en.modeAsk)
+    expect(searchRow.querySelector('summary')?.textContent).toContain(en.modeAllow)
+
+    const echoMode = within(echoRow).getByLabelText(en.toolMode) as HTMLSelectElement
+    expect(echoMode.value).toBe('inherit')
+    expect(echoMode.options[0]?.textContent).toBe('Server default (Ask first)')
+    fireEvent.change(echoMode, { target: { value: 'deny' } })
+    expect(mcpServers.setToolPolicy).toHaveBeenLastCalledWith('mcp-files', { default: 'ask', tools: { search: 'allow', echo: 'deny' } })
+    await waitFor(() => { expect(mcpServers.list).toHaveBeenCalledTimes(2) })
+
+    fireEvent.change(within(searchRow).getByLabelText(en.toolMode), { target: { value: 'inherit' } })
+    await waitFor(() => { expect(mcpServers.setToolPolicy).toHaveBeenLastCalledWith('mcp-files', { default: 'ask', tools: {} }) })
+  })
+
+  it('shows the modes of a server whose policy is set elsewhere without letting them change', async () => {
+    const { mcpServers } = mount([row('mcp-files', { serverName: 'files', status: connected, owned: false, readOnlyReason: 'unaddressable' })])
+    fireEvent.click(await screen.findByRole('button', { name: 'Tools (2)' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Tools of files' })
+    await within(dialog).findByText('mcp__files__echo')
+    expect(within(dialog).getByText(en.toolsPolicyReadOnly)).toBeTruthy()
+    const mode = within(dialog).getByLabelText(en.toolMode) as HTMLSelectElement
+    expect(mode.disabled).toBe(true)
+    fireEvent.change(mode, { target: { value: 'allow' } })
+    expect(mcpServers.setToolPolicy).not.toHaveBeenCalled()
   })
 })

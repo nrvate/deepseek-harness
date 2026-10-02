@@ -20,6 +20,8 @@ import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { DEFAULT_MAX_INSTRUCTION_BYTES, RECONNECT_DEFAULTS, resolveReconnectPolicy, startConnection, validateServerConfig } from './connection.ts'
 import type { ReconnectConfig } from './connection.ts'
 import { registerServerContext } from './server-context.ts'
+import { MCP_TOOL_MODES, registerToolPolicy, resolveToolPolicy } from './policy.ts'
+import type { McpToolPolicyInput } from './policy.ts'
 // Side-effect type import: declaration-merges `ctx.tools` onto Context.
 import type {} from '@deepseek-ai/dsh-tools'
 
@@ -27,6 +29,8 @@ export { createMcpToolDefinition } from './tools.ts'
 export type { McpResult, McpToolDefinitionOptions } from './tools.ts'
 export type { ReconnectConfig, ResolvedReconnectPolicy } from './connection.ts'
 export { validateServerConfig } from './connection.ts'
+export { DEFAULT_TOOL_POLICY, MCP_TOOL_MODES, resolveToolPolicy } from './policy.ts'
+export type { McpToolMode, McpToolPolicy, McpToolPolicyInput } from './policy.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'mcp-client'
@@ -75,6 +79,8 @@ export interface StdioConfig {
   maxInstructionBytes?: number
   /** Whether a Session that has made no selection of its own uses this server (default true). */
   defaultActive?: boolean
+  /** Whether each tool runs, asks the person first, or is refused; omission asks before every call. */
+  toolPolicy?: McpToolPolicyInput
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
 }
@@ -101,6 +107,8 @@ export interface StreamableHttpConfig {
   maxInstructionBytes?: number
   /** Whether a Session that has made no selection of its own uses this server (default true). */
   defaultActive?: boolean
+  /** Whether each tool runs, asks the person first, or is refused; omission asks before every call. */
+  toolPolicy?: McpToolPolicyInput
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
 }
@@ -124,6 +132,11 @@ const Reconnect: z<ReconnectConfig> = z.object({
 /** Field schemas both transports share. */
 const ToolCallTimeoutMs = z.number().min(1).max(MAX_TIMER_DELAY_MS).default(DEFAULT_TOOL_CALL_TIMEOUT_MS)
 const MaxInstructionBytes = z.number().step(1).min(1).default(DEFAULT_MAX_INSTRUCTION_BYTES)
+const ToolMode = z.union([...MCP_TOOL_MODES])
+const ToolPolicy: z<McpToolPolicyInput> = z.object({
+  default: ToolMode.default('ask'),
+  tools: z.dict(ToolMode).default({}),
+})
 
 export const Config = z.union([
   z.object({
@@ -137,6 +150,7 @@ export const Config = z.union([
     failOnStartupError: z.boolean().default(false),
     maxInstructionBytes: MaxInstructionBytes,
     defaultActive: z.boolean().default(true),
+    toolPolicy: ToolPolicy,
     reconnect: Reconnect,
   }),
   z.object({
@@ -148,6 +162,7 @@ export const Config = z.union([
     failOnStartupError: z.boolean().default(false),
     maxInstructionBytes: MaxInstructionBytes,
     defaultActive: z.boolean().default(true),
+    toolPolicy: ToolPolicy,
     reconnect: Reconnect,
   }),
 ]) as z<ConfigInput, Config>
@@ -168,6 +183,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // effect registers.
   validateServerConfig(config, `mcp-client(${config.serverName})`)
   const reconnect = resolveReconnectPolicy(config.reconnect, `mcp-client(${config.serverName}): reconnect`)
+  const toolPolicy = resolveToolPolicy(config.toolPolicy, `mcp-client(${config.serverName})`)
 
   // Reserve the namespace next: a duplicate `serverName` fails THIS instance
   // at load with an actionable error and leaves the earlier instance intact.
@@ -192,6 +208,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // quiesces in-flight work, and unregisters the current generation.
   const connection = startConnection(ctx, config, reconnect)
   registerServerContext(ctx, config.serverName, connection)
+  registerToolPolicy(ctx, config.serverName, toolPolicy, () => connection.handle.tools())
   let stopping: Promise<void> | undefined
   const dispose = (): Promise<void> => stopping ??= connection.dispose()
   // Cordis announces unload before awaiting an unfinished apply(). Closing

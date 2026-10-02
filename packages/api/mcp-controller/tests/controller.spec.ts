@@ -283,6 +283,18 @@ it('lists a row with embedded URL credentials without exposing them', async () =
   expect(JSON.stringify(rows)).not.toMatch(/hunter2|abc/)
 })
 
+it('lists a row whose arguments carry a credential as read-only, with the value masked', async () => {
+  const patch = [
+    '- insert:', '    - id: mcp-x', '      name: "@deepseek-ai/dsh-mcp-client"', '      config:', '        serverName: x', '        transport: stdio',
+    '        command: srv', '        args: ["--api-key", "sk-live-1", "--port=8"]', '',
+  ].join('\n')
+  const { controller } = await fixture('live', patch)
+  const [row] = await controller.list()
+  expect(row).toMatchObject({ readOnlyReason: 'embedded-credentials', summary: 'srv --api-key *** --port=8', owned: true })
+  expect(row?.spec).toBeUndefined()
+  expect(JSON.stringify(row)).not.toContain('sk-live-1')
+})
+
 it('lists an owned row with an expression as not editable but removable', async () => {
   const patch = '- insert:\n    - id: mcp-x\n      name: "@deepseek-ai/dsh-mcp-client"\n      disabled: true\n      config:\n        serverName: x\n        transport: stdio\n        command: tool\n        cwd: !!js process.cwd()\n'
   const { controller } = await fixture('live', patch)
@@ -468,4 +480,35 @@ it('reads an overview without usage when no status service is mounted', async ()
   const { controller } = await fixture('live', '[]\n', [], false)
   await controller.upsert(unreachable)
   expect((await controller.overview('session-a')).servers).toEqual([{ id: 'mcp-web', serverName: 'web', enabled: true, defaultActive: true }])
+})
+
+it('sets a server\'s tool-call policy without a command confirmation, and lists every row\'s policy', async () => {
+  const overlay: PatchOptions = { insert: [
+    { id: 'mcp-overlay', name: '@deepseek-ai/dsh-mcp-client', config: { transport: 'streamable-http', serverName: 'overlay', url: 'http://127.0.0.1:9/o', toolPolicy: { default: 'deny' } } },
+    { id: 'mcp-odd', name: '@deepseek-ai/dsh-mcp-client', config: { transport: 'streamable-http', serverName: 'odd', url: 'http://127.0.0.1:9/p', toolPolicy: 'allow' } },
+  ] }
+  const { ctx, controller, read } = await fixture('live', '[]\n', [overlay])
+  await controller.upsert(stdio, { confirmedCommand: 'mcp-files-test-missing --root /tmp' })
+  const policies = Object.fromEntries((await controller.list()).map(row => [row.serverName, row.toolPolicy]))
+  expect(policies).toEqual({
+    overlay: { default: 'deny', tools: {} },
+    odd: { default: 'ask', tools: {} },
+    files: { default: 'ask', tools: {} },
+  })
+
+  const policy = { default: 'allow' as const, tools: { write_file: 'ask' as const } }
+  expect(await controller.setToolPolicy(id('mcp-files'), policy)).toMatchObject({ changed: true, application: 'applied' })
+  expect(read()).toContain('write_file: ask')
+  expect(probe(ctx, 'files')).toMatchObject({ toolPolicy: policy })
+  expect((await controller.list()).find(row => row.serverName === 'files')?.toolPolicy).toEqual(policy)
+
+  expect(await controller.setToolPolicy(id('mcp-overlay'), policy)).toMatchObject({ error: { code: 'read-only' } })
+})
+
+it('refuses a tool-call policy for an owned row the form cannot edit', async () => {
+  const patch = '- insert:\n    - id: mcp-x\n      name: "@deepseek-ai/dsh-mcp-client"\n      config:\n        transport: stdio\n        serverName: x\n        command: !!js "process.execPath"\n'
+  const { controller, read } = await fixture('live', patch)
+  const before = read()
+  expect(await controller.setToolPolicy(id('mcp-x'), { default: 'allow', tools: {} })).toMatchObject({ error: { code: 'read-only' } })
+  expect(read()).toBe(before)
 })

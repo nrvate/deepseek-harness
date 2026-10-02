@@ -122,6 +122,8 @@ function ServerRow(props: McpServersCardProps & { row: McpServerInfo; pending: s
           <span className={css.name}>{name}</span>
           <Tag>{t(row.transport === 'stdio' ? 'transportStdio' : 'transportHttp')}</Tag>
           <Tag tone={state.dot === 'error' ? 'danger' : state.dot === 'warning' ? 'warning' : 'outline'}>{state.text}</Tag>
+          {row.toolPolicy.default === 'allow' && <Tag tone="warning">{t('rowCallsAllowed')}</Tag>}
+          {row.toolPolicy.default === 'deny' && <Tag>{t('rowCallsBlocked')}</Tag>}
         </div>
         <div className={css.summary}>{row.summary}</div>
         {connection?.error !== undefined && connection.state !== 'connected' && <div className={css.problem}>{connection.error}</div>}

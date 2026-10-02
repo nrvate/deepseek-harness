@@ -25,6 +25,8 @@ export type McpServersLocaleKey =
   | 'kindEnv' | 'kindBearer' | 'kindLiteral' | 'kindKept' | 'kindExpression'
   | 'hintEnv' | 'hintBearer' | 'hintKept' | 'hintExpression' | 'envNote'
   | 'timeout' | 'timeoutHint' | 'failOnStartup' | 'defaultActive' | 'defaultActiveHint'
+  | 'toolPolicy' | 'toolPolicyHint' | 'modeAsk' | 'modeAllow' | 'modeDeny'
+  | 'toolMode' | 'toolModeInherit' | 'toolsPolicyReadOnly' | 'rowCallsAllowed' | 'rowCallsBlocked'
   | 'selectShort' | 'selectLabel' | 'selectHeading' | 'selectFailed'
   | 'trayThisSession' | 'trayAllSessions' | 'traySplitNote' | 'trayUseServer' | 'statSplit'
   | 'errorInvalid' | 'errorDuplicate' | 'errorSecret' | 'errorReadOnly' | 'errorUnknown'
@@ -109,7 +111,7 @@ export const en: Record<McpServersLocaleKey, string> = {
   remove: 'Remove',
   readOnlyOutside: 'Set outside this profile file',
   readOnlyExpression: 'Uses expressions; edit the profile file',
-  readOnlyCredentials: 'The URL contains credentials; edit the profile file',
+  readOnlyCredentials: 'The URL or arguments contain credentials; edit the profile file',
   addTitle: 'Add MCP server',
   editTitle: 'Edit MCP server',
   close: 'Close',
@@ -146,6 +148,16 @@ export const en: Record<McpServersLocaleKey, string> = {
   timeoutHint: 'Leave blank for the default of 60000.',
   failOnStartup: 'Fail to start when the first connection fails',
   defaultActive: 'On for new sessions',
+  toolPolicy: 'Tool calls',
+  toolPolicyHint: 'What happens when the model calls one of this server\'s tools. Sessions with full access run them without asking. Set single tools in the tools list.',
+  modeAsk: 'Ask first',
+  modeAllow: 'Allow',
+  modeDeny: 'Block',
+  toolMode: 'When the model calls this tool',
+  toolModeInherit: 'Server default ({mode})',
+  toolsPolicyReadOnly: 'This server\'s tool-call policy is set outside this page; change it in the profile patch.',
+  rowCallsAllowed: 'Calls allowed',
+  rowCallsBlocked: 'Calls blocked',
   defaultActiveHint: 'When off, the server stays available and a session uses it only after you select it there.',
   selectShort: 'MCP {active}/{total}',
   selectLabel: 'MCP servers in this session: {active} of {total}',
@@ -257,7 +269,7 @@ export const zh: Record<McpServersLocaleKey, string> = {
   remove: '移除',
   readOnlyOutside: '在本 profile 文件之外设置',
   readOnlyExpression: '使用了表达式，请直接编辑 profile 文件',
-  readOnlyCredentials: 'URL 中包含凭证，请直接编辑 profile 文件',
+  readOnlyCredentials: 'URL 或参数中包含凭证，请直接编辑 profile 文件',
   addTitle: '添加 MCP 服务器',
   editTitle: '编辑 MCP 服务器',
   close: '关闭',
@@ -294,6 +306,16 @@ export const zh: Record<McpServersLocaleKey, string> = {
   timeoutHint: '留空使用默认值 60000。',
   failOnStartup: '首次连接失败时不启动',
   defaultActive: '新会话默认启用',
+  toolPolicy: '工具调用',
+  toolPolicyHint: '模型调用该服务器的工具时如何处理。拥有完全访问权限的会话不会询问。可在工具列表中单独设置某个工具。',
+  modeAsk: '先询问',
+  modeAllow: '允许',
+  modeDeny: '阻止',
+  toolMode: '模型调用此工具时',
+  toolModeInherit: '服务器默认（{mode}）',
+  toolsPolicyReadOnly: '该服务器的工具调用策略在本页之外设置；请在 profile 补丁中修改。',
+  rowCallsAllowed: '允许调用',
+  rowCallsBlocked: '阻止调用',
   defaultActiveHint: '关闭后，服务器仍然可用，但会话只有在选择它之后才会使用。',
   selectShort: 'MCP {active}/{total}',
   selectLabel: '本会话使用的 MCP 服务器：{total} 个中的 {active} 个',

@@ -48,7 +48,8 @@ async function mountTools(opts: {
   await ctx.plugin(WebRuntime, opts.webConfig ?? {})
   if (opts.search) ctx.web.registerSearchProvider(opts.search)
   if (opts.fetchProvider) ctx.web.registerFetchProvider(opts.fetchProvider)
-  const fiber = await ctx.plugin(ToolWeb, opts.config ?? {})
+  // These tests exercise fetching itself; fetch-approval.spec.ts covers asking first.
+  const fiber = await ctx.plugin(ToolWeb, Object.assign({ fetchApproval: 'allow' }, opts.config))
   let counter = 0
   const call = (name: string, args: unknown) => ctx.tools.execute({ signal: testToolSignal, callId: ToolCallId(`call-${++counter}`), name, arguments: args })
   return { ctx, fiber, call }

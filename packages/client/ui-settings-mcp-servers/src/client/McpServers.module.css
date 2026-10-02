@@ -381,3 +381,16 @@
   display: block;
   color: var(--dsw-alias-label-tertiary);
 }
+
+/* A tool's effective mode at the end of its collapsed row. */
+.toolMode {
+  flex: none;
+  margin-left: auto;
+}
+
+.toolModeRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}

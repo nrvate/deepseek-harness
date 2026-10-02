@@ -50,6 +50,13 @@ export interface SandboxExecutionPolicy {
    * for agentless calls, which fall back to per-call backend state.
    */
   sessionId?: SessionId
+  /**
+   * Absolute paths no confined execution or sandboxed filesystem operation may
+   * read or write, such as credential stores; a directory covers everything
+   * under it. Absent or empty protects nothing. Enforcement is per backend and
+   * documented with each one.
+   */
+  protectedPaths?: readonly string[]
 }
 
 /**

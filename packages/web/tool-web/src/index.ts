@@ -11,11 +11,14 @@ import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-web'
 import { applyWebSearchTool, WEB_SEARCH_MAX_QUERIES, WEB_SEARCH_MAX_RESULTS } from './search.ts'
 import { applyWebFetchTool } from './fetch.ts'
+import { assertAllowedHosts, registerFetchApproval, type FetchApproval } from './fetch-approval.ts'
 
 export { WEB_SEARCH_MAX_QUERIES, WEB_SEARCH_MAX_RESULTS, applyWebSearchTool, formatSearchOutput, presentSearchCall, presentSearchResult, searchMetaFromValue, searchMetaFromResult } from './search.ts'
 export type { WebSearchMeta } from './search.ts'
 export { applyWebFetchTool, formatFetchOutput, parseFetchArgs, presentFetchCall, presentFetchResult, fetchMetaFromValue, fetchMetaFromResult } from './fetch.ts'
 export type { WebFetchMeta } from './fetch.ts'
+export { hostAllowed } from './fetch-approval.ts'
+export type { FetchApproval } from './fetch-approval.ts'
 
 /** Cordis plugin name used by loader diagnostics. */
 export const name = 'tool-web'
@@ -49,6 +52,10 @@ export interface Config {
   searchTimeoutMs?: number
   /** Cap on source characters converted and complete `web_fetch` output characters. Defaults to 200000. */
   fetchMaxOutputChars?: number
+  /** `ask` (default): fetching a host outside `fetchAllowedHosts` asks the person first; `allow`: every fetch runs without asking. */
+  fetchApproval?: FetchApproval
+  /** Hosts `web_fetch` reaches without asking: exact names, or `*.` and a domain for its subdomains. Defaults to none. */
+  fetchAllowedHosts?: string[]
 }
 
 export const Config: z<Config> = z.object({
@@ -59,6 +66,8 @@ export const Config: z<Config> = z.object({
   fetchTimeoutMs: z.number().default(DEFAULT_WEB_TOOL_TIMEOUT_MS),
   searchTimeoutMs: z.number().default(DEFAULT_WEB_TOOL_TIMEOUT_MS),
   fetchMaxOutputChars: z.number().default(DEFAULT_FETCH_MAX_OUTPUT_CHARS),
+  fetchApproval: z.union(['ask', 'allow'] as const).default('ask'),
+  fetchAllowedHosts: z.array(String).default([]),
 })
 
 /** Complete config after schemastery applies every field default. */
@@ -88,8 +97,12 @@ export function apply(ctx: Context, config: Config): void {
   assertPositiveInteger('fetchTimeoutMs', resolved.fetchTimeoutMs)
   assertPositiveInteger('searchTimeoutMs', resolved.searchTimeoutMs)
   assertPositiveInteger('fetchMaxOutputChars', resolved.fetchMaxOutputChars)
+  assertAllowedHosts(resolved.fetchAllowedHosts)
   if (resolved.search) {
     applyWebSearchTool(ctx, resolved.searchMaxResults, resolved.searchMaxQueries, resolved.searchTimeoutMs, resolved.fetch)
   }
-  if (resolved.fetch) applyWebFetchTool(ctx, resolved.fetchTimeoutMs, resolved.fetchMaxOutputChars)
+  if (resolved.fetch) {
+    applyWebFetchTool(ctx, resolved.fetchTimeoutMs, resolved.fetchMaxOutputChars)
+    registerFetchApproval(ctx, resolved.fetchApproval, resolved.fetchAllowedHosts)
+  }
 }

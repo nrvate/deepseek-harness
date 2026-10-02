@@ -2,7 +2,7 @@
 import { Context } from '@deepseek-ai/cordis'
 import { describe, expect, it, vi } from 'vitest'
 import { stubConfigForm, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
-import type { McpChangeResult, McpEntryId, McpServerInfo, McpServerSpec, McpServerStatus, McpToolInfo } from '@deepseek-ai/dsh-api-remotes/client'
+import type { McpChangeResult, McpEntryId, McpServerInfo, McpServerSpec, McpServerStatus, McpToolInfo, McpToolPolicy } from '@deepseek-ai/dsh-api-remotes/client'
 import {
   draftFromSpec, emptyDraft, McpServersController, specFromDraft,
   type EditorDraft, type McpServersFace,
@@ -24,7 +24,7 @@ const httpSpec: McpServerSpec = {
 function row(rowId: string, spec?: McpServerSpec, rest: Partial<McpServerInfo> = {}): McpServerInfo {
   return {
     id: id(rowId), serverName: spec?.serverName ?? rowId, transport: spec?.transport ?? 'stdio', summary: 'summary',
-    enabled: true, defaultActive: true, fiberPhase: 'active', owned: spec !== undefined, ...spec === undefined ? {} : { spec }, ...rest,
+    enabled: true, defaultActive: true, toolPolicy: { default: 'ask', tools: {} }, fiberPhase: 'active', owned: spec !== undefined, ...spec === undefined ? {} : { spec }, ...rest,
   }
 }
 
@@ -42,6 +42,7 @@ function bench(rows: McpServerInfo[] = [row('mcp-files', stdioSpec), row('mcp-we
     removeServer: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: applied })),
     tools: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: { tools: [echo], status: connected } })),
     reconnectServer: vi.fn((_id: McpEntryId) => Promise.resolve({ ok: true as const, value: { started: true } })),
+    setToolPolicy: vi.fn((_id: McpEntryId, _policy: McpToolPolicy) => Promise.resolve({ ok: true as const, value: applied })),
   }
   const remote = new TestRemote(ctx, { mcpServers })
   const settings = stubConfigForm<McpUiSettings>()
@@ -89,6 +90,8 @@ describe('draft conversion', () => {
   it('round-trips a staged server back to its spec', () => {
     expect(specFromDraft(draftFromSpec(id('mcp-files'), stdioSpec, 0).draft)).toEqual(stdioSpec)
     expect(specFromDraft(draftFromSpec(id('mcp-web'), httpSpec, 0).draft)).toEqual(httpSpec)
+    const guarded = { ...httpSpec, toolPolicy: { default: 'deny' as const, tools: { read: 'allow' as const } } }
+    expect(specFromDraft(draftFromSpec(id('mcp-web'), guarded, 0).draft)).toEqual(guarded)
     const optIn = { ...httpSpec, defaultActive: false }
     expect(draftFromSpec(id('mcp-web'), optIn, 0).draft.defaultActive).toBe(false)
     expect(specFromDraft(draftFromSpec(id('mcp-web'), optIn, 0).draft)).toEqual(optIn)
@@ -197,6 +200,7 @@ describe('editing', () => {
     face.editField('command', 'run')
     face.setFailOnStartup(true)
     face.setDefaultActive(false)
+    face.setToolDefault('allow')
     face.addValue()
     const uid = controller.getSnapshot().editor?.draft.values[0]?.uid ?? -1
     face.editValue(uid, { key: 'K', mode: 'literal', text: 'v' })
@@ -204,7 +208,7 @@ describe('editing', () => {
     const second = controller.getSnapshot().editor?.draft.values[1]?.uid ?? -1
     face.removeValue(second)
     expect(controller.getSnapshot().editor?.draft).toMatchObject({
-      serverName: 'srv', command: 'run', failOnStartupError: true, defaultActive: false, values: [{ key: 'K', mode: 'literal', text: 'v' }],
+      serverName: 'srv', command: 'run', failOnStartupError: true, defaultActive: false, toolPolicy: { default: 'allow', tools: {} }, values: [{ key: 'K', mode: 'literal', text: 'v' }],
     })
     // Off is written; on is the plugin default and stays out of the file.
     expect(specFromDraft(controller.getSnapshot().editor!.draft)).toMatchObject({ defaultActive: false })
@@ -220,6 +224,7 @@ describe('editing', () => {
     face.editField('serverName', 'x')
     face.setFailOnStartup(true)
     face.setDefaultActive(false)
+    face.setToolDefault('deny')
     face.addValue()
     face.editValue(0, { key: 'x' })
     face.removeValue(0)
@@ -609,5 +614,80 @@ describe('status item preference', () => {
     await Promise.resolve()
     expect(controller.getSnapshot().notice).toBeNull()
     expect(settings.listenerCount()).toBe(0)
+  })
+})
+
+describe('per-tool modes', () => {
+  const live = row('mcp-files', stdioSpec, { status: connected, toolPolicy: { default: 'allow', tools: { echo: 'deny' } } })
+
+  async function open(rows = [live]) {
+    const made = await loaded(rows)
+    made.face.openTools(id(rows[0]!.id))
+    await vi.waitFor(() => { expect(made.controller.getSnapshot().tools?.status).toBe('ready') })
+    return made
+  }
+
+  it('writes the whole policy with one tool changed, then follows the policy the rows report', async () => {
+    const { controller, face, mcpServers } = await open()
+    const updated = { ...live, toolPolicy: { default: 'allow' as const, tools: { echo: 'ask' as const } } }
+    mcpServers.list.mockResolvedValue({ ok: true, value: [updated] })
+    face.setToolMode('echo', 'ask')
+    expect(controller.getSnapshot().tools?.savingTool).toBe('echo')
+    // A second change while one is saving is ignored.
+    face.setToolMode('echo', 'deny')
+    await vi.waitFor(() => { expect(controller.getSnapshot().tools?.row.toolPolicy.tools.echo).toBe('ask') })
+    expect(mcpServers.setToolPolicy).toHaveBeenCalledExactlyOnceWith('mcp-files', { default: 'allow', tools: { echo: 'ask' } })
+    expect(controller.getSnapshot().tools?.savingTool).toBeNull()
+    expect(controller.getSnapshot().notice?.kind).toBe('saved')
+
+    face.setToolMode('echo', null)
+    await vi.waitFor(() => { expect(mcpServers.setToolPolicy).toHaveBeenLastCalledWith('mcp-files', { default: 'allow', tools: {} }) })
+  })
+
+  it('reports a change the Host did not save', async () => {
+    const { controller, face, mcpServers } = await open()
+    mcpServers.setToolPolicy.mockResolvedValueOnce(failure as never)
+    face.setToolMode('echo', 'allow')
+    await vi.waitFor(() => { expect(controller.getSnapshot().notice?.kind).toBe('failed') })
+  })
+
+  it('changes nothing without an open dialog, for a row the form cannot edit, or after teardown', async () => {
+    const readOnly = row('mcp-x', undefined, { status: connected })
+    const { controller, face, mcpServers } = await loaded([readOnly])
+    face.setToolMode('echo', 'allow')
+    face.openTools(id('mcp-x'))
+    face.setToolMode('echo', 'allow')
+    expect(mcpServers.setToolPolicy).not.toHaveBeenCalled()
+
+    expect(controller.getSnapshot().tools?.row.id).toBe('mcp-x')
+
+    const gone = await open()
+    const slow = Promise.withResolvers<{ ok: true; value: McpChangeResult }>()
+    gone.mcpServers.setToolPolicy.mockReturnValueOnce(slow.promise)
+    gone.face.setToolMode('echo', 'ask')
+    gone.controller.dispose()
+    slow.resolve({ ok: true, value: applied })
+    await slow.promise
+    await Promise.resolve()
+    expect(gone.controller.getSnapshot().notice).toBeNull()
+  })
+
+  it('still reports the saved change when the dialog closed while it was saving', async () => {
+    const { controller, face, mcpServers } = await open()
+    const slow = Promise.withResolvers<{ ok: true; value: McpChangeResult }>()
+    mcpServers.setToolPolicy.mockReturnValueOnce(slow.promise)
+    face.setToolMode('echo', 'ask')
+    face.closeTools()
+    slow.resolve({ ok: true, value: applied })
+    await vi.waitFor(() => { expect(controller.getSnapshot().notice?.kind).toBe('saved') })
+    expect(controller.getSnapshot().tools).toBeNull()
+  })
+
+  it('keeps the dialog\'s row when the refreshed rows no longer list it', async () => {
+    const { controller, mcpServers } = await open()
+    mcpServers.list.mockResolvedValue({ ok: true, value: [] })
+    controller.refresh()
+    await vi.waitFor(() => { expect(controller.getSnapshot().rows).toEqual([]) })
+    expect(controller.getSnapshot().tools?.row.id).toBe('mcp-files')
   })
 })

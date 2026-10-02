@@ -58,6 +58,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     transport: 'stdio',
     serverName: 'cua-driver-mcp',
     failOnStartupError: true,
+    // Enabling computer use is the person's consent to the driver's tools.
+    toolPolicy: { default: 'allow' },
   })
   // One effect orders child shutdown before release; separate fiber effects
   // unload concurrently and could otherwise admit another live driver.

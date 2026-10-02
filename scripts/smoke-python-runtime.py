@@ -286,6 +286,8 @@ def write_mcp_patch(root: Path, sessions: Path, server_script: Path) -> Path:
                 "env": {"MCP_SMOKE_LOG": str(server_script.with_suffix(".log"))},
                 "failOnStartupError": True,
                 "reconnect": {"enabled": False},
+                # The smoke calls the tool with no person present to approve it.
+                "toolPolicy": {"default": "allow"},
             },
         }],
     }])

@@ -1,0 +1,43 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/guard/secret-redaction/README.md
+/:
+  en: cdb896e908cd0a2d
+  zh: f6a141bab903a65e
+/deepseek-ai-dsh-secret-redaction:
+  en: 8a37c92ba4ef9615
+  zh: 1f127a8caa14ad48
+/deepseek-ai-dsh-secret-redaction/summary:
+  en: 00f8a0730d1813d3
+  zh: 4aed731b2ad7d75c
+/deepseek-ai-dsh-secret-redaction/table-of-contents:
+  en: 122f0d41696980b1
+  zh: 528864635b577290
+/deepseek-ai-dsh-secret-redaction/use-this-package:
+  en: c76deeda23a21e6a
+  zh: bd32f866da066f49
+/deepseek-ai-dsh-secret-redaction/understand-the-implementation:
+  en: a5c3402daa2df597
+  zh: 57c526282c99453c
+/deepseek-ai-dsh-secret-redaction/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-secret-redaction/model-experience/redacted-results:
+  en: 5d47c68a754787d4
+  zh: ebba137b7a7567a1
+/deepseek-ai-dsh-secret-redaction/model-experience/redacted-results/what-the-model-sees:
+  en: 6807c0112a7c3cda
+  zh: 0070fd8cefc4b2fc
+/deepseek-ai-dsh-secret-redaction/model-experience/redacted-results/token-effect:
+  en: ae54dbd652c87c2a
+  zh: 7573a16fa25aa249
+/deepseek-ai-dsh-secret-redaction/model-experience/redacted-results/kv-cache-effect:
+  en: fa7d654bf33a6b1f
+  zh: 32f83762a292f30b
+/deepseek-ai-dsh-secret-redaction/known-limitations-and-deferred-work:
+  en: 4eb14a3ac3748e16
+  zh: 6afc17e20f03f920
+/deepseek-ai-dsh-secret-redaction/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: e88aeb617ffb74ea

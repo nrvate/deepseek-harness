@@ -52,7 +52,7 @@ The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-a
 
 The provider registers as `cua-driver-mcp` before connecting. A second computer-use provider fails activation, including another instance of this package. Failed initialization or initial tool discovery rejects this entry and releases its registration after cleanup. Later disconnects retain the registration while the MCP client reconnects or exhausts its attempt budget; unload the entry to release it.
 
-The model sees tools under the fixed `mcp__cua-driver-mcp__` namespace. Tool names, descriptions, input schemas, canonical results, and image admission follow the existing [MCP bridge](../../mcp/mcp-client/README.md). There is no additional DSH action catalog or provider-selection tool.
+The model sees tools under the fixed `mcp__cua-driver-mcp__` namespace. Tool names, descriptions, input schemas, canonical results, and image admission follow the existing [MCP bridge](../../mcp/mcp-client/README.md). There is no additional DSH action catalog or provider-selection tool. The driver's tools run without per-call approval (`toolPolicy: { default: allow }`): enabling computer use is the consent to them.
 
 -----
 

@@ -17,6 +17,11 @@
  * syscall) is narrowed by re-canonicalizing immediately before delegating and
  * is accepted for this threat model.
  *
+ * Protected paths (`ctx.sandboxPolicy.protectedPaths`, such as credential
+ * stores) are refused at {@link resolve} in every mode, so no read, listing,
+ * or mutation of them starts; the refusal is `FS_PERMISSION_DENIED`, which
+ * no mode escalation lifts.
+ *
  * Per-call policy: `read-only` denies every mutation; `workspace-write` allows
  * a mutation only when the target canonicalizes under the policy's workspace
  * root or a platform temp area from the shared `writableRoots` policy;
@@ -26,6 +31,7 @@
  * @module @deepseek-ai/dsh-fs-sandbox
  */
 
+import { realpath } from 'node:fs/promises'
 import { Context } from '@deepseek-ai/cordis'
 import { LocalFileSystem } from '@deepseek-ai/dsh-fs-local'
 import type { Config as LocalConfig } from '@deepseek-ai/dsh-fs-local'
@@ -35,6 +41,16 @@ import { writableRoots } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxExecutionPolicy, SandboxMode } from '@deepseek-ai/dsh-sandbox'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import { isPathUnder } from './containment.ts'
+
+/** A protected path's canonical spelling while it exists, its configured spelling otherwise. */
+async function canonical(path: string): Promise<string> {
+  try {
+    return await realpath(path)
+  } catch (_error) {
+    // A missing protected path is matched as configured; resolve canonicalizes targets the same way.
+    return path
+  }
+}
 
 /**
  * Plugin config: the local backend's knobs verbatim (`cwd` resolution default
@@ -59,6 +75,23 @@ export class SandboxedFileSystem extends LocalFileSystem {
   constructor(ctx: Context, config: Config) {
     super(ctx, config)
     this.defaultMode = ctx.sandboxPolicy.defaultMode
+  }
+
+  /**
+   * Resolve a path, refusing it when it is or lies under a protected path.
+   * @param path - absolute path or path relative to `opts.cwd`.
+   * @param opts - resolution base and cancellation, as for the local backend.
+   * @returns the resolved target.
+   * @throws FsError `FS_PERMISSION_DENIED` for a protected path.
+   */
+  override async resolve(path: string, opts?: { cwd?: string; signal?: AbortSignal }): Promise<FsTarget> {
+    const target = await super.resolve(path, opts)
+    for (const entry of this.ctx.sandboxPolicy.protectedPaths) {
+      if (await isPathUnder(target.targetKey, await canonical(entry))) {
+        throw new FsError(`cannot access "${target.displayPath}": it is a protected credential location`, 'FS_PERMISSION_DENIED')
+      }
+    }
+    return target
   }
 
   /** The deployment default mode — the capability fact the tool layer reads to advertise escalation. */

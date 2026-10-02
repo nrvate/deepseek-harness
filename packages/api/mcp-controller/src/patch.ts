@@ -5,7 +5,7 @@
  * @module
  */
 import { isMap, isScalar, isSeq, parseDocument, Scalar, YAMLMap, YAMLSeq, type Document } from 'yaml'
-import type { McpServerSpec, McpValue } from './types.ts'
+import type { McpServerSpec, McpToolMode, McpToolPolicy, McpValue } from './types.ts'
 
 /** Module specifier of the MCP client plugin. */
 export const MCP_CLIENT_MODULE = '@deepseek-ai/dsh-mcp-client'
@@ -68,18 +68,42 @@ function plainString(map: YAMLMap, key: string): string | undefined | null {
   return isScalar(node) && !isExpression(node) && typeof node.value === 'string' ? node.value : null
 }
 
+function isToolMode(value: unknown): value is McpToolMode {
+  return value === 'allow' || value === 'ask' || value === 'deny'
+}
+
+/**
+ * Read a tool-call policy value: a map with an optional `default` mode and an optional `tools` map of modes.
+ * @param value - the configured value, as a YAML node or a plain object from a composed row.
+ * @returns the policy (absent fields take `ask` and no overrides), or undefined when the value has another shape.
+ */
+export function readToolPolicy(value: unknown): McpToolPolicy | undefined {
+  const plain: unknown = isMap(value) ? value.toJSON() : value
+  if (plain === undefined || plain === null) return { default: 'ask', tools: {} }
+  if (typeof plain !== 'object' || Array.isArray(plain)) return undefined
+  const { default: mode = 'ask', tools = {}, ...rest } = plain as Record<string, unknown>
+  if (Object.keys(rest).length > 0 || !isToolMode(mode) || typeof tools !== 'object' || tools === null || Array.isArray(tools)) return undefined
+  const entries = Object.entries(tools as Record<string, unknown>)
+  if (!entries.every(([, entry]) => isToolMode(entry))) return undefined
+  return { default: mode, tools: Object.fromEntries(entries) as Record<string, McpToolMode> }
+}
+
 function readSpec(config: YAMLMap): McpServerSpec | undefined {
   const serverName = plainString(config, 'serverName')
   const transport = plainString(config, 'transport')
   const timeout = config.get('toolCallTimeoutMs', true)
   const fail = config.get('failOnStartupError', true)
   const active = config.get('defaultActive', true)
+  const policyNode = config.get('toolPolicy', true)
+  const policy = readToolPolicy(policyNode)
+  if (policy === undefined || isExpression(policyNode)) return undefined
   if (typeof serverName !== 'string') return undefined
   const common = {
     serverName,
     ...isScalar(timeout) && typeof timeout.value === 'number' ? { toolCallTimeoutMs: timeout.value } : {},
     ...isScalar(fail) && typeof fail.value === 'boolean' ? { failOnStartupError: fail.value } : {},
     ...isScalar(active) && typeof active.value === 'boolean' ? { defaultActive: active.value } : {},
+    ...policyNode === undefined ? {} : { toolPolicy: policy },
   }
   if (isScalar(timeout) && typeof timeout.value !== 'number') return undefined
   if (isScalar(fail) && typeof fail.value !== 'boolean') return undefined
@@ -207,6 +231,39 @@ function writeConfig(config: YAMLMap, spec: McpServerSpec, existing: McpServerSp
   assign(config, 'toolCallTimeoutMs', spec.toolCallTimeoutMs)
   assign(config, 'failOnStartupError', spec.failOnStartupError)
   assign(config, 'defaultActive', spec.defaultActive)
+  writeToolPolicy(config, spec.toolPolicy)
+}
+
+/** Write a tool-call policy, leaving out what the plugin defaults to; asking before every call writes nothing. */
+function writeToolPolicy(config: YAMLMap, policy: McpToolPolicy | undefined): void {
+  const tools = Object.entries(policy?.tools ?? {})
+  if (policy === undefined || (policy.default === 'ask' && tools.length === 0)) {
+    config.delete('toolPolicy')
+    return
+  }
+  for (const [tool, mode] of [['default', policy.default] as const, ...tools]) {
+    if (!isToolMode(mode)) throw new Error(`"${tool}" has no tool-call mode "${String(mode)}"`)
+  }
+  const node = new YAMLMap()
+  node.set('default', policy.default)
+  if (tools.length > 0) node.set('tools', Object.fromEntries(tools))
+  config.set('toolPolicy', node)
+}
+
+/**
+ * Replace only the tool-call policy of one inserted row.
+ * @param text - profile patch text.
+ * @param id - row id.
+ * @param policy - the policy to write.
+ * @returns the updated text.
+ * @throws when the patch inserts no such MCP row, the row has no config map, or a mode is unknown.
+ */
+export function setRowToolPolicy(text: string, id: string, policy: McpToolPolicy): string {
+  const document = parse(text)
+  const config = findRow(document, id).row.get('config', true)
+  if (!isMap(config)) throw new Error(`The MCP server row "${id}" has no configuration to change`)
+  writeToolPolicy(config, policy)
+  return String(document)
 }
 
 /**

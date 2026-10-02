@@ -8,7 +8,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -107,6 +107,26 @@ describe('profile dialects', () => {
     const roots = [...new Set(['/ws', realpathSync('/tmp'), realpathSync(tmpdir())])]
     const allow = `(allow file-write* ${roots.map(root => `(subpath "${root}")`).join(' ')})`
     expect(seatbeltProfileArgs(WW)).toEqual(['-p', `${SEATBELT_RO_PROFILE} ${allow}`])
+  })
+
+  it('hides existing protected paths last: a directory behind a tmpfs, a file behind /dev/null, and skips missing ones', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'dsh-protected-'))
+    tempDirs.push(dir)
+    const secrets = join(dir, 'secrets')
+    mkdirSync(secrets)
+    const file = join(dir, 'token.txt')
+    writeFileSync(file, 'x')
+    const protectedPaths = [secrets, file, join(dir, 'missing')]
+    expect(bwrapProfileArgs({ ...WW, protectedPaths })).toEqual([
+      '--ro-bind', '/', '/', '--dev', '/dev', '--unshare-pid', '--proc', '/proc', '--die-with-parent',
+      '--tmpfs', '/tmp', '--bind', '/ws', '/ws',
+      '--tmpfs', realpathSync(secrets), '--ro-bind', '/dev/null', realpathSync(file),
+    ])
+    const profile = seatbeltProfileArgs({ ...RO, protectedPaths })[1] as string
+    const spelled = [...new Set([secrets, realpathSync(secrets), file, realpathSync(file), join(dir, 'missing')])]
+    expect(profile).toBe(`${SEATBELT_RO_PROFILE} (deny file-read* file-write* ${spelled.map(path => `(subpath "${path}")`).join(' ')})`)
+    // Landlock can only grant access, so the protected list does not change its grants.
+    expect(landlockProfileArgs({ ...RO, protectedPaths })).toEqual(landlockProfileArgs(RO))
   })
 
   it('seatbelt workspace-write dedups a workspace root that already IS the temp dir', () => {

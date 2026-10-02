@@ -5,20 +5,21 @@
  */
 
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join, resolve, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { SESSION_FORMAT_VERSION, Session, SessionId } from '@deepseek-ai/dsh-session'
-import SandboxPolicyService, { SANDBOX_MODES, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
+import SandboxPolicyService, { DEFAULT_PROTECTED_PATHS, expandProtectedPath, SANDBOX_MODES, setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
+import { dshHomePath } from '@deepseek-ai/dsh-home-paths'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt, { renderContextSnapshot, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 
 async function mounted(config: { mode?: 'read-only' | 'workspace-write' | 'danger-full-access'; workspaceRoot?: string } = {}) {
   const ctx = new Context()
   await ctx.plugin(SessionProjectionRegistry)
-  await ctx.plugin(SandboxPolicyService, config)
+  await ctx.plugin(SandboxPolicyService, { protectedPaths: [], ...config })
   return ctx
 }
 
@@ -59,7 +60,7 @@ describe('SandboxPolicyService', () => {
     const ctx = new Context()
     try {
       await ctx.plugin(SessionProjectionRegistry)
-      await expect(ctx.plugin(SandboxPolicyService, { workspaceRoot: 'relative/workspace' }))
+      await expect(ctx.plugin(SandboxPolicyService, { protectedPaths: [], workspaceRoot: 'relative/workspace' }))
         .rejects.toThrow('sandbox-policy: workspace root must be an absolute execution-world path')
       expect(ctx.get('sandboxPolicy')).toBeUndefined()
     } finally {
@@ -144,14 +145,14 @@ describe('SandboxPolicyService', () => {
     // requires the projection registry (mandatory injection) to activate.
     await ctx.plugin(SessionProjectionRegistry)
     // schemastery rejects the union violation when the plugin loads.
-    await expect(ctx.plugin(SandboxPolicyService, { mode: 'yolo' as never })).rejects.toThrow()
+    await expect(ctx.plugin(SandboxPolicyService, { protectedPaths: [], mode: 'yolo' as never })).rejects.toThrow()
   })
 
   it('disposes the service and context contribution from a child fiber (HMR safety)', async () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(SessionProjectionRegistry)
-    const fiber = await ctx.plugin(SandboxPolicyService, {})
+    const fiber = await ctx.plugin(SandboxPolicyService, { protectedPaths: [] })
     expect(ctx.sandboxPolicy).toBeDefined()
     expect(await policyContext(ctx, session('sess-hmr'))).toContain('read-only')
     await fiber.dispose()
@@ -165,7 +166,7 @@ describe('sandbox:policy request context', () => {
     const ctx = new Context()
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(SessionProjectionRegistry)
-    await ctx.plugin(SandboxPolicyService, config)
+    await ctx.plugin(SandboxPolicyService, { protectedPaths: [], ...config })
     return ctx
   }
 
@@ -247,5 +248,35 @@ describe('the sandbox/mode session kit', () => {
     const modeEvents = session.snapshotEvents().filter(e => e.type === 'sandbox/mode')
     expect(modeEvents).toHaveLength(1)
     expect(modeEvents[0]?.data).toEqual({ mode: 'danger-full-access' })
+  })
+})
+
+describe('protected paths', () => {
+  it('protects the default credential stores, expanding the home and harness-home prefixes', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SandboxPolicyService, {})
+    expect(ctx.sandboxPolicy.protectedPaths).toEqual(DEFAULT_PROTECTED_PATHS.map(expandProtectedPath))
+    expect(ctx.sandboxPolicy.resolve().protectedPaths).toEqual(ctx.sandboxPolicy.protectedPaths)
+    expect(ctx.sandboxPolicy.protectedPaths).toContain(join(homedir(), '.ssh'))
+    expect(ctx.sandboxPolicy.protectedPaths).toContain(dshHomePath('.credentials.yaml'))
+  })
+
+  it('takes a configured list, and an empty one protects nothing', async () => {
+    const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SandboxPolicyService, { protectedPaths: ['/srv/secrets', '~/.vault-token'] })
+    expect(ctx.sandboxPolicy.resolve().protectedPaths).toEqual(['/srv/secrets', join(homedir(), '.vault-token')])
+    const none = new Context()
+    await none.plugin(SessionProjectionRegistry)
+    await none.plugin(SandboxPolicyService, { protectedPaths: [] })
+    expect(none.sandboxPolicy.resolve()).not.toHaveProperty('protectedPaths')
+  })
+
+  it('refuses a relative protected path at load', async () => {
+    expect(() => expandProtectedPath('secrets')).toThrow('protected path "secrets" must be absolute or start with "~/" or "$DSH_HOME/"')
+    const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
+    await expect(ctx.plugin(SandboxPolicyService, { protectedPaths: ['relative'] })).rejects.toThrow('must be absolute')
   })
 })

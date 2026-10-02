@@ -22,6 +22,17 @@ export type McpValue =
   | { kind: 'expression'; source: string }
   | { kind: 'kept' }
 
+/** What happens when the model calls a tool: run it, ask the person first, or refuse it. */
+export type McpToolMode = 'allow' | 'ask' | 'deny'
+
+/** Whether each of a server's tools runs, asks first, or is refused. */
+export interface McpToolPolicy {
+  /** Mode of every tool `tools` does not name. */
+  default: McpToolMode
+  /** Modes by the server's own tool name. */
+  tools: Record<string, McpToolMode>
+}
+
 /** Fields every transport shares. */
 export interface McpSpecBase {
   /** Local namespace of the server's tool names; `[A-Za-z0-9_-]{1,32}`. */
@@ -32,6 +43,8 @@ export interface McpSpecBase {
   failOnStartupError?: boolean
   /** Whether a Session that has made no selection of its own uses this server; omitted keeps the plugin default, which is true. */
   defaultActive?: boolean
+  /** Tool-call policy; omitted asks before every call. */
+  toolPolicy?: McpToolPolicy
 }
 
 /** A local server started as a child process. */
@@ -60,7 +73,7 @@ export type McpReadOnlyReason =
   | 'unaddressable'
   /** The row holds a `!!js` expression or other value the form cannot represent. */
   | 'custom-expression'
-  /** The row's URL embeds a user name or password. */
+  /** The row's URL or command-line arguments embed a credential. */
   | 'embedded-credentials'
 
 /** One configured MCP server row. */
@@ -74,6 +87,8 @@ export interface McpServerInfo {
   enabled: boolean
   /** Whether a Session that has made no selection of its own uses this server. */
   defaultActive: boolean
+  /** The tool-call policy the row configures; a row that names none asks before every call. */
+  toolPolicy: McpToolPolicy
   /** Root-fiber phase of the running entry; null when none is live. */
   fiberPhase: PluginFiberPhase
   /** The client's live connection state; absent while the plugin is not loaded or no status service is mounted. */

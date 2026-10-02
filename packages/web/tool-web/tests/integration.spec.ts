@@ -49,7 +49,8 @@ beforeEach(async () => {
   // the zero-config timeout-policy plugin, set above the provider backstop so the
   // policy normally wins.
   await ctx.plugin(TimeoutPolicy)
-  fiber = await ctx.plugin(ToolWeb)
+  // These tests exercise fetching itself; fetch-approval.spec.ts covers asking first.
+  fiber = await ctx.plugin(ToolWeb, { fetchApproval: 'allow' })
 })
 
 afterEach(async () => {
@@ -143,7 +144,7 @@ describe('tool-call timeout returns TOOL_TIMEOUT (deadline wins over a slow fetc
     await tctx.plugin(WebFetchLocal, { timeoutMs: 30_000 })
     await tctx.plugin(TimeoutPolicy)
     // The tool-call budget is declared by tool-web config, enforced by the policy.
-    tfiber = await tctx.plugin(ToolWeb, { fetchTimeoutMs: 50 })
+    tfiber = await tctx.plugin(ToolWeb, { fetchTimeoutMs: 50, fetchApproval: 'allow' })
   })
 
   afterEach(async () => {

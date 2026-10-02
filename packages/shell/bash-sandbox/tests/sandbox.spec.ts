@@ -79,7 +79,7 @@ async function setup(
   const ctx = new Context()
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(FakeSandboxProvider)
-  await ctx.plugin(SandboxPolicyService, {
+  await ctx.plugin(SandboxPolicyService, { protectedPaths: [],
     ...mode !== undefined ? { mode } : {},
     ...workspaceRoot !== undefined ? { workspaceRoot } : {},
   })

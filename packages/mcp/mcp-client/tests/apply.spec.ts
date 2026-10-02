@@ -221,7 +221,7 @@ describe('apply (plugin lifecycle)', () => {
   })
 
   it.each([
-    ['an unparsable url', { transport: 'streamable-http', serverName: 'srv', url: 'not a url', headers: {}, toolCallTimeoutMs: 60_000, failOnStartupError: false }, /url is not a valid URL/],
+    ['an unparsable url', { transport: 'streamable-http', serverName: 'srv', url: 'not a url', headers: {}, toolCallTimeoutMs: 60_000, failOnStartupError: false }, /url is not a valid URL$/],
     ['a non-http url', { transport: 'streamable-http', serverName: 'srv', url: 'file:///tmp/mcp', headers: {}, toolCallTimeoutMs: 60_000, failOnStartupError: false }, /url must use http: or https:/],
     ['an empty command', { ...stdioConfig, command: ' ' }, /command must not be empty/],
     ['a zero tool timeout', { ...stdioConfig, toolCallTimeoutMs: 0 }, /toolCallTimeoutMs must be a positive finite number/],

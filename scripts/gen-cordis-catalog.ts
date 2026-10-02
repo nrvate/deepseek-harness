@@ -309,6 +309,7 @@ export const LINK_MAP: Readonly<Record<string, string>> = {
   McpServerStats: 'mcp.md',
   McpOverview: 'mcp.md',
   McpSessionServers: 'mcp.md',
+  McpToolPolicy: 'mcp.md',
   McpConfiguredServer: 'mcp.md',
   BundleRowInfo: 'boot.md',
   PluginInstallCancellation: 'boot.md',

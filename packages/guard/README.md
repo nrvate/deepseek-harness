@@ -22,12 +22,13 @@ The `guard/` group keeps the agent loop productive by watching for two common fa
 <a id="packages"></a>
 ## Packages
 
-Two small plugins cover the two patterns; each README below explains when to keep, tune, or remove it.
+Two small plugins cover the two patterns, and a third keeps credentials out of tool results; each README below explains when to keep, tune, or remove it.
 
 | Package | What it provides |
 |---|---|
 | [`repeat-tool-reminder/`](repeat-tool-reminder/README.md) | Reminds the model when it repeats the same tool call, so it changes approach or finishes |
 | [`timeout-policy/`](timeout-policy/README.md) | Times out tool calls that declare a limit, so the model gets a clear error instead of waiting forever |
+| [`secret-redaction/`](secret-redaction/README.md) | Replaces known credentials and token formats in tool results before the model or the session log sees them |
 
 -----
 

@@ -15,17 +15,20 @@
   en: d152484eb41ac6b4
   zh: 09388d293f9be9cb
 /deepseek-ai-dsh-fs-sandbox/use-this-package:
-  en: c6fe0aa054b2a402
-  zh: 78a779a1b91ac808
+  en: 4458e26e508fb31f
+  zh: 5d62b7258776986b
 /deepseek-ai-dsh-fs-sandbox/use-this-package/minimal-composition:
   en: a954957753339bbf
   zh: c6633e86de8b2707
 /deepseek-ai-dsh-fs-sandbox/use-this-package/how-the-fence-behaves:
   en: 1a6f19bb21aff7b1
   zh: ace300527edd0c1f
+/deepseek-ai-dsh-fs-sandbox/use-this-package/protected-paths:
+  en: f44e96c12e68e891
+  zh: 5f4c84bc0ebb2462
 /deepseek-ai-dsh-fs-sandbox/use-this-package/observable-success-and-failures:
-  en: 722f744eb7b3b040
-  zh: b95db78f9968f9c5
+  en: d0844ab648df41a0
+  zh: 00760b2daef1146a
 /deepseek-ai-dsh-fs-sandbox/understand-the-implementation:
   en: 1c359075f33df1ed
   zh: 1306d6c28b5dd1f5

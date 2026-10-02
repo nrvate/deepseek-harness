@@ -6,8 +6,10 @@
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
 // Type-only: pulls the ctx.remote merge into this program.
 import type {
-  McpChangeResult, McpEntryId, McpErrorCode, McpServerInfo, McpServerSpec, McpServerStatus, McpToolInfo, McpValue,
+  McpChangeResult, McpEntryId, McpErrorCode, McpServerInfo, McpServerSpec, McpServerStatus, McpToolInfo, McpToolMode, McpToolPolicy,
+  McpValue,
 } from '@deepseek-ai/dsh-api-remotes/client'
+import { ASK_EVERY_CALL, asksEveryCall } from './tool-modes.ts'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { DEFAULT_STATUS_ITEM, STATUS_ITEM_FIELD, type McpUiSettings } from '../mcp-ui-settings.ts'
@@ -42,6 +44,8 @@ export interface EditorDraft {
   failOnStartupError: boolean
   /** Whether a Session that has made no selection of its own uses the server. */
   defaultActive: boolean
+  /** Whether each tool runs, asks first, or is refused; the form edits the default and keeps per-tool modes. */
+  toolPolicy: McpToolPolicy
 }
 
 /** Why the editor's last save did not land. */
@@ -80,6 +84,8 @@ export interface ToolsState {
   readonly tools: readonly McpToolInfo[]
   /** The connection state the tools were read under. */
   readonly connection: McpServerStatus | undefined
+  /** The tool whose mode is being saved, if any. */
+  readonly savingTool: string | null
 }
 
 /** What the last action leaves to say, shown as a toast; `seq` tells one showing from the next. */
@@ -123,6 +129,7 @@ export interface McpServersFace {
   editField: (field: DraftField, text: string) => void
   setFailOnStartup: (checked: boolean) => void
   setDefaultActive: (checked: boolean) => void
+  setToolDefault: (mode: McpToolMode) => void
   addValue: () => void
   editValue: (uid: number, change: Partial<Pick<ValueDraft, 'key' | 'mode' | 'text'>>) => void
   removeValue: (uid: number) => void
@@ -134,6 +141,8 @@ export interface McpServersFace {
   askRemove: (id: McpEntryId) => void
   openTools: (id: McpEntryId) => void
   closeTools: () => void
+  /** Give one tool its own mode, or null to follow the server default. */
+  setToolMode: (tool: string, mode: McpToolMode | null) => void
   reconnect: (id: McpEntryId) => void
   setStatusItem: (shown: boolean) => void
   cancelRemove: () => void
@@ -148,7 +157,7 @@ export interface McpServersFace {
 export function emptyDraft(): EditorDraft {
   return {
     rowId: undefined, transport: 'stdio', serverName: '', command: '', args: '', cwd: '', url: '',
-    values: [], timeoutMs: '', failOnStartupError: false, defaultActive: true,
+    values: [], timeoutMs: '', failOnStartupError: false, defaultActive: true, toolPolicy: ASK_EVERY_CALL,
   }
 }
 
@@ -176,6 +185,7 @@ export function draftFromSpec(id: McpEntryId, spec: McpServerSpec, uid: number):
     timeoutMs: spec.toolCallTimeoutMs === undefined ? '' : String(spec.toolCallTimeoutMs),
     failOnStartupError: spec.failOnStartupError === true,
     defaultActive: spec.defaultActive !== false,
+    toolPolicy: spec.toolPolicy ?? ASK_EVERY_CALL,
   }
   const draft: EditorDraft = spec.transport === 'stdio'
     ? { ...common, transport: 'stdio', command: spec.command, args: spec.args.join('\n'), cwd: spec.cwd ?? '', url: '' }
@@ -210,6 +220,7 @@ export function specFromDraft(draft: EditorDraft): McpServerSpec | null {
     ...timeout === '' ? {} : { toolCallTimeoutMs: Number(timeout) },
     ...draft.failOnStartupError ? { failOnStartupError: true } : {},
     ...draft.defaultActive ? {} : { defaultActive: false },
+    ...asksEveryCall(draft.toolPolicy) ? {} : { toolPolicy: draft.toolPolicy },
   }
   if (draft.transport === 'streamable-http') return { transport: 'streamable-http', url: draft.url.trim(), headers: values, ...common }
   const cwd = draft.cwd.trim()
@@ -304,9 +315,9 @@ export class McpServersController {
     if (this.disposed || generation !== this.generation) return
     if (result.ok) {
       this.patch({ status: 'ready', rows: result.value })
-      // An open tools dialog follows the state the rows just reported.
+      // An open tools dialog follows the state and policy the rows just reported.
       const open = this.getSnapshot().tools
-      if (open !== null) await this.readTools(open.row)
+      if (open !== null) await this.readTools(result.value.find(row => row.id === open.row.id) ?? open.row)
     } else if (this.getSnapshot().status === 'ready') {
       this.notify('refresh-failed')
     } else {
@@ -329,6 +340,10 @@ export class McpServersController {
       editField: (field, text) => { this.patchDraft({ [field]: text }) },
       setFailOnStartup: (checked) => { this.patchDraft({ failOnStartupError: checked }) },
       setDefaultActive: (checked) => { this.patchDraft({ defaultActive: checked }) },
+      setToolDefault: (mode) => {
+        const editor = this.getSnapshot().editor
+        if (editor !== null) this.patchDraft({ toolPolicy: { ...editor.draft.toolPolicy, default: mode } })
+      },
       addValue: () => { this.addValue() },
       editValue: (uid, change) => { this.editValue(uid, change) },
       removeValue: (uid) => { this.removeValue(uid) },
@@ -341,6 +356,7 @@ export class McpServersController {
       cancelRemove: () => { this.patch({ removal: null }) },
       openTools: (id) => { this.openTools(id) },
       closeTools: () => { this.patch({ tools: null }) },
+      setToolMode: (tool, mode) => { void this.setToolMode(tool, mode) },
       reconnect: (id) => { void this.reconnect(id) },
       setStatusItem: (shown) => { void this.setStatusItem(shown) },
       confirmRemove: () => { void this.confirmRemove() },
@@ -435,7 +451,7 @@ export class McpServersController {
   private openTools(id: McpEntryId): void {
     const row = this.getSnapshot().rows.find(candidate => candidate.id === id)
     if (row === undefined) return
-    this.patch({ tools: { row, status: 'loading', tools: [], connection: row.status } })
+    this.patch({ tools: { row, status: 'loading', tools: [], connection: row.status, savingTool: null } })
     void this.readTools(row)
   }
 
@@ -445,9 +461,24 @@ export class McpServersController {
     if (this.disposed || open?.row.id !== row.id) return
     this.patch({
       tools: result.ok
-        ? { row: open.row, status: 'ready', tools: result.value.tools, connection: result.value.status }
-        : { ...open, status: 'failed' },
+        ? { row, status: 'ready', tools: result.value.tools, connection: result.value.status, savingTool: open.savingTool }
+        : { ...open, row, status: 'failed' },
     })
+  }
+
+  /** Write one tool's mode into the open server's policy; only an editable row has a policy the form can write. */
+  private async setToolMode(tool: string, mode: McpToolMode | null): Promise<void> {
+    const open = this.getSnapshot().tools
+    if (open === null || open.savingTool !== null || open.row.spec === undefined) return
+    const { [tool]: _previous, ...rest } = open.row.toolPolicy.tools
+    const policy: McpToolPolicy = { default: open.row.toolPolicy.default, tools: mode === null ? rest : { ...rest, [tool]: mode } }
+    this.patch({ tools: { ...open, savingTool: tool } })
+    const result = await this.ctx.remote.mcpServers.setToolPolicy(open.row.id, policy)
+    if (this.disposed) return
+    const after = this.getSnapshot().tools
+    if (after !== null) this.patch({ tools: { ...after, savingTool: null } })
+    this.settle(result.ok ? result.value : undefined, 'saved')
+    await this.read()
   }
 
   private async reconnect(id: McpEntryId): Promise<void> {

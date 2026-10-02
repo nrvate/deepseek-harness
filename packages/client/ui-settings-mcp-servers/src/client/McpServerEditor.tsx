@@ -157,6 +157,7 @@ function ValueList(props: McpServersCardProps & { editor: EditorState }): ReactN
   return (
     <fieldset className={css.values}>
       <legend className={css.label}>{t(editor.draft.transport === 'stdio' ? 'env' : 'headers')}</legend>
+      {editor.draft.transport === 'stdio' && <p className={css.hint}>{t('envNote')}</p>}
       {editor.draft.values.map(entry => <ValueRow key={entry.uid} {...props} entry={entry} />)}
       <Button variant="outline" size="sm" className={css.addValue} onClick={addValue}>{t('addValue')}</Button>
     </fieldset>

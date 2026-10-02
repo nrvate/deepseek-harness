@@ -11,7 +11,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { PostToolDecision } from '@deepseek-ai/dsh-tools'
 import { publicToolName, syncTools, type ToolBridgeOptions } from '@deepseek-ai/dsh-mcp-client/src/tools.ts'
-import { createTransport } from '@deepseek-ai/dsh-mcp-client/src/transport.ts'
+import { buildChildEnv, createTransport } from '@deepseek-ai/dsh-mcp-client/src/transport.ts'
 import type { Config } from '@deepseek-ai/dsh-mcp-client'
 
 const testToolSignal = new AbortController().signal
@@ -1132,52 +1132,53 @@ describe('createTransport', () => {
     expect(transport).toHaveProperty('close')
   })
 
-  it('scrubs sensitive env vars and forwards the rest', () => {
-    const original = { ...process.env }
-    try {
-      process.env.SAFE_VAR = 'kept'
-      process.env.MY_SECRET = 'hidden'
-      process.env.API_KEY = 'hidden'
-      process.env.AUTH_TOKEN = 'hidden'
+  describe('stdio server environment', () => {
+    /** Run with exactly these ambient variables, then restore the real environment. */
+    function withEnv<T>(ambient: Record<string, string>, run: () => T): T {
+      const original = { ...process.env }
+      for (const key of Object.keys(process.env)) Reflect.deleteProperty(process.env, key)
+      Object.assign(process.env, ambient)
+      try {
+        return run()
+      } finally {
+        for (const key of Object.keys(process.env)) Reflect.deleteProperty(process.env, key)
+        Object.assign(process.env, original)
+      }
+    }
 
+    it('inherits only the allow-listed names, whatever the rest are called', () => {
+      const env = withEnv({
+        PATH: '/usr/bin', HOME: '/home/u', LANG: 'en_US.UTF-8', LC_ALL: 'C', TMPDIR: '/tmp', XDG_CACHE_HOME: '/home/u/.cache',
+        SSL_CERT_FILE: '/etc/ca.pem',
+        // Credentials under names a pattern scrub does not recognize.
+        DATABASE_URL: 'postgres://u:p@db/x', GH_PAT: 'ghp_x', AWS_PROFILE: 'prod', KUBECONFIG: '/k', SSH_AUTH_SOCK: '/s',
+        // Names a pattern scrub does recognize, and the harness's own.
+        API_KEY: 'k', MY_SECRET: 's', AUTH_TOKEN: 't', DSH_HOME: '/dsh',
+        SAFE_VAR: 'not listed',
+      }, () => buildChildEnv({}))
+      expect(env).toEqual({
+        PATH: '/usr/bin', HOME: '/home/u', LANG: 'en_US.UTF-8', LC_ALL: 'C', TMPDIR: '/tmp', XDG_CACHE_HOME: '/home/u/.cache',
+        SSL_CERT_FILE: '/etc/ca.pem',
+      })
+    })
+
+    it('matches names in any casing and never inherits a shell function export', () => {
+      const env = withEnv({ Path: 'C:\\Windows', SystemRoot: 'C:\\Windows', TERM: '() { :; }; echo x' }, () => buildChildEnv({}))
+      expect(env).toEqual({ Path: 'C:\\Windows', SystemRoot: 'C:\\Windows' })
+    })
+
+    it('adds the configured env on top, including names that are not inherited', () => {
+      const env = withEnv({ PATH: '/usr/bin', GH_PAT: 'ambient' }, () => buildChildEnv({ GH_PAT: 'explicit', PATH: '/opt/bin', CUSTOM: 'value' }))
+      expect(env).toEqual({ PATH: '/opt/bin', GH_PAT: 'explicit', CUSTOM: 'value' })
+    })
+
+    it('creates a stdio transport from a config that carries env', () => {
       const config: Config = {
-        transport: 'stdio',
-        serverName: 'srv',
-        command: 'echo',
-        args: [],
-        env: { EXTRA: 'injected' },
-        cwd: '',
-        toolCallTimeoutMs: 60_000,
-        failOnStartupError: false,
+        transport: 'stdio', serverName: 'srv', command: 'echo', args: [], env: { EXTRA: 'injected' }, cwd: '',
+        toolCallTimeoutMs: 60_000, failOnStartupError: false,
       }
-      // StdioClientTransport keeps its env private; the observable contract is
-      // that createTransport(config) returns a transport without throwing.
-      const transport = createTransport(config)
-      expect(transport).toBeDefined()
-    } finally {
-      delete process.env.SAFE_VAR
-      delete process.env.MY_SECRET
-      delete process.env.API_KEY
-      delete process.env.AUTH_TOKEN
-      for (const key of Object.keys(process.env)) {
-        if (!(key in original)) Reflect.deleteProperty(process.env, key)
-      }
-    }
-  })
-
-  it('merges explicit env on top of scrubbed ambient env', () => {
-    const config: Config = {
-      transport: 'stdio',
-      serverName: 'srv',
-      command: 'echo',
-      args: [],
-      env: { CUSTOM: 'value' },
-      cwd: '',
-      toolCallTimeoutMs: 60_000,
-      failOnStartupError: false,
-    }
-    const transport = createTransport(config)
-    expect(transport).toBeDefined()
+      expect(createTransport(config)).toHaveProperty('start')
+    })
   })
 })
 

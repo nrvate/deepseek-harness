@@ -23,7 +23,7 @@ export type McpServersLocaleKey =
   | 'command' | 'args' | 'argsHint' | 'cwd' | 'cwdHint' | 'url'
   | 'env' | 'headers' | 'valueName' | 'valueKind' | 'valueText' | 'addValue' | 'removeValue'
   | 'kindEnv' | 'kindBearer' | 'kindLiteral' | 'kindKept' | 'kindExpression'
-  | 'hintEnv' | 'hintBearer' | 'hintKept' | 'hintExpression'
+  | 'hintEnv' | 'hintBearer' | 'hintKept' | 'hintExpression' | 'envNote'
   | 'timeout' | 'timeoutHint' | 'failOnStartup' | 'defaultActive' | 'defaultActiveHint'
   | 'selectShort' | 'selectLabel' | 'selectHeading' | 'selectFailed'
   | 'trayThisSession' | 'trayAllSessions' | 'traySplitNote' | 'trayUseServer' | 'statSplit'
@@ -138,6 +138,7 @@ export const en: Record<McpServersLocaleKey, string> = {
   kindKept: 'Stored value',
   kindExpression: 'Expression',
   hintEnv: 'Reads the value from the harness environment when the server starts. Enter the name of a variable that is already set.',
+  envNote: 'The command starts with a minimal environment: its path, home directory, locale, and proxy settings. Add any other variable it needs here.',
   hintBearer: 'Sends "Bearer" followed by the value of this environment variable.',
   hintKept: 'A value already in the profile file. It stays as it is.',
   hintExpression: 'A custom expression from the profile file. It stays as written.',
@@ -285,6 +286,7 @@ export const zh: Record<McpServersLocaleKey, string> = {
   kindKept: '已存储的值',
   kindExpression: '表达式',
   hintEnv: '服务器启动时从 harness 的环境中读取该值。请填写一个已设置的变量名。',
+  envNote: '该命令以最小环境启动：路径、主目录、区域设置和代理设置。它需要的其他变量请在此添加。',
   hintBearer: '发送“Bearer ”加上该环境变量的值。',
   hintKept: 'profile 文件中已有的值，保持不变。',
   hintExpression: 'profile 文件中的自定义表达式，保持原样。',

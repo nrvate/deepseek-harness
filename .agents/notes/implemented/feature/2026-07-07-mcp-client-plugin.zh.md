@@ -151,7 +151,7 @@ SDK 接受符合协议的工具，并执行现代 HTTP header 声明检查。注
 
 ### 子进程环境（stdio 传输）
 
-以子进程服务边界共享的 `scrubbedParentEnv()` 为基础构建子进程环境；该基础环境会移除环境中匹配 `/KEY|PASSWORD|SECRET|TOKEN/i` 的名称以及 `DSH_*` 名称，然后在其上合并 `config.env`。显式配置的 env 覆盖在清洗后仍会保留。
+从子进程服务边界共享的 `scrubbedParentEnv()` 基础环境中，按允许列表构建子进程环境：可执行文件查找、身份、区域设置、临时目录与用户级目录，以及代理和信任根名称。然后在其上合并 `config.env`。仅按名称模式清洗会把它不识别的名称（如 `DATABASE_URL`）下的凭证传给第三方服务器；服务器需要的环境变量应在 `config.env` 中指名。名称列表见[包 README](../../../../packages/mcp/mcp-client/README.zh.md#stdio-environment)。
 
 ### 断连 / 崩溃
 

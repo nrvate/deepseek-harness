@@ -56,7 +56,7 @@ Add one entry per server; nothing else is required. After the harness starts, th
 |---|---|---|
 | `transport` | required | `stdio` or `streamable-http` |
 | `serverName` | required | Namespace for the server's tool names; `[A-Za-z0-9_-]{1,32}`, unique inside one registration scope |
-| `command` / `args` / `env` / `cwd` | — | stdio: executable, arguments, extra env merged over scrubbed ambient env, working directory |
+| `command` / `args` / `env` / `cwd` | — | stdio: executable, arguments, env added to the [allow-listed base environment](#stdio-environment), working directory |
 | `url` / `headers` | — | streamable-http: endpoint URL (`http:` or `https:`) and extra request headers |
 | `toolCallTimeoutMs` | `60,000` | Timeout per `tools/call` or resource request; a positive number up to 2,147,483,647 |
 | `maxInstructionBytes` | `32,768` | Maximum UTF-8 bytes of server instructions including attribution; an oversized value rejects the connection |
@@ -123,7 +123,7 @@ This section explains the design decisions behind the bridge and points at the c
 | [`src/connection.ts`](src/connection.ts) | Connection supervisor: client generations, reconnect policy, attempt budget, disposal |
 | [`src/server-context.ts`](src/server-context.ts) | Resource-provider registration and literal server instructions |
 | [`src/tools.ts`](src/tools.ts) | Tool bridge: discovery, naming, registration swap, execution, image projection |
-| [`src/transport.ts`](src/transport.ts) | Transport factory: stdio spawn with scrubbed env, Streamable HTTP |
+| [`src/transport.ts`](src/transport.ts) | Transport factory: stdio spawn with an allow-listed env, Streamable HTTP |
 | — | No runtime invariant companion is published; MCP generations contribute through the tool registry, but the bridge exposes no independent server-to-tool snapshot after an asynchronous resync. |
 
 The exported `createMcpToolDefinition(ctx, options)` adapts an upstream tool schema and raw-result callback to the same canonical values, errors, and durable image projection. Each callback receives the exact `ToolExecution`, including its Agent and cancellation signal; SDK spec-type validation checks its result before projection. Callers own registration, cancellation deadlines, and provider teardown. The native Cua Driver provider uses this adapter without opening an MCP transport.
@@ -138,9 +138,20 @@ The SDK receives tool-list changes through legacy notifications or a modern subs
 
 A tool call uses the SDK with the raw name, complete tool definition, JSON arguments, abort signal, and configured timeout. The SDK owns protocol validation, advertised output-schema validation, and modern request headers. Canonical success is `{ content: JsonValue[], structuredContent? }`, preserving valid MCP JSON blocks for programmatic and PTC mode callers. An MCP `isError` result throws before image persistence. The bridge validates each image batch before saving it; a refusal projects every image as diagnostic text.
 
-### Environment scrubbing (stdio)
+<a id="stdio-environment"></a>
+### Server environment (stdio)
 
-The child environment starts from the subprocess seam's `scrubbedParentEnv()` — ambient names matching `/KEY|PASSWORD|SECRET|TOKEN/i` and ambient `DSH_*` names are dropped — and the configured `env` merges on top, so explicit overrides survive. The MCP SDK owns the actual spawn; this package shares the scrub definition, not the spawn path.
+A stdio server inherits only an allow-list of the harness environment; every other ambient variable stays out unless the configured `env` names it. A name-pattern scrub alone would pass credentials under names such as `DATABASE_URL` or `GH_PAT` to a third-party server.
+
+| Inherited | Names |
+|---|---|
+| Identity, shell, executable lookup | `HOME`, `LOGNAME`, `PATH`, `SHELL`, `TERM`, `USER` |
+| Windows counterparts | `APPDATA`, `COMSPEC`, `HOMEDRIVE`, `HOMEPATH`, `LOCALAPPDATA`, `PATHEXT`, `PROCESSOR_ARCHITECTURE`, `PROGRAMDATA`, `PROGRAMFILES`, `PROGRAMFILES(X86)`, `SYSTEMDRIVE`, `SYSTEMROOT`, `USERNAME`, `USERPROFILE`, `WINDIR` |
+| Locale, time zone, scratch directories | `LANG`, `LANGUAGE`, `LC_*`, `TZ`, `TEMP`, `TMP`, `TMPDIR` |
+| Per-user directories | `XDG_CACHE_HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, `XDG_RUNTIME_DIR`, `XDG_STATE_HOME` |
+| Network routing and trust roots | `ALL_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `NODE_USE_ENV_PROXY`, `NODE_EXTRA_CA_CERTS`, `SSL_CERT_DIR`, `SSL_CERT_FILE` |
+
+Names match in any casing. The list is applied to the subprocess seam's `scrubbedParentEnv()`, which supplies the proxy names a child Node needs, and a value that begins with `()` (a shell function export) is never inherited. The configured `env` is added last and wins. To pass another ambient variable, name it in `env`, for example `AWS_PROFILE: !!js process.env.AWS_PROFILE`. The list is fixed in [`src/transport.ts`](src/transport.ts); the MCP SDK owns the actual spawn.
 
 </details>
 

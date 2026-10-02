@@ -56,7 +56,7 @@ kind: "package-reference"
 |---|---|---|
 | `transport` | 必填 | `stdio` 或 `streamable-http` |
 | `serverName` | 必填 | 服务器工具名称的 namespace；`[A-Za-z0-9_-]{1,32}`，在一个注册作用域内唯一 |
-| `command` / `args` / `env` / `cwd` | — | stdio：可执行文件、参数、合并到清洗过的环境之上的额外环境变量、工作目录 |
+| `command` / `args` / `env` / `cwd` | — | stdio：可执行文件、参数、添加到[允许列表基础环境](#stdio-environment)之上的环境变量、工作目录 |
 | `url` / `headers` | — | streamable-http：端点 URL（`http:` 或 `https:`）与额外请求标头 |
 | `toolCallTimeoutMs` | `60,000` | 每次 `tools/call` 或资源请求的超时；正数，最大 2,147,483,647 |
 | `maxInstructionBytes` | `32,768` | 包括服务器归属信息在内的服务器指令 UTF-8 字节上限；超出时连接失败 |
@@ -123,7 +123,7 @@ kind: "package-reference"
 | [`src/connection.ts`](src/connection.ts) | 连接监督器：客户端世代、重连策略、尝试预算、dispose（资源释放） |
 | [`src/server-context.ts`](src/server-context.ts) | 资源提供方注册与字面服务器指令 |
 | [`src/tools.ts`](src/tools.ts) | 工具桥接：发现、命名、注册交换、执行、图片投影 |
-| [`src/transport.ts`](src/transport.ts) | 传输工厂：带清洗环境的 stdio spawn、Streamable HTTP |
+| [`src/transport.ts`](src/transport.ts) | 传输工厂：使用允许列表环境的 stdio spawn、Streamable HTTP |
 | — | 不发布运行时不变式伴生入口；MCP 世代会通过工具注册表发挥作用，但桥接在异步重新同步后不提供独立的服务器工具映射快照。 |
 
 导出的 `createMcpToolDefinition(ctx, options)` 将上游工具 schema 和原始结果回调适配到相同的规范值、错误和持久化图像投影。每次回调都收到原样的 `ToolExecution`，包括其 Agent 和取消信号；SDK 的规范类型校验会在投影前检查返回结果。调用方负责注册、取消截止时间和提供方卸载。原生 Cua Driver 提供方使用此适配函数，无需打开 MCP 传输。
@@ -138,9 +138,20 @@ SDK 通过旧版通知或现代协议订阅接收工具列表变化。监督器�
 
 工具调用向 SDK 提供原始名称、完整工具定义、JSON 参数、取消信号及配置的超时。SDK 负责协议校验、已声明输出 schema 的校验和现代协议请求 header。成功结果规范值为 `{ content: JsonValue[], structuredContent? }`，为编程调用方及 PTC 模式保留有效的 MCP JSON 块。MCP `isError` 结果会在图片持久化前抛出。桥接器在保存前校验整批图片；拒绝时将每张图片投影为诊断文本。
 
-### 环境清洗（stdio）
+<a id="stdio-environment"></a>
+### 服务器环境（stdio）
 
-子进程环境以子进程 seam 的 `scrubbedParentEnv()` 为基座——删除匹配 `/KEY|PASSWORD|SECRET|TOKEN/i` 的环境名称与所有 `DSH_*` 名称——再在其上合并配置的 `env`，因此显式覆盖得以保留。实际 spawn 由 MCP SDK 负责；本包共享清洗定义，而非 spawn 路径。
+stdio 服务器只继承 harness 环境中的一份允许列表；其余所有环境变量都不会传入，除非配置的 `env` 指名它。仅按名称模式清洗会把 `DATABASE_URL` 或 `GH_PAT` 这类名称下的凭证传给第三方服务器。
+
+| 继承的内容 | 名称 |
+|---|---|
+| 身份、shell、可执行文件查找 | `HOME`、`LOGNAME`、`PATH`、`SHELL`、`TERM`、`USER` |
+| Windows 对应项 | `APPDATA`、`COMSPEC`、`HOMEDRIVE`、`HOMEPATH`、`LOCALAPPDATA`、`PATHEXT`、`PROCESSOR_ARCHITECTURE`、`PROGRAMDATA`、`PROGRAMFILES`、`PROGRAMFILES(X86)`、`SYSTEMDRIVE`、`SYSTEMROOT`、`USERNAME`、`USERPROFILE`、`WINDIR` |
+| 区域设置、时区、临时目录 | `LANG`、`LANGUAGE`、`LC_*`、`TZ`、`TEMP`、`TMP`、`TMPDIR` |
+| 用户级目录 | `XDG_CACHE_HOME`、`XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_RUNTIME_DIR`、`XDG_STATE_HOME` |
+| 网络路由与信任根 | `ALL_PROXY`、`HTTP_PROXY`、`HTTPS_PROXY`、`NO_PROXY`、`NODE_USE_ENV_PROXY`、`NODE_EXTRA_CA_CERTS`、`SSL_CERT_DIR`、`SSL_CERT_FILE` |
+
+名称匹配不区分大小写。该列表应用于子进程 seam 的 `scrubbedParentEnv()`，后者提供子 Node 进程所需的代理变量；以 `()` 开头的值（shell 函数导出）永远不会被继承。配置的 `env` 最后添加并优先生效。要传入其他环境变量，请在 `env` 中指名它，例如 `AWS_PROFILE: !!js process.env.AWS_PROFILE`。该列表固定在 [`src/transport.ts`](src/transport.ts) 中；实际 spawn 由 MCP SDK 负责。
 
 </details>
 

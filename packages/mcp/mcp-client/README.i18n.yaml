@@ -18,8 +18,8 @@
   en: e77871d58566601a
   zh: c5ef229d22eb3ebf
 /deepseek-ai-dsh-mcp-client/use-this-package/minimal-configuration:
-  en: f79a647d89bd0167
-  zh: 003ec3afe033fb0d
+  en: 3e31c039a5c9a3c5
+  zh: e6e89b29f14af4f2
 /deepseek-ai-dsh-mcp-client/use-this-package/tool-naming-and-coexistence:
   en: 75ae9745d5b04796
   zh: 8ae5b8ca6e73296e
@@ -39,17 +39,17 @@
   en: 4e213d68082b07f0
   zh: 7617949ba46a3b63
 /deepseek-ai-dsh-mcp-client/understand-the-implementation/source-map:
-  en: ab2bbaa701f24c2c
-  zh: c6db79438239388e
+  en: 6cf424882826bdb1
+  zh: ef280cd7aa735270
 /deepseek-ai-dsh-mcp-client/understand-the-implementation/lifecycle-and-sync:
   en: ae9029b48b2a2e4e
   zh: 048f08361b799667
 /deepseek-ai-dsh-mcp-client/understand-the-implementation/tool-execution-internals:
-  en: b4333df1bd3f027c
-  zh: 6bb4be691452c27a
-/deepseek-ai-dsh-mcp-client/understand-the-implementation/environment-scrubbing-stdio:
-  en: fef482a6f8cc789f
-  zh: 08f4c594ec83b4a1
+  en: 52a41da8a47c7b48
+  zh: c62c80dc0564d09d
+/deepseek-ai-dsh-mcp-client/understand-the-implementation/server-environment-stdio:
+  en: cc541e3afb083396
+  zh: a9fa24c96b837b4d
 /deepseek-ai-dsh-mcp-client/further-exploration:
   en: 402f4148cc9a39eb
   zh: 02060d6909b39f7e

@@ -151,7 +151,7 @@ A unified `execute` handler for all tools from one MCP server:
 
 ### Subprocess environment (stdio transport)
 
-Build the child environment from the subprocess seam's shared `scrubbedParentEnv()` base, which removes ambient names matching `/KEY|PASSWORD|SECRET|TOKEN/i` and ambient `DSH_*` names, then merge `config.env` on top. Explicit env overrides survive the scrub.
+Build the child environment from an allow-list of the subprocess seam's shared `scrubbedParentEnv()` base: executable lookup, identity, locale, scratch and per-user directories, and proxy and trust-root names. Then merge `config.env` on top. A name-pattern scrub alone passes credentials under names it does not recognize, such as `DATABASE_URL`, to a third-party server; an ambient variable a server needs is named in `config.env`. The [package README](../../../../packages/mcp/mcp-client/README.md#stdio-environment) lists the names.
 
 ### Disconnection / crash
 

@@ -186,10 +186,13 @@ describe('McpServersCard', () => {
   it('adds an HTTP server with a bearer variable and a text header', async () => {
     const { mcpServers } = mount([])
     fireEvent.click(await screen.findByRole('button', { name: en.add }))
+    // Only a local command has an environment to explain.
+    expect(screen.getByText(en.envNote)).toBeTruthy()
     fireEvent.click(screen.getByRole('tab', { name: en.transportHttp }))
     fireEvent.change(screen.getByLabelText(en.serverName), { target: { value: 'web' } })
     fireEvent.change(screen.getByLabelText(en.url), { target: { value: 'https://example.test/mcp' } })
     expect(screen.getByText(en.headers)).toBeTruthy()
+    expect(screen.queryByText(en.envNote)).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: en.addValue }))
     fireEvent.change(screen.getByLabelText(en.valueName), { target: { value: 'Authorization' } })

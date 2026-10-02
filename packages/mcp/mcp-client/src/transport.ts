@@ -1,7 +1,7 @@
 /**
  * Transport factory: creates the appropriate MCP transport based on the
- * plugin's resolved config. Stdio spawns a child process (with credential
- * scrubbing); Streamable HTTP connects to a URL.
+ * plugin's resolved config. Stdio spawns a child process with an allow-listed
+ * environment; Streamable HTTP connects to a URL.
  *
  * @module
  */
@@ -13,13 +13,44 @@ import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import type { Config } from './index.ts'
 
 /**
- * The subprocess seam's scrubbed parent env (credential-shaped and stale
- * `DSH_*` names dropped), plus the spec's explicit env. The MCP SDK owns the
- * actual spawn, so this transport shares the scrub definition rather than the
- * spawn path.
+ * Ambient names a stdio server inherits. Everything else in the harness
+ * environment stays out of a third-party server unless its `env` names it:
+ * a name-pattern scrub alone passes credentials under names such as
+ * `DATABASE_URL` or `GH_PAT`. Names are compared case-insensitively because
+ * Windows environment names are.
  */
-function buildChildEnv(extra: Record<string, string>): Record<string, string> {
-  return { ...scrubbedParentEnv(), ...extra }
+const INHERITED_ENV_NAMES = new Set([
+  // Identity, shell, and executable lookup.
+  'HOME', 'LOGNAME', 'PATH', 'SHELL', 'TERM', 'USER',
+  // Their Windows counterparts.
+  'APPDATA', 'COMSPEC', 'HOMEDRIVE', 'HOMEPATH', 'LOCALAPPDATA', 'PATHEXT', 'PROCESSOR_ARCHITECTURE', 'PROGRAMDATA',
+  'PROGRAMFILES', 'PROGRAMFILES(X86)', 'SYSTEMDRIVE', 'SYSTEMROOT', 'USERNAME', 'USERPROFILE', 'WINDIR',
+  // Locale, time zone, and scratch directories.
+  'LANG', 'LANGUAGE', 'TZ', 'TEMP', 'TMP', 'TMPDIR',
+  // Per-user directories that package runners such as npx and uvx cache under.
+  'XDG_CACHE_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_RUNTIME_DIR', 'XDG_STATE_HOME',
+  // Network routing and trust roots, so a server reaches the network the way the harness does.
+  'ALL_PROXY', 'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'NODE_USE_ENV_PROXY', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_DIR', 'SSL_CERT_FILE',
+])
+
+/** Locale categories (`LC_ALL`, `LC_CTYPE`, ...) are inherited as a family. */
+const INHERITED_ENV_PREFIX = 'LC_'
+
+/**
+ * Build a stdio server's environment: the allow-listed names of the subprocess
+ * seam's scrubbed parent env, then the spec's explicit `env`. The scrubbed env
+ * supplies the proxy names a child Node needs; a value that begins with `()`
+ * is a shell function export and is never inherited.
+ * @param extra - the configured `env`, which wins over every inherited name.
+ * @returns a fresh environment for the server process.
+ */
+export function buildChildEnv(extra: Record<string, string>): Record<string, string> {
+  const env: Record<string, string> = {}
+  for (const [name, value] of Object.entries(scrubbedParentEnv())) {
+    const key = name.toUpperCase()
+    if ((INHERITED_ENV_NAMES.has(key) || key.startsWith(INHERITED_ENV_PREFIX)) && !value.startsWith('()')) env[name] = value
+  }
+  return { ...env, ...extra }
 }
 
 /**

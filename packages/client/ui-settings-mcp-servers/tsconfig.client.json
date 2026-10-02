@@ -44,6 +44,9 @@
     },
     {
       "path": "../ui-slots"
+    },
+    {
+      "path": "../../mcp/mcp-selection"
     }
   ],
   "exclude": [

@@ -32,7 +32,8 @@ kind: "package-reference"
 | `removeServer(id)` | 删除 profile 补丁所拥有的行 |
 | `tools(id)` | 服务器当前提供的工具及其连接状态 |
 | `reconnectServer(id)` | 请服务器的客户端立即连接；返回是否开始了尝试 |
-| `overview()` | 一次调用返回每一行的连接状态和用量计数，以及读取时的 Host 时钟 |
+| `overview(sessionId?)` | 一次调用返回每一行的连接状态和用量计数，以及读取时的 Host 时钟；传入会话 id 时，每一行还以 `sessionStats` 给出该会话的部分 |
+| `setSessionServers(sessionId, active)` | 通过 [`mcp-selection`](../../mcp/mcp-selection/README.zh.md) 替换一个会话使用的服务器；返回正在使用的服务器 |
 
 每次写入都返回 `{ changed, application, target, error?, warnings? }`。`application` 为 `applied` 表示 Loader 已协调该变更，`restart-required` 表示 profile 没有热重载，`failed` 则带有 `error.code`：`invalid-config`、`duplicate-server`、`confirmation-required`、`literal-secret`、`unknown-server`、`read-only`、`unreadable-patch` 或 `operation-error`。失败的变更会让补丁文件保持原样。
 
@@ -76,7 +77,7 @@ stdio 服务器会以 Host 的权限运行命令。在 `confirmedCommand` 等于
 
 - 连接状态依赖状态服务：没有它时，行没有 `status`，首次连接失败的已保存服务器仍以 `fiberPhase: 'active'` 列出。
 - 只有 profile 补丁所插入的行才能被编辑、启用、禁用或删除；`env` 和 `headers` 之外含有 `!!js` 值的行可以删除或切换启用状态，但不能编辑。
-- 表单托管 `transport`、`serverName`、命令或 URL、`args`、`env`、`headers`、`cwd`、`toolCallTimeoutMs` 和 `failOnStartupError`。`reconnect` 等其他键保持文件中的原样。
+- 表单托管 `transport`、`serverName`、命令或 URL、`args`、`env`、`headers`、`cwd`、`toolCallTimeoutMs`、`failOnStartupError` 和 `defaultActive`。`reconnect` 等其他键保持文件中的原样。
 - 查询字符串中带有令牌的 URL 按输入原样存储，并显示在可编辑的 `spec` 中；列表摘要省略查询部分。
 - 没有 HMR 的 profile 在下次启动时才应用变更；此时 `list` 显示该行但没有实时阶段。
 

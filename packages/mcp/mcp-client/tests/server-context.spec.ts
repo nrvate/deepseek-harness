@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context, Service } from '@deepseek-ai/cordis'
 import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import McpResources from '@deepseek-ai/dsh-mcp-resources'
 import McpStatus, { type McpServerHandle } from '@deepseek-ai/dsh-mcp-status'
 import { createScope } from '@deepseek-ai/dsh-scope'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { registerServerContext } from '../src/server-context.ts'
 
 const roots: Context[] = []
@@ -27,6 +28,7 @@ const idleHandle: McpServerHandle = {
   reconnect: () => Promise.resolve(false),
   stats: () => ({ calls: 0, errors: 0, inputTokens: 0, outputTokens: 0, totalMs: 0, maxMs: 0, connections: 1, schemaTokens: 0, transport: 'stdio', tools: [] }),
   subscribe: () => () => {},
+  defaultActive: true,
 }
 
 describe('MCP server context', () => {
@@ -67,5 +69,23 @@ describe('MCP server context', () => {
     } })
     expect(renderPrompt(await ctx.systemPrompt.assemble({ scope: scopeKey }))).toContain('Private server instructions.')
     expect(renderPrompt(await ctx.systemPrompt.assemble())).not.toContain('Private server instructions.')
+  })
+
+  it('omits the instructions for a Session that does not use the server', async () => {
+    const ctx = await setup()
+    const idle = {} as Agent
+    await ctx.plugin(class extends Service {
+      constructor(inner: Context) { super(inner, 'mcpSelection') }
+      isActive(_server: string, agent: Agent | undefined): boolean { return agent !== idle }
+    })
+    await ctx.plugin({ apply(inner: Context) {
+      registerServerContext(inner, 'docs', {
+        resources: { request: async () => ({ resources: [] }) },
+        handle: idleHandle,
+        instructions: () => 'Docs server instructions.',
+      })
+    } })
+    expect(renderPrompt(await ctx.systemPrompt.assemble({ agent: {} as Agent }))).toContain('Docs server instructions.')
+    expect(renderPrompt(await ctx.systemPrompt.assemble({ agent: idle }))).not.toContain('Docs server instructions.')
   })
 })

@@ -29,7 +29,8 @@ kind: "package-reference"
 | `list()` | 所有已注册服务器的状态 |
 | `get(server)` | 单个服务器的 `McpServerStatus`，或 undefined |
 | `tools(server)` | 当前已从该服务器注册的工具 |
-| `stats(server)` | 该服务器的 `McpServerStats`：用量计数和连接信息，或 undefined |
+| `servers()` | 每个已注册服务器的名称，以及新会话是否默认使用它 |
+| `stats(server, session?)` | 该服务器的 `McpServerStats`：用量计数和连接信息，或 undefined；传入会话 id 时只统计该会话的调用 |
 | `reconnect(server)` | 是否开始了新的尝试 |
 
 `McpServerStatus` 包含 `state`（`connecting`、`connected`、`reconnecting`、`failed`）、失败的 `attempt` 次数和配置的 `maxAttempts`、最近的 `error`、`connectedAt` 以及 `toolCount`。`failed` 表示没有待执行的尝试：重试预算已用尽、已禁用重连，或失败的连接无法关闭。`reconnect` 会立即连接、跳过等待中的重试延迟并重置重试预算；连接已建立或正在建立时它不做任何事。
@@ -70,7 +71,7 @@ kind: "package-reference"
 
 - **服务器仅以配置的名称为键** — 两个 Agent 作用域复用同一个 `serverName` 时都会注册，读取方返回第一个。
 - **错误是 SDK 或传输层的原始消息** — 未经本地化，且可能很长。
-- **计数以进程为单位** — Host 重启或客户端插件重载时清零，且不归属到某个 Session。
+- **计数以进程为单位** — Host 重启或客户端插件重载时清零。没有 agent 的调用只计入合计。
 - **Token 数为估算值** — 按每 Token 四个字符的文本长度计算；图片和其他二进制块计为零。
 
 <a id="dev-note"></a>

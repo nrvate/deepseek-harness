@@ -109,6 +109,7 @@ it.each([
   ['a non-map env', 'transport: stdio\n        command: c\n        env: x'],
   ['a non-number timeout', 'transport: stdio\n        command: c\n        toolCallTimeoutMs: soon'],
   ['a non-boolean startup flag', 'transport: stdio\n        command: c\n        failOnStartupError: maybe'],
+  ['a non-boolean default selection', 'transport: stdio\n        command: c\n        defaultActive: sometimes'],
   ['an unknown transport', 'transport: carrier-pigeon'],
 ])('reads %s as not editable', (_label, config) => {
   const text = `- insert:\n    - id: mcp-a\n      name: "@deepseek-ai/dsh-mcp-client"\n      config:\n        serverName: a\n        ${config}\n`
@@ -118,6 +119,14 @@ it.each([
 it('reads timeouts and startup flags', () => {
   const text = upsertRow('[]\n', 'mcp-a', { ...stdio, serverName: 'a', failOnStartupError: true })
   expect(readOwnedRows(text)[0]?.spec).toMatchObject({ toolCallTimeoutMs: 30_000, failOnStartupError: true })
+})
+
+it('writes and reads whether new Sessions use the server, and drops the key when the spec omits it', () => {
+  const off = upsertRow('[]\n', 'mcp-a', { ...stdio, serverName: 'a', defaultActive: false })
+  expect(readOwnedRows(off)[0]?.spec).toMatchObject({ defaultActive: false })
+  const again = upsertRow(off, 'mcp-a', { ...stdio, serverName: 'a' })
+  expect(again).not.toContain('defaultActive')
+  expect(readOwnedRows(again)[0]?.spec).not.toHaveProperty('defaultActive')
 })
 
 it('enables and disables a row on the row itself', () => {

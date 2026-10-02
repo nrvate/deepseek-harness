@@ -29,7 +29,8 @@ Shipped profiles already mount the service as `mcp-status`; a custom profile add
 | `list()` | The status of every registered server |
 | `get(server)` | One server's `McpServerStatus`, or undefined |
 | `tools(server)` | The tools registered from the server right now |
-| `stats(server)` | The server's `McpServerStats`: usage counters and connection facts, or undefined |
+| `servers()` | Every registered server's name and whether new Sessions use it by default |
+| `stats(server, session?)` | The server's `McpServerStats`: usage counters and connection facts, or undefined; with a Session id, only that Session's calls |
 | `reconnect(server)` | Whether a new attempt started |
 
 An `McpServerStatus` carries `state` (`connecting`, `connected`, `reconnecting`, `failed`), the failed `attempt` count and the configured `maxAttempts`, the last `error`, `connectedAt`, and `toolCount`. `failed` means no attempt is pending: the retry budget is spent, reconnecting is disabled, or a failed connection could not be closed. `reconnect` connects now, skips a pending retry delay, and restarts the retry budget; it does nothing while a connection is live or being made.
@@ -70,7 +71,7 @@ None; this package neither assembles nor sends a provider request.
 
 - **Servers are keyed by their configured name only** — two Agent scopes that reuse one `serverName` both register, and the readers return the first.
 - **The error is the SDK's or the transport's message** — it is not localized and can be long.
-- **Counters are per process** — they reset when the Host restarts or the client plugin reloads, and they are not attributed to a Session.
+- **Counters are per process** — they reset when the Host restarts or the client plugin reloads. A call made with no agent counts in the totals only.
 - **Token figures are estimates** — text length at four characters per token; images and other binary blocks count as zero.
 
 <a id="dev-note"></a>

@@ -46,6 +46,7 @@
 | `event:image/offload` | event | `b222069eea2d768065161c1147b1f2c78c1b54328c84b3586ae5c8f91b8ed35e` | [`{ type: "image/offload" }`](#persistence-type-sha256-b222069eea2d768065161c1147b1f2c78c1b54328c84b3586ae5c8f91b8ed35e) |
 | `event:llm/retry` | event | `525254db03b1d1e6b74cf55aced52817568331ac1f96c0818728910b6692e336` | [`{ type: "llm/retry" }`](#persistence-type-sha256-525254db03b1d1e6b74cf55aced52817568331ac1f96c0818728910b6692e336) |
 | `event:llm/retry-started` | event | `48e5c9861f16ac07e78cb7b5ae9dabdf7bb85c58baed5a51b4ad275050ea58e3` | [`{ type: "llm/retry-started" }`](#persistence-type-sha256-48e5c9861f16ac07e78cb7b5ae9dabdf7bb85c58baed5a51b4ad275050ea58e3) |
+| `event:mcp/servers` | event | `4f94ea39cdc082c34c58d81bcf837bd62faf8440b9025a485f244ad80e0b526e` | [`{ type: "mcp/servers" }`](#persistence-type-sha256-4f94ea39cdc082c34c58d81bcf837bd62faf8440b9025a485f244ad80e0b526e) |
 | `event:model/selection` | event | `35203ba7ad5ef6f97d556b85df20ae98f04f09c65748cecdf8eefdb8b6405ffc` | [`{ type: "model/selection" }`](#persistence-type-sha256-35203ba7ad5ef6f97d556b85df20ae98f04f09c65748cecdf8eefdb8b6405ffc) |
 | `event:permission/preset` | event | `5c45bf4c544a7211dcd8ba6ba7e5f1bc39b49e7a9df9d5cbdc8e87c22771b37b` | [`{ type: "permission/preset" }`](#persistence-type-sha256-5c45bf4c544a7211dcd8ba6ba7e5f1bc39b49e7a9df9d5cbdc8e87c22771b37b) |
 | `event:plan/mode` | event | `a7cf43ce7c2a4c038feed1885cd7a00d5c6ee2d90a7e0d56b46f78a3e1ca327f` | [`{ type: "plan/mode" }`](#persistence-type-sha256-a7cf43ce7c2a4c038feed1885cd7a00d5c6ee2d90a7e0d56b46f78a3e1ca327f) |
@@ -649,6 +650,23 @@ export type SessionEvent<T extends SessionEventType = SessionEventType> = {
 ```
 
 来源：[`packages/llm/llm-retry/src/types.ts:11`](../packages/llm/llm-retry/src/types.ts)
+
+### `mcp/*`
+
+<a id="mcpservers--log-only"></a>
+
+#### `mcp/servers` — log-only
+
+```ts persistence-catalog
+/**
+ * The MCP servers this Session uses from this point on: log-only,
+ * non-surface, whole-value replace. The last `mcp/servers` wins; a log
+ * with none follows each server's configured default.
+ */
+'mcp/servers': { active: string[] }
+```
+
+来源：[`packages/mcp/mcp-selection/src/index.ts:31`](../packages/mcp/mcp-selection/src/index.ts)
 
 ### `model/*`
 
@@ -2004,6 +2022,14 @@ SHA-256: `4ae007ed190a72c92138b22d059b83208079c7551ca13fb59ae8cf5e23693964`
 SHA-256: `68141cbe3994a5ffcd064c07c75996538437fd9dbf77ce8a2927e89ec577fabe`
 
 `"max-tokens"`
+
+<a id="persistence-type-sha256-7e020ee1c248afac108504ec163b4f5955490768d86ad2c59f7adc38dba448bf"></a>
+
+### `"mcp/servers"`
+
+SHA-256: `7e020ee1c248afac108504ec163b4f5955490768d86ad2c59f7adc38dba448bf`
+
+`"mcp/servers"`
 
 <a id="persistence-type-sha256-2765e9119edf5816ac1ab4c95c5ee32c90403f3742962eff11544f7752d59d2e"></a>
 
@@ -5517,6 +5543,18 @@ SHA-256: `20a57544bbf204dacd1ae6beb2ab29444365c3c869f2afdf489dcdcbc3d9c8c5`
 |---|---|---|
 | `active` | 必需 | `boolean` |
 
+<a id="persistence-type-sha256-6d041358a672c032c250fe668b9ba69cd2599cf2174df01a5b85696ec88a48dc"></a>
+
+### `{ active }`
+
+SHA-256: `6d041358a672c032c250fe668b9ba69cd2599cf2174df01a5b85696ec88a48dc`
+
+来源：[`packages/mcp/mcp-selection/src/index.ts:31`](../packages/mcp/mcp-selection/src/index.ts)
+
+| 属性 | 存在性 | 类型 |
+|---|---|---|
+| `active` | 必需 | [`string[]`](#persistence-type-sha256-93c33d9687613293f8c95d46c4d922fe9ceae83b84c384beff5c3315abe005f2) |
+
 <a id="persistence-type-sha256-6e52dd55a1d48954ed5464ec46fe34d9eb65f709baabc9561e7a279910b0c406"></a>
 
 ### `{ agentPreset }`
@@ -8071,6 +8109,22 @@ SHA-256: `48e5c9861f16ac07e78cb7b5ae9dabdf7bb85c58baed5a51b4ad275050ea58e3`
 | `seq` | 必需 | `number` |
 | `time` | 必需 | `number` |
 | `type` | 必需 | `"llm/retry-started"` |
+
+<a id="persistence-type-sha256-4f94ea39cdc082c34c58d81bcf837bd62faf8440b9025a485f244ad80e0b526e"></a>
+
+<a id="persistence-type-eventmcpservers"></a>
+
+### `{ type: "mcp/servers" }`
+
+SHA-256: `4f94ea39cdc082c34c58d81bcf837bd62faf8440b9025a485f244ad80e0b526e`
+
+| 属性 | 存在性 | 类型 |
+|---|---|---|
+| `data` | 必需 | [`{ active }`](#persistence-type-sha256-6d041358a672c032c250fe668b9ba69cd2599cf2174df01a5b85696ec88a48dc) |
+| `ignorable` | 可选 | `true` |
+| `seq` | 必需 | `number` |
+| `time` | 必需 | `number` |
+| `type` | 必需 | `"mcp/servers"` |
 
 <a id="persistence-type-sha256-35203ba7ad5ef6f97d556b85df20ae98f04f09c65748cecdf8eefdb8b6405ffc"></a>
 

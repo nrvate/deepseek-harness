@@ -1,0 +1,43 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/mcp/mcp-selection/README.md
+/:
+  en: a4fcf306d806108e
+  zh: c4e9e8c2d27fb440
+/deepseek-ai-dsh-mcp-selection:
+  en: 786df65052fd03a4
+  zh: 481afd5e4b42a2e9
+/deepseek-ai-dsh-mcp-selection/summary:
+  en: 69dba1279e3acf39
+  zh: 11b9c3ffe674da3e
+/deepseek-ai-dsh-mcp-selection/table-of-contents:
+  en: 122f0d41696980b1
+  zh: 528864635b577290
+/deepseek-ai-dsh-mcp-selection/use-this-package:
+  en: 160f67a3aed117f8
+  zh: 8a7cd07e4961738c
+/deepseek-ai-dsh-mcp-selection/understand-the-implementation:
+  en: ba4a10f9cab7bba5
+  zh: 91b0194371075202
+/deepseek-ai-dsh-mcp-selection/model-experience:
+  en: 215e7ba838619b7b
+  zh: a311da3843709f90
+/deepseek-ai-dsh-mcp-selection/model-experience/servers-a-session-does-not-use:
+  en: 6c0d0787ae6b9260
+  zh: a7a45b24956d039c
+/deepseek-ai-dsh-mcp-selection/model-experience/servers-a-session-does-not-use/what-the-model-sees:
+  en: c025638af1e5f9f9
+  zh: cf6af152a1a8566c
+/deepseek-ai-dsh-mcp-selection/model-experience/servers-a-session-does-not-use/token-effect:
+  en: a4a621f485d163e6
+  zh: c57ef00eb38ea4ca
+/deepseek-ai-dsh-mcp-selection/model-experience/servers-a-session-does-not-use/kv-cache-effect:
+  en: a5dad21d35be26db
+  zh: e0e255f8a48e7d94
+/deepseek-ai-dsh-mcp-selection/known-limitations-and-deferred-work:
+  en: e277ee057bcdc0a9
+  zh: 0b316f3506c28ec8
+/deepseek-ai-dsh-mcp-selection/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: e88aeb617ffb74ea

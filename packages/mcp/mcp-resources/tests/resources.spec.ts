@@ -1,6 +1,6 @@
 import { setImmediate as nextEventLoopTurn } from 'node:timers/promises'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Context } from '@deepseek-ai/cordis'
+import { Context, Service } from '@deepseek-ai/cordis'
 import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineTool, type Config as ToolConfig } from '@deepseek-ai/dsh-tools'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
@@ -357,5 +357,42 @@ describe('MCP resource tools', () => {
     dispose()
     await call(ctx, 'list_mcp_resources', { server: 'docs' }, owner)
     expect(globalRequest).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('per-Session server selection', () => {
+  const mounted: Selection[] = []
+  /** Stands in for `mcpSelection`: one Agent whose Session uses no "second" server. */
+  class Selection extends Service {
+    readonly hidden: string[] = []
+    readonly without = {} as Agent
+    constructor(ctx: Context) {
+      super(ctx, 'mcpSelection')
+      mounted.push(this)
+    }
+
+    isActive(server: string, agent: Agent | undefined): boolean { return agent !== this.without || server !== 'second' }
+    hideWhenNone(names: readonly string[]): () => void {
+      this.hidden.push(...names)
+      return () => {}
+    }
+  }
+
+  it('names only the servers the Session uses, refuses the others, and asks for its tools to be hidden with them', async () => {
+    const ctx = await setup()
+    await ctx.plugin(Selection)
+    const selection = mounted.at(-1)!
+    expect([...selection.hidden].sort()).toEqual([...resourceToolNames].sort())
+    const request = vi.fn<McpResourceProvider['request']>().mockResolvedValue({ resources: [] })
+    for (const server of ['first', 'second']) ctx.mcpResources.register(server, { request })
+
+    expect(renderPrompt(await ctx.systemPrompt.assemble({ agent: {} as Agent }))).toContain('["first","second"]')
+    expect(renderPrompt(await ctx.systemPrompt.assemble({ agent: selection.without }))).toContain('["first"]')
+
+    expect((await call(ctx, 'list_mcp_resources', { server: 'first' }, selection.without)).isError).toBe(false)
+    const refused = await call(ctx, 'list_mcp_resources', { server: 'second' }, selection.without)
+    expect(refused.isError).toBe(true)
+    expect(JSON.stringify(refused)).toContain('MCP resource server \\"second\\" is not active in this session')
+    expect(request).toHaveBeenCalledTimes(1)
   })
 })

@@ -73,14 +73,17 @@ function readSpec(config: YAMLMap): McpServerSpec | undefined {
   const transport = plainString(config, 'transport')
   const timeout = config.get('toolCallTimeoutMs', true)
   const fail = config.get('failOnStartupError', true)
+  const active = config.get('defaultActive', true)
   if (typeof serverName !== 'string') return undefined
   const common = {
     serverName,
     ...isScalar(timeout) && typeof timeout.value === 'number' ? { toolCallTimeoutMs: timeout.value } : {},
     ...isScalar(fail) && typeof fail.value === 'boolean' ? { failOnStartupError: fail.value } : {},
+    ...isScalar(active) && typeof active.value === 'boolean' ? { defaultActive: active.value } : {},
   }
   if (isScalar(timeout) && typeof timeout.value !== 'number') return undefined
   if (isScalar(fail) && typeof fail.value !== 'boolean') return undefined
+  if (isScalar(active) && typeof active.value !== 'boolean') return undefined
   if (transport === 'streamable-http') {
     const url = plainString(config, 'url')
     const headers = readValueMap(config.get('headers', true))
@@ -203,6 +206,7 @@ function writeConfig(config: YAMLMap, spec: McpServerSpec, existing: McpServerSp
   }
   assign(config, 'toolCallTimeoutMs', spec.toolCallTimeoutMs)
   assign(config, 'failOnStartupError', spec.failOnStartupError)
+  assign(config, 'defaultActive', spec.defaultActive)
 }
 
 /**

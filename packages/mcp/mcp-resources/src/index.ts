@@ -9,7 +9,9 @@ import { createScope, NamedEntries, ScopedLayers, scopeOf, type ScopeKey, type S
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
 import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
-import { registerResourceTools } from './tools.ts'
+import type {} from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-mcp-selection'
+import { registerResourceTools, RESOURCE_TOOL_NAMES } from './tools.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -55,14 +57,21 @@ export class McpResourceRuntime extends Service {
   constructor(ctx: Context) {
     super(ctx, 'mcpResources')
     this.selfCtx = ctx
+    // A Session that uses no MCP server gets no resource tools either.
+    ctx.inject(['mcpSelection'], (inner) => {
+      inner.mcpSelection.hideWhenNone(RESOURCE_TOOL_NAMES)
+    })
 
     ctx.inject(['systemPrompt'], (inner) => {
       inner.systemPrompt.section({
         name: 'mcp-resource-servers',
         order: inner.systemPrompt.getSectionOrder('MCP_SERVERS'),
         interpolate: false,
-        text: ({ scope }) => {
-          const names = [...this.layers.merge(scope, layer => layer.servers).keys()].sort()
+        text: ({ scope, agent }) => {
+          const selection = this.selfCtx.get('mcpSelection')
+          const names = [...this.layers.merge(scope, layer => layer.servers).keys()]
+            .filter(name => selection?.isActive(name, agent) !== false)
+            .sort()
           return names.length === 0 ? '' : '## MCP resource servers\n\n'
             + 'Use list_mcp_resources, list_mcp_resource_templates, or read_mcp_resource with one of these names '
             + `as the server argument: ${JSON.stringify(names)}.`
@@ -122,6 +131,9 @@ export class McpResourceRuntime extends Service {
   private request(server: string, request: McpResourceRequest, exec: ToolExecution): Promise<JsonValue> {
     const provider = this.layers.merge(exec.agent, layer => layer.servers).get(server)
     if (!provider) throw new Error(`MCP resource server "${server}" is unavailable in this agent's scope`)
+    if (this.selfCtx.get('mcpSelection')?.isActive(server, exec.agent) === false) {
+      throw new Error(`MCP resource server "${server}" is not active in this session`)
+    }
     return provider.request(request, exec)
   }
 }

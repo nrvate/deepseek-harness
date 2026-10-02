@@ -6,7 +6,7 @@
  * @module @deepseek-ai/dsh-mcp-status
  */
 import { Service, type Context } from '@deepseek-ai/cordis'
-import type { McpServerHandle, McpServerStats, McpServerStatus, McpToolInfo } from './types.ts'
+import type { McpConfiguredServer, McpServerHandle, McpServerStats, McpServerStatus, McpToolInfo } from './types.ts'
 
 export type * from './types.ts'
 
@@ -65,6 +65,14 @@ export class McpStatusRuntime extends Service {
   }
 
   /**
+   * Name every registered server with its configured default.
+   * @returns one entry per registration, in registration order.
+   */
+  servers(): McpConfiguredServer[] {
+    return [...this.entries].map(entry => ({ serverName: entry.server, defaultActive: entry.handle.defaultActive }))
+  }
+
+  /**
    * Read one server's state.
    * @param server - configured server name.
    * @returns its status, or undefined when no client registered it.
@@ -85,10 +93,11 @@ export class McpStatusRuntime extends Service {
   /**
    * Read one server's usage counters and connection facts.
    * @param server - configured server name.
+   * @param session - a Session id; when given, the counters cover only that Session's calls.
    * @returns its stats, or undefined when no client registered it.
    */
-  stats(server: string): McpServerStats | undefined {
-    return this.find(server)?.stats()
+  stats(server: string, session?: string): McpServerStats | undefined {
+    return this.find(server)?.stats(session)
   }
 
   /**

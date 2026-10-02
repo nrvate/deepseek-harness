@@ -62,7 +62,7 @@ function Field(props: { id: string; label: string; hint?: string; children: Reac
 }
 
 function EditorDialog(props: McpServersCardProps & { editor: EditorState }): ReactNode {
-  const { t, editor, closeEditor, save, editField, setTransport, setFailOnStartup } = props
+  const { t, editor, closeEditor, save, editField, setTransport, setFailOnStartup, setDefaultActive } = props
   const { draft, saving, error } = editor
   const stdio = draft.transport === 'stdio'
   const complete = draft.serverName.trim() !== '' && (stdio ? draft.command.trim() !== '' : draft.url.trim() !== '')
@@ -139,6 +139,13 @@ function EditorDialog(props: McpServersCardProps & { editor: EditorState }): Rea
         <div className={css.switchRow}>
           <span className={css.label}>{t('failOnStartup')}</span>
           <Switch label={t('failOnStartup')} checked={draft.failOnStartupError} onChange={setFailOnStartup} />
+        </div>
+        <div className={css.switchRow}>
+          <span className={css.switchText}>
+            <span className={css.label}>{t('defaultActive')}</span>
+            <span className={css.hint}>{t('defaultActiveHint')}</span>
+          </span>
+          <Switch label={t('defaultActive')} checked={draft.defaultActive} onChange={setDefaultActive} />
         </div>
       </form>
     </Modal>

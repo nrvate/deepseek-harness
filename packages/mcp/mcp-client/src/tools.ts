@@ -52,6 +52,8 @@ export interface McpCallRecord {
   inputChars: number
   /** Length of the text blocks returned; binary blocks are not counted. */
   outputChars: number
+  /** The Session whose model made the call; absent for a call made outside any Session. */
+  session?: string
 }
 
 /** Summed length of the text blocks of a raw result, 0 for anything else. */
@@ -209,7 +211,11 @@ export async function syncTools(
       taskRequired: tool.execution?.taskSupport === 'required',
       call: async (args, execution) => {
         const started = Date.now()
-        const record = { tool: tool.name, failed: true, inputChars: JSON.stringify(args).length, outputChars: 0 }
+        const session = execution.agent?.session.id
+        const record = {
+          tool: tool.name, failed: true, inputChars: JSON.stringify(args).length, outputChars: 0,
+          ...session === undefined ? {} : { session },
+        }
         try {
           const result = await client.callTool(
             { name: tool.name, arguments: args },

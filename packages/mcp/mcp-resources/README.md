@@ -33,6 +33,8 @@ Use the [client configuration](../mcp-client/README.md#use-this-package) to add 
 
 A caller with no configured MCP server sees no MCP prompt text or resource tools in native or PTC mode. A configured server enables the three shared resource tools, including when another provider mounts its client or the server has no tools or instructions. Connection failures do not remove the shared tools while the client entry remains active; resource calls report the connection error.
 
+Where [per-Session selection](../mcp-selection/README.md) is mounted, a Session sees only the servers it uses: the others are left out of the server-name list, a request naming one fails with `MCP resource server "<name>" is not active in this session`, and a Session using no server sees no resource tools.
+
 ### Discover and read
 
 When system-prompt assembly is mounted, the prompt lists server names visible to the calling agent. Call `list_mcp_resources` or `list_mcp_resource_templates` with one of those names as `server`. Without a cursor, the MCP SDK collects the server’s pages. An explicit `cursor` requests that page; pass a returned `nextCursor` unchanged. Read a listed URI or an expanded template with `read_mcp_resource`, using the same `server` name and an explicit `uri`.

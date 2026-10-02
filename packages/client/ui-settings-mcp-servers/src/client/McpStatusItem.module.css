@@ -140,6 +140,17 @@
   overflow-wrap: anywhere;
 }
 
+.serverNameUnused {
+  composes: serverName;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.caption {
+  margin: 0 0 -6px;
+  font-weight: 500;
+  color: var(--dsw-alias-label-secondary);
+}
+
 .serverState {
   margin-left: auto;
   flex: none;

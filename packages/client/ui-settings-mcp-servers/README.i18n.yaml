@@ -15,14 +15,17 @@
   en: d152484eb41ac6b4
   zh: 09388d293f9be9cb
 /deepseek-ai-dsh-client-ui-settings-mcp-servers/use-this-package:
-  en: a368f3d759efec52
-  zh: 044f8434e469c7cb
+  en: c8bd540e77807c04
+  zh: 4cd4d00840c27548
 /deepseek-ai-dsh-client-ui-settings-mcp-servers/use-this-package/status-item:
-  en: d5fcca93190ee5c7
-  zh: 407da213a8b47bcf
+  en: 780d1cc63d178368
+  zh: 792a25fbb71992e1
+/deepseek-ai-dsh-client-ui-settings-mcp-servers/use-this-package/servers-per-session:
+  en: 7f40fe7c65d21fc7
+  zh: cfc93045014571ea
 /deepseek-ai-dsh-client-ui-settings-mcp-servers/understand-the-implementation:
-  en: 7f0b5d89e5e70d9b
-  zh: bd4175f2a0ade576
+  en: 811823840c1e8737
+  zh: b94c9865348892df
 /deepseek-ai-dsh-client-ui-settings-mcp-servers/further-exploration:
   en: 07d20c8e22f05ed3
   zh: ee6917a0b3ba00e6

@@ -78,9 +78,12 @@ flowchart LR
   pkg_api_settings_controller["api-settings-controller"]
   svc_credentialsController["ctx.credentialsController<br/>Host credential-surface Remote controller"]
   svc_settingsController["ctx.settingsController<br/>Host settings-surface Remote controller"]
+  pkg_mcp_selection["mcp-selection"]
+  svc_mcpSelection["ctx.mcpSelection<br/>Per-Session MCP server selection"]
+  pkg_subagent["subagent"]
+  pkg_api_mcp_controller["api-mcp-controller"]
   pkg_mcp_status["mcp-status"]
   svc_mcpStatus["ctx.mcpStatus<br/>Live MCP server connection state"]
-  pkg_api_mcp_controller["api-mcp-controller"]
   svc_mcpServersController["ctx.mcpServersController<br/>Host MCP server Remote controller"]
   pkg_api_workspace_files["api-workspace-files"]
   svc_workspaceFiles["ctx.workspaceFiles<br/>Host workspace file Remote service"]
@@ -232,7 +235,6 @@ flowchart LR
   pkg_fs_observation_policy["fs-observation-policy"]
   pkg_compaction["compaction"]
   svc_compaction["ctx.compaction<br/>Compaction seam"]
-  pkg_subagent["subagent"]
   svc_subagents["ctx.subagents<br/>Subagent provider and continuation service"]
   pkg_subagent_spawn_in_process["subagent-spawn-in-process"]
   pkg_subagent_fork_in_process["subagent-fork-in-process"]
@@ -360,6 +362,7 @@ flowchart LR
   pkg_mcp_client --> svc_mcpResources
   pkg_mcp_client --> svc_mcpStatus
   pkg_mcp_resources --> svc_mcpResources
+  pkg_mcp_selection --> svc_mcpSelection
   pkg_mcp_status --> svc_mcpStatus
   pkg_message_feedback --> svc_messageFeedback
   pkg_office_to_pdf --> svc_officeToPdf
@@ -488,7 +491,12 @@ flowchart LR
   svc_llm --> pkg_compaction_basic
   svc_lsp --> pkg_tool_lsp
   svc_mcpResources --> pkg_mcp_resources
+  svc_mcpSelection --> pkg_api_mcp_controller
+  svc_mcpSelection --> pkg_mcp_client
+  svc_mcpSelection --> pkg_mcp_resources
+  svc_mcpSelection --> pkg_subagent
   svc_mcpStatus --> pkg_api_mcp_controller
+  svc_mcpStatus --> pkg_mcp_selection
   svc_officeToPdf --> pkg_client_ui_sidebar_documentpreview
   svc_otel --> pkg_host_product_telemetry_otel
   svc_otel --> pkg_session_telemetry_otel
@@ -610,7 +618,8 @@ flowchart LR
 | `ctx.jobController` | `core` | [`api-job-controller`](../packages/api/job-controller) | - | - | - | 经生成的 Remote namespace 流式发送一个后台任务的观测 record；名册仍在会话控制流上。 |
 | `ctx.credentialsController` | `core` | [`api-settings-controller`](../packages/api/settings-controller) | - | - | - | 把凭据引用 seam 投影到生成的 Remote namespace：批量扇出、视图投影与拒绝映射都在这里，而不在 seam Definition 上。 |
 | `ctx.settingsController` | `core` | [`api-settings-controller`](../packages/api/settings-controller) | - | - | - | 把用户设置 seam 投影到生成的 Remote namespace：读取一律脱敏，所有拒绝在这里分类，而不在 seam Definition 上。 |
-| `ctx.mcpStatus` | `seam` | [`mcp-status`](../packages/mcp/mcp-status) | [`mcp-client`](../packages/mcp/mcp-client) | [`api-mcp-controller`](../packages/api/mcp-controller) | - | 每个 MCP 客户端注册一个读取自身连接状态和工具的 handle；管理界面读取这些信息并发起重新连接。 |
+| `ctx.mcpSelection` | `core` | [`mcp-selection`](../packages/mcp/mcp-selection) | - | [`mcp-client`](../packages/mcp/mcp-client), [`mcp-resources`](../packages/mcp/mcp-resources), [`subagent`](../packages/subagent/subagent), [`api-mcp-controller`](../packages/api/mcp-controller) | - | 折叠会话已记录的选择，并拒绝会话未使用的服务器的工具；MCP 客户端、资源工具、子 agent 种子和 Remote 控制器读取或写入它。 |
+| `ctx.mcpStatus` | `seam` | [`mcp-status`](../packages/mcp/mcp-status) | [`mcp-client`](../packages/mcp/mcp-client) | [`api-mcp-controller`](../packages/api/mcp-controller), [`mcp-selection`](../packages/mcp/mcp-selection) | - | 每个 MCP 客户端注册一个读取自身连接状态和工具的 handle；管理界面读取这些信息并发起重新连接。 |
 | `ctx.mcpServersController` | `core` | [`api-mcp-controller`](../packages/api/mcp-controller) | - | - | - | 在 profile 补丁中添加、编辑、启用和移除 MCP 服务器行；校验、密钥处理和回滚都在这里，而不在插件页面中。 |
 | `ctx.workspaceFiles` | `core` | [`api-workspace-files`](../packages/api/workspace-files) | - | - | - | 为会话工作区根内的文件提供 stat、分页文本、字节窗口、目录列举与变更流，经 lstat、包含关系与 stat 重检限定。 |
 | `ctx.workspaceChanges` | `core` | [`workspace-changes`](../packages/deliverables/workspace-changes) | - | - | - | Serves the summary each workspace/changes event announced and each listed file's turn-start and turn-end comparison, by Session and event sequence, until that Session is disposed; the log carries only the turn. |

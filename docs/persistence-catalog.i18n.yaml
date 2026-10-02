@@ -9,8 +9,8 @@
   en: e7c80d1de4d328b4
   zh: d9f368c27fd9f998
 /session-persistence-event-catalog/persistence-type-fingerprints:
-  en: 33dd28b1c768cd8b
-  zh: 7256442baf2faed1
+  en: 6fb77c799cbeed59
+  zh: 4ab9625f30af8ed4
 /session-persistence-event-catalog/event-envelope:
   en: 7ebb1a2e0dd1f916
   zh: 8946f415dda5c1b8
@@ -128,6 +128,12 @@
 /session-persistence-event-catalog/events/llm/llm-retry-started-log-only:
   en: a2f8cab2fa650793
   zh: b0425971d17cf10c
+/session-persistence-event-catalog/events/mcp:
+  en: f496630bd8fab31b
+  zh: f496630bd8fab31b
+/session-persistence-event-catalog/events/mcp/mcp-servers-log-only:
+  en: 756d56ace85961d1
+  zh: b96f640adca9d707
 /session-persistence-event-catalog/events/model:
   en: 9edf4ef31e60e880
   zh: 9edf4ef31e60e880
@@ -558,8 +564,11 @@
   en: 3112837754975a3d
   zh: 3112837754975a3d
 /session-persistence-event-catalog/resolved-persistence-types/max-tokens:
-  en: d5ada3d6acfc416b
-  zh: d5ada3d6acfc416b
+  en: 427d03a61756ef70
+  zh: 427d03a61756ef70
+/session-persistence-event-catalog/resolved-persistence-types/mcp-servers:
+  en: eaa2256130f411de
+  zh: eaa2256130f411de
 /session-persistence-event-catalog/resolved-persistence-types/model:
   en: 723c81c82a20b283
   zh: 723c81c82a20b283
@@ -1332,8 +1341,11 @@
   en: a74e3dfa51c987af
   zh: 6c3c87974d7a7260
 /session-persistence-event-catalog/resolved-persistence-types/active~2:
-  en: c861888d6239b700
-  zh: a9b2271d3c6b8737
+  en: cf4f93a7a5c8a73c
+  zh: 2122afecec07d873
+/session-persistence-event-catalog/resolved-persistence-types/active~3:
+  en: 0fe2d31d519d7358
+  zh: 139300f1f59c8947
 /session-persistence-event-catalog/resolved-persistence-types/agentpreset:
   en: b8a0f8aac9708056
   zh: f5f004bd205b41e1
@@ -1926,8 +1938,11 @@
   en: 6d026baeac30a0f1
   zh: 55131683e3d5ed27
 /session-persistence-event-catalog/resolved-persistence-types/type-llm-retry-started:
-  en: c0ad371b1f636530
-  zh: 6b79634088e8d9da
+  en: 63422332eebaf97f
+  zh: 4ad6ca4d37162d2b
+/session-persistence-event-catalog/resolved-persistence-types/type-mcp-servers:
+  en: 576c935c65634b6b
+  zh: f92ee3b27168769d
 /session-persistence-event-catalog/resolved-persistence-types/type-model-selection:
   en: 0c6a1ef6a38ac10b
   zh: 0522b4477e992088

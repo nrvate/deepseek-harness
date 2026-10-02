@@ -114,6 +114,7 @@ export async function validateSpec(spec: McpServerSpec, env: NodeJS.ProcessEnv =
     serverName: spec.serverName,
     ...spec.toolCallTimeoutMs === undefined ? {} : { toolCallTimeoutMs: spec.toolCallTimeoutMs },
     ...spec.failOnStartupError === undefined ? {} : { failOnStartupError: spec.failOnStartupError },
+    ...spec.defaultActive === undefined ? {} : { defaultActive: spec.defaultActive },
   }
   const raw = spec.transport === 'stdio'
     ? { transport: spec.transport, command: spec.command, args: spec.args, env: strings(spec.env), cwd: spec.cwd ?? '', ...common }

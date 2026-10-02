@@ -73,6 +73,8 @@ export interface StdioConfig {
   failOnStartupError: boolean
   /** Maximum UTF-8 bytes of attributed server instructions (default 32768). */
   maxInstructionBytes?: number
+  /** Whether a Session that has made no selection of its own uses this server (default true). */
+  defaultActive?: boolean
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
 }
@@ -97,6 +99,8 @@ export interface StreamableHttpConfig {
   failOnStartupError: boolean
   /** Maximum UTF-8 bytes of attributed server instructions (default 32768). */
   maxInstructionBytes?: number
+  /** Whether a Session that has made no selection of its own uses this server (default true). */
+  defaultActive?: boolean
   /** Automatic reconnect policy after a lost connection; omission uses the defaults. */
   reconnect?: ReconnectConfig
 }
@@ -117,6 +121,10 @@ const Reconnect: z<ReconnectConfig> = z.object({
   maxAttempts: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(RECONNECT_DEFAULTS.maxAttempts),
 })
 
+/** Field schemas both transports share. */
+const ToolCallTimeoutMs = z.number().min(1).max(MAX_TIMER_DELAY_MS).default(DEFAULT_TOOL_CALL_TIMEOUT_MS)
+const MaxInstructionBytes = z.number().step(1).min(1).default(DEFAULT_MAX_INSTRUCTION_BYTES)
+
 export const Config = z.union([
   z.object({
     transport: z.const('stdio'),
@@ -125,9 +133,10 @@ export const Config = z.union([
     args: z.array(String).default([]),
     env: z.dict(String).default({}),
     cwd: z.string().default(''),
-    toolCallTimeoutMs: z.number().min(1).max(MAX_TIMER_DELAY_MS).default(DEFAULT_TOOL_CALL_TIMEOUT_MS),
+    toolCallTimeoutMs: ToolCallTimeoutMs,
     failOnStartupError: z.boolean().default(false),
-    maxInstructionBytes: z.number().step(1).min(1).default(DEFAULT_MAX_INSTRUCTION_BYTES),
+    maxInstructionBytes: MaxInstructionBytes,
+    defaultActive: z.boolean().default(true),
     reconnect: Reconnect,
   }),
   z.object({
@@ -135,9 +144,10 @@ export const Config = z.union([
     serverName: z.string().required().pattern(SERVER_NAME_PATTERN),
     url: z.string().required(),
     headers: z.dict(String).default({}),
-    toolCallTimeoutMs: z.number().min(1).max(MAX_TIMER_DELAY_MS).default(DEFAULT_TOOL_CALL_TIMEOUT_MS),
+    toolCallTimeoutMs: ToolCallTimeoutMs,
     failOnStartupError: z.boolean().default(false),
-    maxInstructionBytes: z.number().step(1).min(1).default(DEFAULT_MAX_INSTRUCTION_BYTES),
+    maxInstructionBytes: MaxInstructionBytes,
+    defaultActive: z.boolean().default(true),
     reconnect: Reconnect,
   }),
 ]) as z<ConfigInput, Config>

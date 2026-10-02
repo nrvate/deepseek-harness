@@ -12,6 +12,7 @@ import {
   boot, initProfile, loadProfileDirectory, readProfileManifest, readProfilePatches, type ProfileContext,
 } from '@deepseek-ai/dsh-app-boot'
 import McpStatus, { type McpServerStatus } from '@deepseek-ai/dsh-mcp-status'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import McpServersController from '../src/index.ts'
 import type { McpEntryId, McpHttpSpec, McpStdioSpec } from '../src/types.ts'
 
@@ -83,7 +84,8 @@ async function fixture(reload: 'live' | 'startup' = 'live', patch = '[]\n', over
     '      status: () => handle.current,',
     "      tools: () => [{ name: 'echo', publicName: `mcp__${config.serverName}__echo`, description: 'Echo it', parameters: [] }],",
     '      reconnect: async () => { handle.reconnects += 1; return handle.reconnectResult },',
-    "      stats: () => ({ calls: 4, errors: 1, inputTokens: 12, outputTokens: 34, totalMs: 50, maxMs: 20, connections: 1, schemaTokens: 9, transport: 'stdio', tools: [] }),",
+    "      stats: session => ({ calls: session === undefined ? 4 : 1, errors: 1, inputTokens: 12, outputTokens: 34, totalMs: 50, maxMs: 20, connections: 1, schemaTokens: 9, transport: 'stdio', tools: [] }),",
+    '      defaultActive: config.defaultActive !== false,',
     '      subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },',
     '    })',
     '  })',
@@ -416,14 +418,54 @@ it('reads every server\'s state and usage together, without usage for a row that
   const overview = await controller.overview()
   expect(overview.readAt).toBeGreaterThanOrEqual(before)
   const [first, second] = overview.servers
-  expect(first).toMatchObject({ id: 'mcp-web', serverName: 'web', enabled: true })
+  expect(first).toMatchObject({ id: 'mcp-web', serverName: 'web', enabled: true, defaultActive: true })
   expect(first?.status).toMatchObject({ state: 'connected' })
   expect(first?.stats).toMatchObject({ calls: 4, errors: 1, inputTokens: 12 })
-  expect(second).toEqual({ id: 'mcp-second', serverName: 'second', enabled: false })
+  expect(first?.sessionStats).toBeUndefined()
+  expect(second).toEqual({ id: 'mcp-second', serverName: 'second', enabled: false, defaultActive: true })
+})
+
+it('adds one Session\'s share of the usage when the overview names a Session', async () => {
+  const { controller } = await fixture()
+  await controller.upsert(unreachable)
+  await controller.upsert({ ...unreachable, serverName: 'second', url: 'http://127.0.0.1:9/second' })
+  await controller.setEnabled(id('mcp-second'), false)
+  const [first, second] = (await controller.overview('session-a')).servers
+  expect(first?.stats?.calls).toBe(4)
+  expect(first?.sessionStats?.calls).toBe(1)
+  expect(second?.sessionStats).toBeUndefined()
+})
+
+it('writes whether new Sessions use a server and lists it, for owned and overlay rows', async () => {
+  const overlay: PatchOptions = { insert: [
+    { id: 'mcp-overlay', name: '@deepseek-ai/dsh-mcp-client', config: { transport: 'streamable-http', serverName: 'overlay', url: 'http://127.0.0.1:9/o', defaultActive: false } },
+  ] }
+  const { ctx, controller, read } = await fixture('live', '[]\n', [overlay])
+  await controller.upsert({ ...unreachable, defaultActive: false })
+  expect(read()).toContain('defaultActive: false')
+  expect(probe(ctx, 'web')).toMatchObject({ defaultActive: false })
+  const rows = await controller.list()
+  expect(rows.map(row => [row.serverName, row.defaultActive])).toEqual(expect.arrayContaining([['overlay', false], ['web', false]]))
+  expect(rows.find(row => row.serverName === 'web')?.spec).toMatchObject({ defaultActive: false })
+  expect((await controller.overview()).servers.map(server => server.defaultActive)).toEqual([false, false])
+
+  await controller.upsert({ ...unreachable }, { id: id('mcp-web') })
+  expect(read()).not.toContain('defaultActive')
+  expect((await controller.list()).find(row => row.serverName === 'web')?.defaultActive).toBe(true)
+})
+
+it('selects one Session\'s servers through the selection service, and refuses without one', async () => {
+  const { ctx, controller } = await fixture()
+  const agent = {} as Agent
+  expect(() => controller.setSessionServers(agent, ['web'])).toThrow('This profile does not support choosing MCP servers per session')
+  const select = vi.fn((_agent: Agent, servers: readonly string[]) => [...servers].sort())
+  ctx.provide('mcpSelection', { select } as never)
+  expect(controller.setSessionServers(agent, ['web', 'docs'])).toEqual({ active: ['docs', 'web'] })
+  expect(select).toHaveBeenCalledExactlyOnceWith(agent, ['web', 'docs'])
 })
 
 it('reads an overview without usage when no status service is mounted', async () => {
   const { controller } = await fixture('live', '[]\n', [], false)
   await controller.upsert(unreachable)
-  expect((await controller.overview()).servers).toEqual([{ id: 'mcp-web', serverName: 'web', enabled: true }])
+  expect((await controller.overview('session-a')).servers).toEqual([{ id: 'mcp-web', serverName: 'web', enabled: true, defaultActive: true }])
 })

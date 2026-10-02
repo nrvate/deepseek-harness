@@ -72,6 +72,7 @@ it('displays a URL without credentials, query, or a trailing root slash', () => 
 
 it('accepts a startup flag', async () => {
   expect(await validateSpec({ ...stdio, failOnStartupError: true })).toBeUndefined()
+  expect(await validateSpec({ ...stdio, defaultActive: false })).toBeUndefined()
 })
 
 it('reads the message of any thrown value', () => {

@@ -9,6 +9,7 @@ import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineTool } from '@deepseek-ai/dsh-tools'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import McpStatus from '@deepseek-ai/dsh-mcp-status'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Config } from '@deepseek-ai/dsh-mcp-client'
 
 // ---- Mock MCP SDK ----
@@ -351,6 +352,38 @@ describe('published connection status', () => {
       expect(stats.lastCallAt).toBeGreaterThanOrEqual(before - 1)
       expect(stats.tools.map(({ name, calls, errors }) => [name, calls, errors])).toEqual([['other', 3, 1], ['remote', 2, 1]])
       await handle.dispose()
+    })
+
+    it('attributes a call to the Session that made it and keeps the server totals', async () => {
+      const { handle } = start()
+      await handle.ready
+      const inSession = (id: string) => ctx.tools.execute({
+        name: 'mcp__srv__remote', arguments: { q: 'abcd' }, callId: ToolCallId(`session-${++seq}`),
+        signal: new AbortController().signal, agent: { session: { id } } as Agent,
+      })
+      mockCallTool.mockResolvedValue({ content: [{ type: 'text', text: 'x'.repeat(8) }] })
+      await inSession('one')
+      await inSession('one')
+      await inSession('two')
+      await call('mcp__srv__remote', {})
+
+      expect(handle.handle.stats().calls).toBe(4)
+      expect(handle.handle.stats('one')).toMatchObject({ calls: 2, errors: 0, outputTokens: 4, tools: [{ name: 'remote', calls: 2 }] })
+      expect(handle.handle.stats('two')).toMatchObject({ calls: 1, outputTokens: 2 })
+      // A Session that never called this server reports zero usage with the same connection facts.
+      expect(handle.handle.stats('idle')).toMatchObject({ calls: 0, inputTokens: 0, tools: [], connections: 1, transport: 'stdio' })
+      expect(handle.handle.stats('idle').lastCallAt).toBeUndefined()
+      await handle.dispose()
+    })
+
+    it('reports whether new Sessions use the server, on by default', async () => {
+      const { handle } = start()
+      expect(handle.handle.defaultActive).toBe(true)
+      await handle.dispose()
+      captureLogs(ctx)
+      const off = startConnection(ctx, { ...stdioConfig(), serverName: 'off', defaultActive: false }, resolveReconnectPolicy(undefined, 'status'))
+      expect(off.handle.defaultActive).toBe(false)
+      await off.dispose()
     })
 
     it('orders tools with equal counts by name and keeps counters across a reconnect', async () => {

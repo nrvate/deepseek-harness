@@ -288,12 +288,20 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Projects the user-settings seam onto the generated Remote namespace: the read is always redacted and every refusal is classified here, not on the seam Definition.',
   },
   {
+    key: 'mcpSelection',
+    pkg: 'mcp-selection',
+    title: 'Per-Session MCP server selection',
+    mode: 'core',
+    consumers: ['mcp-client', 'mcp-resources', 'subagent', 'api-mcp-controller'],
+    note: 'Folds the Session\'s logged selection and denies the tools of the servers it does not use; the MCP client, resource tools, subagent seed, and Remote controller read or write it.',
+  },
+  {
     key: 'mcpStatus',
     pkg: 'mcp-status',
     title: 'Live MCP server connection state',
     mode: 'seam',
     implementations: ['mcp-client'],
-    consumers: ['api-mcp-controller'],
+    consumers: ['api-mcp-controller', 'mcp-selection'],
     note: 'Each MCP client registers a handle reading its own connection state and tools; management surfaces read them and the reconnect action.',
   },
   {

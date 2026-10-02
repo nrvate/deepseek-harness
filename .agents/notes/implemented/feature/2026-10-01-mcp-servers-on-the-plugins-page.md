@@ -49,7 +49,7 @@ Users manage servers without editing files, and every write is validated by the 
 
 A user can still type a literal token into `args` or `command`; the file is mode 0600 but unencrypted. A URL that carries a token in its query is stored as typed and shown in the editable spec, while the list summary omits the query.
 
-Usage counters are per Host process: they reset on restart and are not attributed to a Session, and token figures are estimates. The status item appears only once a conversation has a message, because the composer dock is not rendered on a blank session's start screen.
+Usage counters are per Host process: they reset on restart, and token figures are estimates. [Per-Session selection](2026-10-02-per-session-mcp-server-selection.md) attributes each call to its Session. The status item appears only once a conversation has a message, because the composer dock is not rendered on a blank session's start screen.
 
 The Plugins page is mounted only in the web-app bundle, so launchers that do not use it get no MCP page. Rows from bundles, the home patch, and overlays are listed but cannot be changed here.
 

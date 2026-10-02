@@ -24,7 +24,9 @@ export type McpServersLocaleKey =
   | 'env' | 'headers' | 'valueName' | 'valueKind' | 'valueText' | 'addValue' | 'removeValue'
   | 'kindEnv' | 'kindBearer' | 'kindLiteral' | 'kindKept' | 'kindExpression'
   | 'hintEnv' | 'hintBearer' | 'hintKept' | 'hintExpression'
-  | 'timeout' | 'timeoutHint' | 'failOnStartup'
+  | 'timeout' | 'timeoutHint' | 'failOnStartup' | 'defaultActive' | 'defaultActiveHint'
+  | 'selectShort' | 'selectLabel' | 'selectHeading' | 'selectFailed'
+  | 'trayThisSession' | 'trayAllSessions' | 'traySplitNote' | 'trayUseServer' | 'statSplit'
   | 'errorInvalid' | 'errorDuplicate' | 'errorSecret' | 'errorReadOnly' | 'errorUnknown'
   | 'errorPatch' | 'errorOperation' | 'errorTimeout' | 'errorTransport'
   | 'confirmTitle' | 'confirmBody' | 'confirmCommand' | 'confirmAcknowledge' | 'confirmAction'
@@ -142,6 +144,17 @@ export const en: Record<McpServersLocaleKey, string> = {
   timeout: 'Tool call timeout (ms)',
   timeoutHint: 'Leave blank for the default of 60000.',
   failOnStartup: 'Fail to start when the first connection fails',
+  defaultActive: 'On for new sessions',
+  defaultActiveHint: 'When off, the server stays available and a session uses it only after you select it there.',
+  selectShort: 'MCP {active}/{total}',
+  selectLabel: 'MCP servers in this session: {active} of {total}',
+  selectHeading: 'MCP servers in this session',
+  selectFailed: 'The selection was not saved: {detail}',
+  trayThisSession: 'This session',
+  trayAllSessions: 'All sessions',
+  traySplitNote: 'Per-server figures read this session / all sessions.',
+  trayUseServer: 'Use {name} in this session',
+  statSplit: '{session} / {total}',
   errorInvalid: 'These settings were not accepted.',
   errorDuplicate: 'A server with this name already exists.',
   errorSecret: 'Credentials cannot be typed here. Use an environment variable instead.',
@@ -278,6 +291,17 @@ export const zh: Record<McpServersLocaleKey, string> = {
   timeout: '工具调用超时（毫秒）',
   timeoutHint: '留空使用默认值 60000。',
   failOnStartup: '首次连接失败时不启动',
+  defaultActive: '新会话默认启用',
+  defaultActiveHint: '关闭后，服务器仍然可用，但会话只有在选择它之后才会使用。',
+  selectShort: 'MCP {active}/{total}',
+  selectLabel: '本会话使用的 MCP 服务器：{total} 个中的 {active} 个',
+  selectHeading: '本会话使用的 MCP 服务器',
+  selectFailed: '选择未能保存：{detail}',
+  trayThisSession: '本会话',
+  trayAllSessions: '全部会话',
+  traySplitNote: '各服务器的数字为“本会话 / 全部会话”。',
+  trayUseServer: '在本会话中使用 {name}',
+  statSplit: '{session} / {total}',
   errorInvalid: '这些设置未被接受。',
   errorDuplicate: '已存在同名服务器。',
   errorSecret: '不能在此直接输入凭证，请改用环境变量。',

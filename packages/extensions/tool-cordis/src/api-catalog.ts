@@ -1492,6 +1492,44 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'mcpSelection',
+    summary: 'Decides and enforces which configured MCP servers each Session uses.',
+    description: 'Decides and enforces which configured MCP servers each Session uses.',
+    methods: [
+      {
+        signature: 'logged(session: Session): readonly string[] | undefined',
+        description: 'Read the selection a Session logged for itself.',
+        parameters: [{ name: 'session', description: 'the Session to read.' }],
+        returns: 'the logged server names, or undefined while the Session follows the configured defaults.',
+      },
+      {
+        signature: 'active(session: Session): string[]',
+        description: 'Resolve the servers a Session uses now: its logged selection restricted to the servers still configured, or the servers configured as active by default.',
+        parameters: [{ name: 'session', description: 'the Session to resolve for.' }],
+        returns: 'the active server names, in the order the servers are configured.',
+      },
+      {
+        signature: 'isActive(server: string, agent: Agent | undefined): boolean',
+        description: 'Whether one server reaches an agent\'s model requests.',
+        parameters: [{ name: 'server', description: 'configured server name.' }, { name: 'agent', description: 'the agent whose Session decides; a caller with no agent is not restricted.' }],
+        returns: 'false only when the agent\'s Session does not use the server.',
+      },
+      {
+        signature: 'select(agent: Agent, servers: readonly string[]): string[]',
+        description: 'Replace a Session\'s selection, log it, and apply it to the agent\'s tools at once. A request that names the servers already in use logs nothing.',
+        parameters: [{ name: 'agent', description: 'the agent whose Session selects.' }, { name: 'servers', description: 'every server the Session uses from now on; duplicates are dropped.' }],
+        returns: 'the servers in use afterwards, in configured order.',
+        throws: ['when a name is not a configured server.'],
+      },
+      {
+        signature: 'hideWhenNone(names: readonly string[]): () => void',
+        description: 'Hide tools that serve MCP servers in general from every Session that uses no server.',
+        parameters: [{ name: 'names', description: 'registered tool names, such as the shared resource tools.' }],
+        returns: 'the disposer that stops hiding them.',
+      },
+    ],
+  },
+  {
     key: 'mcpServersController',
     summary: 'Remote owner of the profile\'s MCP server rows.',
     description: 'Remote owner of the profile\'s MCP server rows.',
@@ -1527,10 +1565,17 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the tools registered from the server right now; empty when it is not connected or has no client.',
       },
       {
-        signature: '@Remote async overview(): Promise<McpOverview>',
+        signature: '@Remote async overview(sessionId?: string): Promise<McpOverview>',
         description: 'Read every configured server\'s connection state and usage counters in one call.',
-        parameters: [],
+        parameters: [{ name: 'sessionId', description: 'Session whose own share of the counters to include; omitted reads the totals only.' }],
         returns: 'one entry per row in composition order, with the Host clock the figures were read at.',
+      },
+      {
+        signature: '@Remote setSessionServers(agent: Agent, active: string[]): McpSessionServers',
+        description: 'Replace the servers one Session uses. The choice is logged on the Session and takes effect on its next model request.',
+        parameters: [{ name: 'agent', description: 'target Agent resolved from the Session identity on the wire.' }, { name: 'active', description: 'every server name the Session uses from now on; an empty list uses none.' }],
+        returns: 'the servers in use afterwards.',
+        throws: ['when a name is not a configured server, or the profile mounts no selection service.'],
       },
       {
         signature: '@Remote async reconnectServer(id: McpEntryId): Promise<McpReconnectResult>',
@@ -1558,6 +1603,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'one status per registration, in registration order.',
       },
       {
+        signature: 'servers(): McpConfiguredServer[]',
+        description: 'Name every registered server with its configured default.',
+        parameters: [],
+        returns: 'one entry per registration, in registration order.',
+      },
+      {
         signature: 'get(server: string): McpServerStatus | undefined',
         description: 'Read one server\'s state.',
         parameters: [{ name: 'server', description: 'configured server name.' }],
@@ -1570,9 +1621,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the tools registered from it, empty when no client registered it.',
       },
       {
-        signature: 'stats(server: string): McpServerStats | undefined',
+        signature: 'stats(server: string, session?: string): McpServerStats | undefined',
         description: 'Read one server\'s usage counters and connection facts.',
-        parameters: [{ name: 'server', description: 'configured server name.' }],
+        parameters: [{ name: 'server', description: 'configured server name.' }, { name: 'session', description: 'a Session id; when given, the counters cover only that Session\'s calls.' }],
         returns: 'its stats, or undefined when no client registered it.',
       },
       {
@@ -5802,6 +5853,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface McpChangeResult {\n    changed: boolean;\n    application: \'applied\' | \'restart-required\' | \'failed\';\n    target: string;\n    error?: McpError;\n    warnings?: string[];\n}',
   },
   {
+    name: 'McpConfiguredServer',
+    declaration: 'export interface McpConfiguredServer {\n    serverName: string;\n    defaultActive: boolean;\n}',
+  },
+  {
     name: 'McpConnectionState',
     declaration: 'export type McpConnectionState = \'connecting\' | \'connected\' | \'reconnecting\' | \'failed\';',
   },
@@ -5843,15 +5898,15 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'McpServerHandle',
-    declaration: 'export interface McpServerHandle {\n    status(): McpServerStatus;\n    tools(): readonly McpToolInfo[];\n    stats(): McpServerStats;\n    reconnect(): Promise<boolean>;\n    subscribe(listener: () => void): () => void;\n}',
+    declaration: 'export interface McpServerHandle {\n    readonly defaultActive: boolean;\n    status(): McpServerStatus;\n    tools(): readonly McpToolInfo[];\n    stats(session?: string): McpServerStats;\n    reconnect(): Promise<boolean>;\n    subscribe(listener: () => void): () => void;\n}',
   },
   {
     name: 'McpServerInfo',
-    declaration: 'export interface McpServerInfo {\n    id: McpEntryId;\n    serverName: string;\n    transport: McpServerSpec[\'transport\'];\n    summary: string;\n    enabled: boolean;\n    fiberPhase: PluginFiberPhase;\n    status?: McpServerStatus;\n    spec?: McpServerSpec;\n    readOnlyReason?: McpReadOnlyReason;\n    owned: boolean;\n}',
+    declaration: 'export interface McpServerInfo {\n    id: McpEntryId;\n    serverName: string;\n    transport: McpServerSpec[\'transport\'];\n    summary: string;\n    enabled: boolean;\n    defaultActive: boolean;\n    fiberPhase: PluginFiberPhase;\n    status?: McpServerStatus;\n    spec?: McpServerSpec;\n    readOnlyReason?: McpReadOnlyReason;\n    owned: boolean;\n}',
   },
   {
     name: 'McpServerOverview',
-    declaration: 'export interface McpServerOverview {\n    id: McpEntryId;\n    serverName: string;\n    enabled: boolean;\n    status?: McpServerStatus;\n    stats?: McpServerStats;\n}',
+    declaration: 'export interface McpServerOverview {\n    id: McpEntryId;\n    serverName: string;\n    enabled: boolean;\n    defaultActive: boolean;\n    status?: McpServerStatus;\n    stats?: McpServerStats;\n    sessionStats?: McpServerStats;\n}',
   },
   {
     name: 'McpServerSpec',
@@ -5866,8 +5921,12 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface McpServerStatus {\n    serverName: string;\n    state: McpConnectionState;\n    attempt: number;\n    maxAttempts: number;\n    error?: string;\n    connectedAt?: number;\n    toolCount: number;\n}',
   },
   {
+    name: 'McpSessionServers',
+    declaration: 'export interface McpSessionServers {\n    active: string[];\n}',
+  },
+  {
     name: 'McpSpecBase',
-    declaration: 'export interface McpSpecBase {\n    serverName: string;\n    toolCallTimeoutMs?: number;\n    failOnStartupError?: boolean;\n}',
+    declaration: 'export interface McpSpecBase {\n    serverName: string;\n    toolCallTimeoutMs?: number;\n    failOnStartupError?: boolean;\n    defaultActive?: boolean;\n}',
   },
   {
     name: 'McpStdioSpec',

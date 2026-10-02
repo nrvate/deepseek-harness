@@ -30,6 +30,8 @@ export interface McpSpecBase {
   toolCallTimeoutMs?: number
   /** Fail plugin activation when the first connection fails; omitted keeps the plugin default. */
   failOnStartupError?: boolean
+  /** Whether a Session that has made no selection of its own uses this server; omitted keeps the plugin default, which is true. */
+  defaultActive?: boolean
 }
 
 /** A local server started as a child process. */
@@ -70,6 +72,8 @@ export interface McpServerInfo {
   summary: string
   /** Whether the row loads; a disabled row keeps its configuration. */
   enabled: boolean
+  /** Whether a Session that has made no selection of its own uses this server. */
+  defaultActive: boolean
   /** Root-fiber phase of the running entry; null when none is live. */
   fiberPhase: PluginFiberPhase
   /** The client's live connection state; absent while the plugin is not loaded or no status service is mounted. */
@@ -141,10 +145,20 @@ export interface McpServerOverview {
   serverName: string
   /** Whether the row loads. */
   enabled: boolean
+  /** Whether a Session that has made no selection of its own uses this server. */
+  defaultActive: boolean
   /** The client's connection state; absent while the plugin is not loaded or no status service is mounted. */
   status?: McpServerStatus
   /** Usage counters and connection facts since the client loaded; absent with `status`. */
   stats?: McpServerStats
+  /** The same counters restricted to the Session the overview was read for; absent with `stats` or when no Session was named. */
+  sessionStats?: McpServerStats
+}
+
+/** The servers a Session uses after a selection. */
+export interface McpSessionServers {
+  /** Server names in configured order. */
+  active: string[]
 }
 
 /** Every configured server's state and usage, read together. */

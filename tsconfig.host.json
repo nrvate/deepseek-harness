@@ -463,6 +463,7 @@
     { "path": "./packages/mcp/mcp-client" },
     { "path": "./packages/mcp/mcp-resources" },
     { "path": "./packages/mcp/mcp-status" },
+    { "path": "./packages/mcp/mcp-selection" },
     { "path": "./packages/host/directory-picker" },
     { "path": "./packages/host/directory-picker-auto" },
     { "path": "./packages/host/directory-picker-browse" },

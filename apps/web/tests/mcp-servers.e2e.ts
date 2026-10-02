@@ -9,6 +9,8 @@ import { join } from 'node:path'
 import type { Browser, Locator, Page } from 'playwright'
 import { chromium } from 'playwright'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
+import type { SessionId } from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-mcp-selection'
 import { afterAll, beforeAll, describe, expect, it, onTestFailed } from 'vitest'
 import { launchWebScaffold, seedSession, watchConsole, type WebScaffold } from './scaffold.ts'
 import { ZH_BROWSER_LOCALE, saveFailureShot } from './support.ts'
@@ -25,6 +27,7 @@ describe('web e2e: MCP servers page', () => {
   let browser: Browser
   let page: Page
   let tripwire: ReturnType<typeof watchConsole>
+  let sessionId: SessionId
 
   beforeAll(async () => {
     // The Host evaluates `process.env` references in its own process, so the referenced variable must exist here.
@@ -33,7 +36,7 @@ describe('web e2e: MCP servers page', () => {
       extraOverlayPath: fileURLToPath(new URL('./pin-browse-picker.overlay.yml', import.meta.url)),
     })
     const workspace = await scaffold.ctx.workspaceRegistry.create(scaffold.workspaceCwd)
-    const sessionId = await seedSession(scaffold, await readFile(SEEDED_HISTORY, 'utf8'), 'mcp-status-session')
+    sessionId = await seedSession(scaffold, await readFile(SEEDED_HISTORY, 'utf8'), 'mcp-status-session')
     await workspace.attachSession(sessionId)
     await scaffold.ctx.sessionController.rename({ sessionId, title: SESSION_TITLE })
     browser = await chromium.launch()
@@ -241,6 +244,57 @@ describe('web e2e: MCP servers page', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 
+  it('selects the servers one session uses from the composer and the status panel, and offers the selector on a new session', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-mcp-servers-session-selection'))
+    const session = page.getByRole('treeitem').filter({ has: page.getByText(SESSION_TITLE, { exact: true }) })
+    await session.click({ timeout: 20_000 })
+    const chip = page.getByRole('button', { name: /^本会话使用的 MCP 服务器：/ })
+    await chip.waitFor({ timeout: 20_000 })
+    // Both configured servers are on for new sessions, and this session has chosen nothing.
+    await expect.poll(() => chip.textContent(), { timeout: 20_000 }).toBe('MCP 2/2')
+    const agent = scaffold.ctx.agents.get(sessionId)
+    if (agent === undefined) throw new Error('the seeded session has no live agent')
+    const everythingTools = (): string[] =>
+      scaffold.ctx.tools.schemas(agent).map(tool => tool.name).filter(name => name.startsWith('mcp__everything__'))
+    expect(everythingTools()).toContain('mcp__everything__echo')
+
+    await chip.click()
+    const menu = page.getByRole('menu')
+    await menu.getByText('本会话使用的 MCP 服务器', { exact: true }).waitFor()
+    await menu.getByRole('menuitem', { name: 'everything', exact: true }).click()
+    // The list stays open, and the session's next request carries none of the server's tools.
+    await expect.poll(() => chip.textContent(), { timeout: 10_000 }).toBe('MCP 1/2')
+    await expect.poll(() => scaffold.ctx.mcpSelection.active(agent.session), { timeout: 10_000 }).toEqual(['files'])
+    expect(everythingTools()).toEqual([])
+    expect(await menu.isVisible()).toBe(true)
+    const refused = await scaffold.ctx.tools.execute({
+      name: 'mcp__everything__echo', arguments: { message: 'hidden' }, callId: ToolCallId('mcp-deselected'),
+      signal: new AbortController().signal, agent,
+    })
+    expect(refused).toMatchObject({ isError: true, error: { info: { code: 'UNKNOWN_TOOL' } } })
+    await page.keyboard.press('Escape')
+    await menu.waitFor({ state: 'detached' })
+
+    // The status panel's switch turns the server back on for this session.
+    await page.getByRole('button', { name: /^MCP 服务器：/ }).click()
+    const panel = page.getByRole('dialog', { name: 'MCP 服务器', exact: true })
+    const use = panel.getByRole('switch', { name: '在本会话中使用 everything' })
+    await expect.poll(() => use.getAttribute('aria-checked'), { timeout: 10_000 }).toBe('false')
+    await use.click()
+    await expect.poll(() => scaffold.ctx.mcpSelection.active(agent.session), { timeout: 10_000 }).toEqual(['files', 'everything'])
+    await expect.poll(() => chip.textContent(), { timeout: 10_000 }).toBe('MCP 2/2')
+    expect(everythingTools()).toContain('mcp__everything__echo')
+    await page.keyboard.press('Escape')
+    await panel.waitFor({ state: 'detached' })
+
+    // A new session offers the same selector before its first prompt.
+    await page.getByRole('button', { name: '新建会话', exact: true }).first().click()
+    const fresh = page.getByRole('button', { name: /^本会话使用的 MCP 服务器：/ })
+    await fresh.waitFor({ timeout: 20_000 })
+    await expect.poll(() => fresh.textContent(), { timeout: 20_000 }).toBe('MCP 2/2')
+    expect(tripwire.pageErrors).toEqual([])
+  }, 120_000)
+
   it('shows the status item below the prompt box with per-server stats, and hides it from the preference switch', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-mcp-servers-status-item'))
     // Two real calls through the Host's tool registry, so the counters have something to show without a model.
@@ -263,9 +317,11 @@ describe('web e2e: MCP servers page', () => {
     await panel.getByText('2 个中已连接 1 个', { exact: true }).waitFor({ timeout: 10_000 })
     const everything = panel.getByRole('listitem').filter({ hasText: 'everything' }).first()
     await everything.getByText('已连接', { exact: true }).waitFor()
-    // Calls, errors: the two echo calls above, none failed.
-    await expect.poll(() => everything.locator('dd').nth(0).textContent(), { timeout: 10_000 }).toBe('2')
-    expect(await everything.locator('dd').nth(1).textContent()).toBe('0')
+    // Calls, errors as this session / all sessions: the two echo calls above ran outside any session, and none failed.
+    await expect.poll(() => everything.locator('dd').nth(0).textContent(), { timeout: 10_000 }).toBe('0 / 2')
+    expect(await everything.locator('dd').nth(1).textContent()).toBe('0 / 0')
+    await panel.getByText('本会话', { exact: true }).waitFor()
+    await panel.getByText('全部会话', { exact: true }).waitFor()
     await everything.getByText('详情', { exact: true }).click()
     await everything.getByText('本地命令', { exact: true }).waitFor()
     await everything.getByText('已连接时长', { exact: true }).waitFor()

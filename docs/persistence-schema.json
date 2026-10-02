@@ -10608,6 +10608,80 @@
       }
     },
     {
+      "key": "event:mcp/servers",
+      "kind": "event",
+      "event": "mcp/servers",
+      "surface": false,
+      "digest": "4f94ea39cdc082c34c58d81bcf837bd62faf8440b9025a485f244ad80e0b526e",
+      "schema": {
+        "root": 0,
+        "nodes": [
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "data",
+                "type": 1,
+                "optional": false
+              },
+              {
+                "name": "ignorable",
+                "type": 4,
+                "optional": true
+              },
+              {
+                "name": "seq",
+                "type": 5,
+                "optional": false
+              },
+              {
+                "name": "time",
+                "type": 5,
+                "optional": false
+              },
+              {
+                "name": "type",
+                "type": 6,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "object",
+            "properties": [
+              {
+                "name": "active",
+                "type": 2,
+                "optional": false
+              }
+            ],
+            "indices": []
+          },
+          {
+            "kind": "array",
+            "element": 3
+          },
+          {
+            "kind": "primitive",
+            "type": "string"
+          },
+          {
+            "kind": "literal",
+            "value": true
+          },
+          {
+            "kind": "primitive",
+            "type": "number"
+          },
+          {
+            "kind": "literal",
+            "value": "mcp/servers"
+          }
+        ]
+      }
+    },
+    {
       "key": "event:model/selection",
       "kind": "event",
       "event": "model/selection",
@@ -23009,6 +23083,11 @@
       ]
     },
     {
+      "digest": "4f94ea39cdc082c34c58d81bcf837bd62faf8440b9025a485f244ad80e0b526e",
+      "names": [],
+      "sources": []
+    },
+    {
       "digest": "4fb59762612c3e3ac3a3bd4f84c9c148d3c3893bd422ba2b201cc039fabd49bc",
       "names": [],
       "sources": []
@@ -23439,6 +23518,13 @@
       "sources": []
     },
     {
+      "digest": "6d041358a672c032c250fe668b9ba69cd2599cf2174df01a5b85696ec88a48dc",
+      "names": [],
+      "sources": [
+        "packages/mcp/mcp-selection/src/index.ts:31"
+      ]
+    },
+    {
       "digest": "6e52dd55a1d48954ed5464ec46fe34d9eb65f709baabc9561e7a279910b0c406",
       "names": [],
       "sources": [
@@ -23626,6 +23712,11 @@
     },
     {
       "digest": "7df62978a2b7de8540e714152297743e0a622209a46a5ac9513fc0fad73ca23b",
+      "names": [],
+      "sources": []
+    },
+    {
+      "digest": "7e020ee1c248afac108504ec163b4f5955490768d86ad2c59f7adc38dba448bf",
       "names": [],
       "sources": []
     },

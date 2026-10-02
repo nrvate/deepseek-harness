@@ -6,6 +6,8 @@
 
 import type { Context } from '@deepseek-ai/cordis'
 import type { McpResourceProvider } from '@deepseek-ai/dsh-mcp-resources'
+import type {} from '@deepseek-ai/dsh-agent'
+import type {} from '@deepseek-ai/dsh-mcp-selection'
 import type { McpServerHandle } from '@deepseek-ai/dsh-mcp-status'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 
@@ -40,7 +42,8 @@ export function registerServerContext(ctx: Context, server: string, connection: 
       name: `mcp:${server}`,
       order: inner.systemPrompt.getSectionOrder('MCP_SERVERS'),
       interpolate: false,
-      text: () => connection.instructions(),
+      // A Session that does not use this server gets none of its instructions.
+      text: context => inner.get('mcpSelection')?.isActive(server, context.agent) === false ? '' : connection.instructions(),
     })
   })
 }

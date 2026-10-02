@@ -32,7 +32,8 @@ The [web bundle](../../bundle/web-app/README.md) mounts the controller as `mcp-s
 | `removeServer(id)` | Delete a row the profile patch owns |
 | `tools(id)` | The tools the server offers right now, with its connection state |
 | `reconnectServer(id)` | Ask the server's client to connect now; returns whether an attempt started |
-| `overview()` | Every row's connection state and usage counters in one call, with the Host clock they were read at |
+| `overview(sessionId?)` | Every row's connection state and usage counters in one call, with the Host clock they were read at; with a Session id, each row also carries that Session's share as `sessionStats` |
+| `setSessionServers(sessionId, active)` | Replace the servers one Session uses through [`mcp-selection`](../../mcp/mcp-selection/README.md); returns the servers in use |
 
 Every write returns `{ changed, application, target, error?, warnings? }`. `application` is `applied` after the Loader reconciled the change, `restart-required` when the profile has no hot reload, and `failed` with an `error.code` otherwise: `invalid-config`, `duplicate-server`, `confirmation-required`, `literal-secret`, `unknown-server`, `read-only`, `unreadable-patch`, or `operation-error`. A failed change leaves the patch file as it was.
 
@@ -76,7 +77,7 @@ A change that adds, removes, or reconnects a server changes the tool definitions
 
 - Connection state needs the status service: without it a row has no `status`, and a saved server whose first connection fails is listed with `fiberPhase: 'active'`.
 - Only rows the profile patch inserts can be edited, enabled, disabled, or removed; a row with a `!!js` value outside `env` and `headers` can be removed or toggled but not edited.
-- The form manages `transport`, `serverName`, the command or URL, `args`, `env`, `headers`, `cwd`, `toolCallTimeoutMs`, and `failOnStartupError`. Other keys such as `reconnect` stay as the file holds them.
+- The form manages `transport`, `serverName`, the command or URL, `args`, `env`, `headers`, `cwd`, `toolCallTimeoutMs`, `failOnStartupError`, and `defaultActive`. Other keys such as `reconnect` stay as the file holds them.
 - A URL that carries a token in its query string is stored as typed and shown in the editable `spec`; the list summary omits the query.
 - Profiles without HMR apply a change on the next start; `list` then shows the row with no live phase.
 

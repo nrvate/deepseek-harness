@@ -24,7 +24,7 @@ const stdioSpec: McpServerSpec = {
 const httpSpec: McpServerSpec = { transport: 'streamable-http', serverName: 'web', url: 'https://example.test/mcp', headers: {} }
 
 function row(rowId: string, rest: Partial<McpServerInfo> = {}): McpServerInfo {
-  return { id: id(rowId), serverName: rowId, transport: 'stdio', summary: 'mcp-files --root /tmp', enabled: true, fiberPhase: 'active', owned: true, ...rest }
+  return { id: id(rowId), serverName: rowId, transport: 'stdio', summary: 'mcp-files --root /tmp', enabled: true, defaultActive: true, fiberPhase: 'active', owned: true, ...rest }
 }
 
 const applied: McpChangeResult = { changed: true, application: 'applied', target: 'x' }
@@ -150,6 +150,9 @@ describe('McpServersCard', () => {
     fireEvent.change(within(dialog).getByLabelText(en.cwd), { target: { value: '/work' } })
     fireEvent.change(within(dialog).getByLabelText(en.timeout), { target: { value: '5000' } })
     fireEvent.click(within(dialog).getByRole('switch', { name: en.failOnStartup }))
+    expect(within(dialog).getByRole('switch', { name: en.defaultActive }).getAttribute('aria-checked')).toBe('true')
+    expect(within(dialog).getByText(en.defaultActiveHint)).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('switch', { name: en.defaultActive }))
     fireEvent.click(save)
 
     const confirm = await screen.findByRole('dialog', { name: en.confirmTitle })
@@ -161,7 +164,7 @@ describe('McpServersCard', () => {
 
     await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })
     expect(mcpServers.upsert).toHaveBeenLastCalledWith(
-      expect.objectContaining({ transport: 'stdio', serverName: 'new', command: 'run', args: ['--flag'], cwd: '/work', toolCallTimeoutMs: 5000, failOnStartupError: true }),
+      expect.objectContaining({ transport: 'stdio', serverName: 'new', command: 'run', args: ['--flag'], cwd: '/work', toolCallTimeoutMs: 5000, failOnStartupError: true, defaultActive: false }),
       { confirmedCommand: 'run --flag' },
     )
   })

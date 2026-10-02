@@ -1,0 +1,22 @@
+# Bilingual-pair consistency record for 2026-10-02-per-session-mcp-server-selection.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-10-02-per-session-mcp-server-selection.md
+/agent-note-per-session-mcp-server-selection:
+  en: e58fecf0abf3e593
+  zh: d6590d0e1d0cd9db
+/agent-note-per-session-mcp-server-selection/problem:
+  en: 5a8a70bdaf4c73cb
+  zh: 898f02945d4cb1b8
+/agent-note-per-session-mcp-server-selection/decision:
+  en: e1da8935548e00f7
+  zh: ae58ea97770c5fbf
+/agent-note-per-session-mcp-server-selection/alternatives-considered:
+  en: 1d8f973cb5fde447
+  zh: 7391e1b300c0b47f
+/agent-note-per-session-mcp-server-selection/consequences:
+  en: f57d86f612b8fa96
+  zh: fe4e3c88061748de
+/agent-note-per-session-mcp-server-selection/testing:
+  en: 19f54149239bd4a0
+  zh: 3c07904e05abeaa1

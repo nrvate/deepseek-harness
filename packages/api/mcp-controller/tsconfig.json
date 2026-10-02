@@ -43,6 +43,12 @@
     },
     {
       "path": "../../util/brand"
+    },
+    {
+      "path": "../../mcp/mcp-selection"
+    },
+    {
+      "path": "../../core/agent"
     }
   ]
 }

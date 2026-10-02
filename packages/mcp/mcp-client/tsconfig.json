@@ -43,6 +43,12 @@
     },
     {
       "path": "../../core/system-prompt"
+    },
+    {
+      "path": "../mcp-selection"
+    },
+    {
+      "path": "../../core/agent"
     }
   ]
 }

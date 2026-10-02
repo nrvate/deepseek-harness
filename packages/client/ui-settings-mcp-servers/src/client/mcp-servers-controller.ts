@@ -40,6 +40,8 @@ export interface EditorDraft {
   values: ValueDraft[]
   timeoutMs: string
   failOnStartupError: boolean
+  /** Whether a Session that has made no selection of its own uses the server. */
+  defaultActive: boolean
 }
 
 /** Why the editor's last save did not land. */
@@ -120,6 +122,7 @@ export interface McpServersFace {
   setTransport: (transport: McpServerSpec['transport']) => void
   editField: (field: DraftField, text: string) => void
   setFailOnStartup: (checked: boolean) => void
+  setDefaultActive: (checked: boolean) => void
   addValue: () => void
   editValue: (uid: number, change: Partial<Pick<ValueDraft, 'key' | 'mode' | 'text'>>) => void
   removeValue: (uid: number) => void
@@ -145,7 +148,7 @@ export interface McpServersFace {
 export function emptyDraft(): EditorDraft {
   return {
     rowId: undefined, transport: 'stdio', serverName: '', command: '', args: '', cwd: '', url: '',
-    values: [], timeoutMs: '', failOnStartupError: false,
+    values: [], timeoutMs: '', failOnStartupError: false, defaultActive: true,
   }
 }
 
@@ -172,6 +175,7 @@ export function draftFromSpec(id: McpEntryId, spec: McpServerSpec, uid: number):
     rowId: id, serverName: spec.serverName, values,
     timeoutMs: spec.toolCallTimeoutMs === undefined ? '' : String(spec.toolCallTimeoutMs),
     failOnStartupError: spec.failOnStartupError === true,
+    defaultActive: spec.defaultActive !== false,
   }
   const draft: EditorDraft = spec.transport === 'stdio'
     ? { ...common, transport: 'stdio', command: spec.command, args: spec.args.join('\n'), cwd: spec.cwd ?? '', url: '' }
@@ -205,6 +209,7 @@ export function specFromDraft(draft: EditorDraft): McpServerSpec | null {
     serverName: draft.serverName.trim(),
     ...timeout === '' ? {} : { toolCallTimeoutMs: Number(timeout) },
     ...draft.failOnStartupError ? { failOnStartupError: true } : {},
+    ...draft.defaultActive ? {} : { defaultActive: false },
   }
   if (draft.transport === 'streamable-http') return { transport: 'streamable-http', url: draft.url.trim(), headers: values, ...common }
   const cwd = draft.cwd.trim()
@@ -323,6 +328,7 @@ export class McpServersController {
       setTransport: (transport) => { this.patchDraft({ transport, values: [] }) },
       editField: (field, text) => { this.patchDraft({ [field]: text }) },
       setFailOnStartup: (checked) => { this.patchDraft({ failOnStartupError: checked }) },
+      setDefaultActive: (checked) => { this.patchDraft({ defaultActive: checked }) },
       addValue: () => { this.addValue() },
       editValue: (uid, change) => { this.editValue(uid, change) },
       removeValue: (uid) => { this.removeValue(uid) },

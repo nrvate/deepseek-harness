@@ -25,7 +25,7 @@ import type { ServerContext } from './server-context.ts'
 import { MAX_TIMER_DELAY_MS } from '@deepseek-ai/dsh-timeout'
 import { createTransport } from './transport.ts'
 import { syncTools } from './tools.ts'
-import type { ToolBridgeOptions, ToolDisposers } from './tools.ts'
+import type { McpCallRecord, ToolBridgeOptions, ToolDisposers } from './tools.ts'
 import type { Config } from './index.ts'
 
 /** Automatic reconnect policy for one MCP server connection. */
@@ -59,8 +59,8 @@ const CHARS_PER_TOKEN = 4
 // generation is gone; timing out fails closed instead of overlapping children.
 const GENERATION_CLOSE_TIMEOUT_MS = 5_000
 
-/** Running usage sums of one connection supervisor, in characters and milliseconds. */
-interface UsageTotals {
+/** Running usage sums in characters and milliseconds, overall or for one Session. */
+interface Usage {
   calls: number
   errors: number
   inputChars: number
@@ -68,6 +68,30 @@ interface UsageTotals {
   totalMs: number
   maxMs: number
   lastCallAt?: number
+  /** Per-tool counts, keyed by the server's own tool name. */
+  tools: Map<string, McpToolUsage>
+}
+
+function emptyUsage(): Usage {
+  return { calls: 0, errors: 0, inputChars: 0, outputChars: 0, totalMs: 0, maxMs: 0, tools: new Map() }
+}
+
+/** Add one finished call to a usage sum. */
+function recordCall(usage: Usage, call: McpCallRecord): void {
+  usage.calls += 1
+  usage.inputChars += call.inputChars
+  usage.outputChars += call.outputChars
+  usage.totalMs += call.ms
+  usage.maxMs = Math.max(usage.maxMs, call.ms)
+  usage.lastCallAt = Date.now() - call.ms
+  const tool = usage.tools.get(call.tool) ?? { name: call.tool, calls: 0, errors: 0, totalMs: 0 }
+  tool.calls += 1
+  tool.totalMs += call.ms
+  if (call.failed) {
+    usage.errors += 1
+    tool.errors += 1
+  }
+  usage.tools.set(call.tool, tool)
 }
 
 /** Fully resolved reconnect policy captured at plugin load. */
@@ -187,8 +211,9 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
   let lastError: string | undefined
   let registeredTools: McpToolInfo[] = []
   /** Usage since this plugin instance loaded; a reconnect keeps it. */
-  const totals: UsageTotals = { calls: 0, errors: 0, inputChars: 0, outputChars: 0, totalMs: 0, maxMs: 0 }
-  const usage = new Map<string, McpToolUsage>()
+  const overall = emptyUsage()
+  /** Usage of each Session that called this server, kept for the life of the plugin instance. */
+  const bySession = new Map<string, Usage>()
   let schemaChars = 0
   let connections = 0
   let serverInfo: McpServerStats['serverInfo']
@@ -207,20 +232,11 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
     onTools: (next, chars) => { registeredTools = next; schemaChars = chars; notify() },
     onCall: (call) => {
       // Counters change on every call and are read on demand, so they notify no observer.
-      totals.calls += 1
-      totals.inputChars += call.inputChars
-      totals.outputChars += call.outputChars
-      totals.totalMs += call.ms
-      totals.maxMs = Math.max(totals.maxMs, call.ms)
-      totals.lastCallAt = Date.now() - call.ms
-      const tool = usage.get(call.tool) ?? { name: call.tool, calls: 0, errors: 0, totalMs: 0 }
-      tool.calls += 1
-      tool.totalMs += call.ms
-      if (call.failed) {
-        totals.errors += 1
-        tool.errors += 1
-      }
-      usage.set(call.tool, tool)
+      recordCall(overall, call)
+      if (call.session === undefined) return
+      const session = bySession.get(call.session) ?? emptyUsage()
+      recordCall(session, call)
+      bySession.set(call.session, session)
     },
   }
   // The initial sync uses 'throw' when failOnStartupError is configured, so
@@ -466,6 +482,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
   })
 
   const handle: McpServerHandle = {
+    defaultActive: config.defaultActive ?? true,
     status(): McpServerStatus {
       return {
         serverName: config.serverName,
@@ -478,7 +495,8 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
       }
     },
     tools: () => registeredTools,
-    stats(): McpServerStats {
+    stats(session?: string): McpServerStats {
+      const totals = session === undefined ? overall : bySession.get(session) ?? emptyUsage()
       return {
         calls: totals.calls,
         errors: totals.errors,
@@ -492,7 +510,7 @@ export function startConnection(ctx: Context, config: Config, policy: ResolvedRe
         ...serverInfo === undefined ? {} : { serverInfo },
         ...protocolVersion === undefined ? {} : { protocolVersion },
         transport: config.transport,
-        tools: [...usage.values()]
+        tools: [...totals.tools.values()]
           .map(tool => ({ ...tool }))
           .sort((left, right) => right.calls - left.calls || left.name.localeCompare(right.name)),
       }

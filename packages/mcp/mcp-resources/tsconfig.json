@@ -25,6 +25,12 @@
     },
     {
       "path": "../../util/values"
+    },
+    {
+      "path": "../mcp-selection"
+    },
+    {
+      "path": "../../core/agent"
     }
   ]
 }

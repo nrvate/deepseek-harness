@@ -15,11 +15,13 @@ import { readPluginInventory } from '@deepseek-ai/dsh-host-plugin-inventory'
 import type {} from '@deepseek-ai/dsh-hmr'
 import type {} from '@deepseek-ai/dsh-plugin-manager'
 import type {} from '@deepseek-ai/dsh-mcp-status'
+import type {} from '@deepseek-ai/dsh-mcp-selection'
+import type { Agent } from '@deepseek-ai/dsh-agent'
 import { commandLine, MCP_CLIENT_MODULE, readOwnedRows, removeRow, setRowEnabled, upsertRow, type OwnedRow } from './patch.ts'
 import { displayUrl, hasEmbeddedCredentials, messageOf, redact, validateSpec } from './spec.ts'
 import type {
   McpChangeResult, McpEntryId, McpError, McpOverview, McpReadOnlyReason, McpReconnectResult, McpServerInfo, McpServerSpec,
-  McpToolsResult, McpUpsertOptions,
+  McpSessionServers, McpToolsResult, McpUpsertOptions,
 } from './types.ts'
 
 export type * from './types.ts'
@@ -108,6 +110,7 @@ export class McpServersController extends TypertRemoteService {
           ? 'embedded-credentials' as const : undefined
         return {
           ...base, serverName: mine.spec.serverName, transport: mine.spec.transport, owned: true,
+          defaultActive: mine.spec.defaultActive ?? true,
           summary: mine.spec.transport === 'stdio' ? commandLine(mine.spec) : displayUrl(mine.spec.url),
           ...reason === undefined ? { spec: redact(mine.spec) } : { readOnlyReason: reason },
         }
@@ -117,6 +120,7 @@ export class McpServersController extends TypertRemoteService {
       const transport = config.transport === 'streamable-http' ? 'streamable-http' as const : 'stdio' as const
       return {
         ...base, serverName: text(config.serverName), transport, owned: mine !== undefined,
+        defaultActive: config.defaultActive !== false,
         summary: transport === 'stdio' ? text(config.command) : displayUrl(text(config.url)),
         readOnlyReason: (mine === undefined ? 'unaddressable' : 'custom-expression') satisfies McpReadOnlyReason,
       }
@@ -214,22 +218,40 @@ export class McpServersController extends TypertRemoteService {
 
   /**
    * Read every configured server's connection state and usage counters in one call.
+   * @param sessionId - Session whose own share of the counters to include; omitted reads the totals only.
    * @returns one entry per row in composition order, with the Host clock the figures were read at.
    */
   @Remote
-  async overview(): Promise<McpOverview> {
+  async overview(sessionId?: string): Promise<McpOverview> {
     const statuses = this.ctx.get('mcpStatus')
     return {
       readAt: Date.now(),
       servers: (await this.list()).map((row) => {
         const stats = row.status === undefined ? undefined : statuses?.stats(row.serverName)
+        const sessionStats = stats === undefined || sessionId === undefined ? undefined : statuses?.stats(row.serverName, sessionId)
         return {
-          id: row.id, serverName: row.serverName, enabled: row.enabled,
+          id: row.id, serverName: row.serverName, enabled: row.enabled, defaultActive: row.defaultActive,
           ...row.status === undefined ? {} : { status: row.status },
           ...stats === undefined ? {} : { stats },
+          ...sessionStats === undefined ? {} : { sessionStats },
         }
       }),
     }
+  }
+
+  /**
+   * Replace the servers one Session uses. The choice is logged on the Session and
+   * takes effect on its next model request.
+   * @param agent - target Agent resolved from the Session identity on the wire.
+   * @param active - every server name the Session uses from now on; an empty list uses none.
+   * @returns the servers in use afterwards.
+   * @throws when a name is not a configured server, or the profile mounts no selection service.
+   */
+  @Remote
+  setSessionServers(agent: Agent, active: string[]): McpSessionServers {
+    const selection = this.ctx.get('mcpSelection')
+    if (selection === undefined) throw new Error('This profile does not support choosing MCP servers per session')
+    return { active: selection.select(agent, active) }
   }
 
   /**

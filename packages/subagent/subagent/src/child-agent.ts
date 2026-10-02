@@ -27,6 +27,7 @@ import type {} from '@deepseek-ai/dsh-permission-presets'
 // keeps its model-facing rows on the host plane, where the child already sees
 // them through the tool registry's global layer.
 import type {} from '@deepseek-ai/dsh-agent-preset-registry'
+import type {} from '@deepseek-ai/dsh-mcp-selection'
 import { delegationDepthOf } from './depth.ts'
 
 /** Thrown when starting a child would exceed the requested depth cap. */
@@ -233,6 +234,8 @@ export interface DelegatedPolicyOverrides {
    * delegation, so its asks are rejected deterministically.
    */
   readonly approvalPolicy: 'never' | undefined
+  /** The MCP servers the parent session selected for itself, or `undefined` while it follows the configured defaults. */
+  readonly mcpServers: readonly string[] | undefined
 }
 
 /**
@@ -242,7 +245,8 @@ export interface DelegatedPolicyOverrides {
  * inherited only through the in-process DSH path so either can replace a stale
  * same-bundle fork value. Only the parent session's explicit sandbox override
  * is captured — never deployment defaults or one-shot grants — and the approval
- * policy is pinned to `'never'` regardless of the parent's own policy.
+ * policy is pinned to `'never'` regardless of the parent's own policy. The
+ * parent's own MCP server selection is captured so the child uses the same servers.
  * @param parent - the delegating parent agent.
  * @returns the sandbox override (or `undefined` without one) and the approval pin.
  */
@@ -252,6 +256,7 @@ export function captureDelegatedPolicyOverrides(parent: Agent): DelegatedPolicyO
     permissionPreset: preset === 'auto' || preset === 'danger-full-access' ? preset : undefined,
     sandboxMode: parent.ctx.get('sandboxPolicy')?.overrideOf(parent.session),
     approvalPolicy: parent.ctx.get('approval') === undefined ? undefined : 'never',
+    mcpServers: parent.ctx.get('mcpSelection')?.logged(parent.session),
   }
 }
 
@@ -276,6 +281,9 @@ export function appendDelegatedPolicyOverrides(
   }
   if (overrides.permissionPreset !== undefined) {
     childSession.append('permission/preset', { preset: overrides.permissionPreset })
+  }
+  if (overrides.mcpServers !== undefined) {
+    childSession.append('mcp/servers', { active: [...overrides.mcpServers] })
   }
 }
 

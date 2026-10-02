@@ -24,7 +24,7 @@ const httpSpec: McpServerSpec = {
 function row(rowId: string, spec?: McpServerSpec, rest: Partial<McpServerInfo> = {}): McpServerInfo {
   return {
     id: id(rowId), serverName: spec?.serverName ?? rowId, transport: spec?.transport ?? 'stdio', summary: 'summary',
-    enabled: true, fiberPhase: 'active', owned: spec !== undefined, ...spec === undefined ? {} : { spec }, ...rest,
+    enabled: true, defaultActive: true, fiberPhase: 'active', owned: spec !== undefined, ...spec === undefined ? {} : { spec }, ...rest,
   }
 }
 
@@ -89,6 +89,9 @@ describe('draft conversion', () => {
   it('round-trips a staged server back to its spec', () => {
     expect(specFromDraft(draftFromSpec(id('mcp-files'), stdioSpec, 0).draft)).toEqual(stdioSpec)
     expect(specFromDraft(draftFromSpec(id('mcp-web'), httpSpec, 0).draft)).toEqual(httpSpec)
+    const optIn = { ...httpSpec, defaultActive: false }
+    expect(draftFromSpec(id('mcp-web'), optIn, 0).draft.defaultActive).toBe(false)
+    expect(specFromDraft(draftFromSpec(id('mcp-web'), optIn, 0).draft)).toEqual(optIn)
   })
 
   it('trims fields, drops blank arguments and names, and lets a later name win', () => {
@@ -193,6 +196,7 @@ describe('editing', () => {
     face.editField('serverName', 'srv')
     face.editField('command', 'run')
     face.setFailOnStartup(true)
+    face.setDefaultActive(false)
     face.addValue()
     const uid = controller.getSnapshot().editor?.draft.values[0]?.uid ?? -1
     face.editValue(uid, { key: 'K', mode: 'literal', text: 'v' })
@@ -200,8 +204,12 @@ describe('editing', () => {
     const second = controller.getSnapshot().editor?.draft.values[1]?.uid ?? -1
     face.removeValue(second)
     expect(controller.getSnapshot().editor?.draft).toMatchObject({
-      serverName: 'srv', command: 'run', failOnStartupError: true, values: [{ key: 'K', mode: 'literal', text: 'v' }],
+      serverName: 'srv', command: 'run', failOnStartupError: true, defaultActive: false, values: [{ key: 'K', mode: 'literal', text: 'v' }],
     })
+    // Off is written; on is the plugin default and stays out of the file.
+    expect(specFromDraft(controller.getSnapshot().editor!.draft)).toMatchObject({ defaultActive: false })
+    face.setDefaultActive(true)
+    expect(specFromDraft(controller.getSnapshot().editor!.draft)).not.toHaveProperty('defaultActive')
     face.setTransport('streamable-http')
     expect(controller.getSnapshot().editor?.draft).toMatchObject({ transport: 'streamable-http', values: [] })
   })
@@ -211,6 +219,7 @@ describe('editing', () => {
     const before = controller.getSnapshot()
     face.editField('serverName', 'x')
     face.setFailOnStartup(true)
+    face.setDefaultActive(false)
     face.addValue()
     face.editValue(0, { key: 'x' })
     face.removeValue(0)

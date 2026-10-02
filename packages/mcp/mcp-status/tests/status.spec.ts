@@ -12,10 +12,11 @@ function handle(serverName: string) {
   const listeners = new Set<() => void>()
   let current = status(serverName)
   const served: McpServerHandle = {
+    defaultActive: serverName !== 'b',
     status: () => current,
     tools: () => [{ name: 'echo', publicName: `mcp__${serverName}__echo`, description: 'Echo', parameters: [] }],
     reconnect,
-    stats: () => ({ calls: 3, errors: 1, inputTokens: 10, outputTokens: 20, totalMs: 30, maxMs: 15, connections: 1, schemaTokens: 5, transport: 'stdio', tools: [] }),
+    stats: session => ({ calls: session === undefined ? 3 : 1, errors: 1, inputTokens: 10, outputTokens: 20, totalMs: 30, maxMs: 15, connections: 1, schemaTokens: 5, transport: 'stdio', tools: [] }),
     subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
   }
   return {
@@ -51,6 +52,8 @@ it('lists registered servers and answers per server', async () => {
   expect(ctx.mcpStatus.tools('a')).toHaveLength(1)
   expect(ctx.mcpStatus.tools('missing')).toEqual([])
   expect(ctx.mcpStatus.stats('a')).toMatchObject({ calls: 3, errors: 1 })
+  expect(ctx.mcpStatus.stats('a', 'session-1')).toMatchObject({ calls: 1 })
+  expect(ctx.mcpStatus.servers()).toEqual([{ serverName: 'a', defaultActive: true }, { serverName: 'b', defaultActive: false }])
   expect(ctx.mcpStatus.stats('missing')).toBeUndefined()
 })
 

@@ -125,6 +125,25 @@ describe('continuable policy inheritance', () => {
     },
   )
 
+  it('gives the child the MCP servers its parent selected, and nothing when the parent follows the defaults', { timeout: 20_000 }, async () => {
+    const { ctx, parent } = await setup([textResponse('first child'), textResponse('second child')])
+    const logged = vi.fn<(session: Session) => readonly string[] | undefined>(() => undefined)
+    ctx.provide('mcpSelection', { logged } as never)
+    const selections = async (childId: SessionId): Promise<unknown[]> => {
+      await waitNoActivation(ctx, childId)
+      const stored = await loadStoredSession(ctx.sessionPersistence, childId)
+      return stored.events.filter(event => event.type === 'mcp/servers').map(event => event.data)
+    }
+
+    const defaults = await ctx.subagents.startContinuable(startSpec(parent))
+    expect(await selections(defaults.childId)).toEqual([])
+
+    logged.mockReturnValue(['docs'])
+    const selected = await ctx.subagents.startContinuable(startSpec(parent))
+    expect(await selections(selected.childId)).toEqual([{ active: ['docs'] }])
+    expect(logged).toHaveBeenCalledWith(parent.session)
+  })
+
   it.each([
     { seedPreset: 'auto', preset: 'danger-full-access' },
     { seedPreset: 'danger-full-access', preset: 'auto' },

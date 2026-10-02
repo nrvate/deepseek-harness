@@ -1,9 +1,11 @@
 /**
  * The MCP servers page, browser half: the add, edit, enable, and remove
- * controls over the `mcpServers` Remote, and the status item below the prompt
- * box. The page registers into the Plugins page's `plugins.item` slot and the
- * item into `conversation.composer.dock`, both only while the Host serves that
- * namespace, so a deployment without the controller shows no trace of either.
+ * controls over the `mcpServers` Remote, the status item below the prompt box,
+ * and the per-Session server selector in the composer tool row. The page
+ * registers into the Plugins page's `plugins.item` slot, the item into
+ * `conversation.composer.dock`, and the selector into `conversation.input.right`,
+ * all only while the Host serves that namespace, so a deployment without the
+ * controller shows no trace of them.
  * Outcome toasts live in `shell.overlay`, which outlives the Plugins panel.
  */
 
@@ -24,6 +26,7 @@ import { McpServersCard } from './McpServersCard.tsx'
 import { McpServersToast, type McpServersToastFace } from './McpServersToast.tsx'
 import { McpServersController } from './mcp-servers-controller.ts'
 import { McpStatusItem } from './McpStatusItem.tsx'
+import { McpServerSelect } from './McpServerSelect.tsx'
 import { McpTrayController } from './mcp-tray-controller.ts'
 import { MCP_UI_SETTINGS_NAMESPACE, type McpUiSettings } from '../mcp-ui-settings.ts'
 import { en, zh, type McpServersLocaleKey } from './locales.ts'
@@ -32,6 +35,7 @@ export type { McpServersCardProps } from './McpServersCard.tsx'
 export type { McpServersToastProps } from './McpServersToast.tsx'
 export type { McpServersFace, McpServersState } from './mcp-servers-controller.ts'
 export type { McpStatusItemProps } from './McpStatusItem.tsx'
+export type { McpServerSelectProps } from './McpServerSelect.tsx'
 export type { McpTrayFace, McpTrayState } from './mcp-tray-controller.ts'
 export type { McpServersLocaleKey } from './locales.ts'
 
@@ -83,4 +87,8 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
     name: 'conversation.composer.dock', id: 'mcp-status', order: 20, locale: NS, inject: () => trayFace,
   }, McpStatusItem))
+  // The tool row's right group ends at the model selector, so this entry sits between the permission and model controls.
+  ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
+    name: 'conversation.input.right', id: 'mcp-servers', order: 90, locale: NS, inject: () => trayFace,
+  }, McpServerSelect))
 }

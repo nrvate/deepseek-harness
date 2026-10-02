@@ -1,10 +1,12 @@
 /**
- * State of the MCP status item below the prompt box: every configured server's
- * connection state and usage, read from the Host when the item mounts, when the
- * Host reports a change, and on a short interval while the panel is open.
+ * State shared by the MCP status item below the prompt box and the server
+ * selector in the composer: every configured server's connection state and
+ * usage, read from the Host when either mounts, when the Host reports a change,
+ * and on a short interval while the status panel is open. It also sends one
+ * Session's server selection to the Host.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import type { McpServerOverview } from '@deepseek-ai/dsh-api-remotes/client'
+import type { McpServerOverview, SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
@@ -28,6 +30,10 @@ export interface McpTrayState {
   readonly servers: readonly McpServerOverview[]
   /** Host clock of the last read, in epoch milliseconds. */
   readonly readAt: number
+  /** The Session whose own figures `servers[].sessionStats` hold; undefined before the first read. */
+  readonly statsSession: SessionId | undefined
+  /** Why the last selection change did not land; cleared by the next one that does. */
+  readonly problem: string | undefined
   readonly open: boolean
 }
 
@@ -37,9 +43,12 @@ export interface McpTrayFace {
     /** Item snapshot bound by the renderer as useMcpTray. */
     mcpTray: SnapshotStore<McpTrayState>
   }
-  load: () => void
+  /** Read the servers for the Session on screen. */
+  load: (sessionId: SessionId) => void
   setOpen: (open: boolean) => void
   openManager: () => void
+  /** Replace the servers one Session uses; resolves to whether the Host applied the selection. */
+  selectServers: (sessionId: SessionId, servers: readonly string[]) => Promise<boolean>
 }
 
 /** Reads the servers' overview for the status item and polls it while the panel is open. */
@@ -49,6 +58,8 @@ export class McpTrayController {
   private timer: ReturnType<typeof setInterval> | undefined
   private generation = 0
   private disposed = false
+  /** The Session on screen, whose share of the usage each read asks for. */
+  private session: SessionId | undefined
 
   /**
    * @param ctx - the plugin's context, whose `remote.mcpServers` namespace answers.
@@ -56,14 +67,13 @@ export class McpTrayController {
    */
   constructor(private readonly ctx: ClientContext, private readonly form: ConfigForm<McpUiSettings>) {
     this.store = createSnapshotStore<McpTrayState>({
-      visible: this.preference(), loaded: false, servers: [], readAt: 0, open: false,
+      visible: this.preference(), loaded: false, servers: [], readAt: 0, statsSession: undefined, problem: undefined, open: false,
     })
     this.unsubscribe = form.subscribe(() => {
       const visible = this.preference()
       if (visible === this.getSnapshot().visible) return
       if (!visible) this.stopPolling()
       this.patch({ visible, open: visible && this.getSnapshot().open })
-      if (visible) void this.read()
     })
   }
 
@@ -88,18 +98,25 @@ export class McpTrayController {
     this.unsubscribe()
   }
 
-  /** Re-read after the Host reports a change, once the item has mounted and while it is shown. */
+  /** Re-read after the Host reports a change, once a consumer has mounted. */
   refresh(): void {
-    if (this.getSnapshot().loaded && this.getSnapshot().visible) void this.read()
+    if (this.getSnapshot().loaded) void this.read()
   }
 
   private async read(): Promise<void> {
     const generation = ++this.generation
-    const result = await this.ctx.remote.mcpServers.overview()
+    const session = this.session
+    const result = await this.ctx.remote.mcpServers.overview(session)
     if (this.disposed || generation !== this.generation) return
     // A failed read keeps the figures already on screen; the next read replaces them.
-    if (result.ok) this.patch({ loaded: true, servers: result.value.servers, readAt: result.value.readAt })
+    if (result.ok) this.patch({ loaded: true, servers: result.value.servers, readAt: result.value.readAt, statsSession: session })
     else this.patch({ loaded: true })
+  }
+
+  private async select(sessionId: SessionId, servers: readonly string[]): Promise<boolean> {
+    const result = await this.ctx.remote.mcpServers.setSessionServers(sessionId, [...servers])
+    if (!this.disposed) this.patch({ problem: result.ok ? undefined : result.error.message })
+    return result.ok
   }
 
   private stopPolling(): void {
@@ -123,12 +140,16 @@ export class McpTrayController {
   inject(): McpTrayFace {
     return {
       hooks: { mcpTray: this.store },
-      load: () => { if (this.getSnapshot().visible) void this.read() },
+      load: (sessionId) => {
+        this.session = sessionId
+        void this.read()
+      },
       setOpen: (open) => { this.setOpen(open) },
       openManager: () => {
         this.setOpen(false)
         this.ctx.layout.selectPanel(PLUGINS_PANEL)
       },
+      selectServers: (sessionId, servers) => this.select(sessionId, servers),
     }
   }
 }

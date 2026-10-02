@@ -91,14 +91,28 @@ export interface McpServerStats {
   tools: McpToolUsage[]
 }
 
+/** One configured server and whether new Sessions start with it active. */
+export interface McpConfiguredServer {
+  /** The configured `serverName`. */
+  serverName: string
+  /** Whether a Session that has made no selection of its own uses this server. */
+  defaultActive: boolean
+}
+
 /** What a client hands the registry for one server; every read reflects the live connection. */
 export interface McpServerHandle {
+  /** Whether a Session that has made no selection of its own uses this server, as configured. */
+  readonly defaultActive: boolean
   /** @returns the current connection state. */
   status(): McpServerStatus
   /** @returns the tools registered from the server right now. */
   tools(): readonly McpToolInfo[]
-  /** @returns usage counters and connection facts since the client loaded. */
-  stats(): McpServerStats
+  /**
+   * Read usage counters and connection facts since the client loaded.
+   * @param session - a Session id; when given, the counters cover only that Session's calls.
+   * @returns the counters, with the connection facts either way.
+   */
+  stats(session?: string): McpServerStats
   /**
    * Connect now instead of waiting for the next scheduled attempt, and restart the retry budget.
    * @returns false when a connection is already live or being made, so nothing changed.

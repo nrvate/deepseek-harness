@@ -137,6 +137,58 @@ register(server: string, provider: McpResourceProvider): () => void
 
 Source: [`packages/mcp/mcp-resources/src/index.ts`](../../packages/mcp/mcp-resources/src/index.ts)
 
+<a id="ctxmcpselection--mcpselection"></a>
+
+### `ctx.mcpSelection` — `McpSelection`
+
+Decides and enforces which configured MCP servers each Session uses.
+
+```ts cordis-catalog
+/**
+ * Read the selection a Session logged for itself.
+ * @param session - the Session to read.
+ * @returns the logged server names, or undefined while the Session follows the configured defaults.
+ */
+logged(session: Session): readonly string[] | undefined
+
+/**
+ * Resolve the servers a Session uses now: its logged selection restricted to
+ * the servers still configured, or the servers configured as active by default.
+ * @param session - the Session to resolve for.
+ * @returns the active server names, in the order the servers are configured.
+ */
+active(session: Session): string[]
+
+/**
+ * Whether one server reaches an agent's model requests.
+ * @param server - configured server name.
+ * @param agent - the agent whose Session decides; a caller with no agent is not restricted.
+ * @returns false only when the agent's Session does not use the server.
+ */
+isActive(server: string, agent: Agent | undefined): boolean
+
+/**
+ * Replace a Session's selection, log it, and apply it to the agent's tools at once.
+ * A request that names the servers already in use logs nothing.
+ * @param agent - the agent whose Session selects.
+ * @param servers - every server the Session uses from now on; duplicates are dropped.
+ * @returns the servers in use afterwards, in configured order.
+ * @throws when a name is not a configured server.
+ */
+select(agent: Agent, servers: readonly string[]): string[]
+
+/**
+ * Hide tools that serve MCP servers in general from every Session that uses no server.
+ * @param names - registered tool names, such as the shared resource tools.
+ * @returns the disposer that stops hiding them.
+ */
+hideWhenNone(names: readonly string[]): () => void
+```
+
+Types: [Agent](core.md) · [Session](session.md)
+
+Source: [`packages/mcp/mcp-selection/src/index.ts`](../../packages/mcp/mcp-selection/src/index.ts)
+
 <a id="ctxmcpserverscontroller--mcpserverscontroller"></a>
 
 ### `ctx.mcpServersController` — `McpServersController`
@@ -186,9 +238,20 @@ Remote owner of the profile's MCP server rows.
 
 /**
  * Read every configured server's connection state and usage counters in one call.
+ * @param sessionId - Session whose own share of the counters to include; omitted reads the totals only.
  * @returns one entry per row in composition order, with the Host clock the figures were read at.
  */
-@Remote async overview(): Promise<McpOverview>
+@Remote async overview(sessionId?: string): Promise<McpOverview>
+
+/**
+ * Replace the servers one Session uses. The choice is logged on the Session and
+ * takes effect on its next model request.
+ * @param agent - target Agent resolved from the Session identity on the wire.
+ * @param active - every server name the Session uses from now on; an empty list uses none.
+ * @returns the servers in use afterwards.
+ * @throws when a name is not a configured server, or the profile mounts no selection service.
+ */
+@Remote setSessionServers(agent: Agent, active: string[]): McpSessionServers
 
 /**
  * Ask one server's client to connect now instead of waiting out its retry delay, restarting its retry budget.
@@ -197,6 +260,8 @@ Remote owner of the profile's MCP server rows.
  */
 @Remote async reconnectServer(id: McpEntryId): Promise<McpReconnectResult>
 ```
+
+Types: [Agent](core.md)
 
 Source: [`packages/api/mcp-controller/src/index.ts`](../../packages/api/mcp-controller/src/index.ts)
 
@@ -222,6 +287,12 @@ register(server: string, handle: McpServerHandle): () => void
 list(): McpServerStatus[]
 
 /**
+ * Name every registered server with its configured default.
+ * @returns one entry per registration, in registration order.
+ */
+servers(): McpConfiguredServer[]
+
+/**
  * Read one server's state.
  * @param server - configured server name.
  * @returns its status, or undefined when no client registered it.
@@ -238,9 +309,10 @@ tools(server: string): readonly McpToolInfo[]
 /**
  * Read one server's usage counters and connection facts.
  * @param server - configured server name.
+ * @param session - a Session id; when given, the counters cover only that Session's calls.
  * @returns its stats, or undefined when no client registered it.
  */
-stats(server: string): McpServerStats | undefined
+stats(server: string, session?: string): McpServerStats | undefined
 
 /**
  * Ask one server's client to connect now.

@@ -51,8 +51,6 @@ Disposed-cause cancellation starts resource cleanup before AgentHandle waits for
 
 The [MCP helper](src/mcp.ts) connects within serial `agent/created`; [AgentLoop](../../core/agent-loop/README.md#understand-the-implementation) holds queued input and owns creation rollback. Prompt assembly reads the initialized catalog. The helper retains the provider registration through resource cleanup and uses the [MCP client](../../mcp/mcp-client/README.md) for transport, schema discovery, result conversion, and durable image admission. Its browser tools run without per-call approval (`toolPolicy: { default: allow }`): enabling browser use is the consent to them, and this helper already scopes them to their Session.
 
-No runtime invariant companion is published: resource ownership and pending work are private lifecycle state, with no separately maintained runtime projection to compare. Owner tests cover isolation, disposal, and failed cleanup.
-
 </details>
 
 -----

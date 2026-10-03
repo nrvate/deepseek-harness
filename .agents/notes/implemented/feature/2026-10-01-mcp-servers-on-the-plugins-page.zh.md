@@ -6,11 +6,11 @@ Status: implemented
 
 ## 问题
 
-用户通过在 profile 的 `cordis.patch.yml`、家目录补丁或 `--patch` 覆盖文件中手写 `@deepseek-ai/dsh-mcp-client` 条目来添加 MCP 服务器。[MCP 客户端](2026-07-07-mcp-client-plugin.zh.md)的 schema 没有 `.volatile()` 字段，因此通用的[插件配置表单](../architecture/2026-09-16-plugin-configuration-on-the-plugins-page.zh.md)无法编辑它。`ConfigEditor` 只能编辑已有条目的 `config`；没有任何写入路径可以插入或删除条目。客户端曾只记录连接状态而不对外暴露，因此保存后连接失败的服务器仍显示为活动插件，且没有工具。
+用户通过在 profile 的 `cordis.patch.yml`、家目录补丁或 `--patch` 覆盖文件中手写 `@deepseek-ai/dsh-mcp-client` 条目来添加 MCP 服务器。[MCP 客户端](../../archived/feature/2026-07-07-mcp-client-plugin.md)的 schema 没有 `.volatile()` 字段，因此通用的[插件配置表单](../../archived/architecture/2026-09-16-plugin-configuration-on-the-plugins-page.md)无法编辑它。`ConfigEditor` 只能编辑已有条目的 `config`；没有任何写入路径可以插入或删除条目。客户端曾只记录连接状态而不对外暴露，因此保存后连接失败的服务器仍显示为活动插件，且没有工具。
 
 ## 决策
 
-**插件页面列出、添加、编辑、启用、停用和删除当前 profile 补丁中的 MCP 服务器。**[设置页只保留只读清单](../architecture/2026-09-09-plugin-management-in-the-web-sidebar.zh.md)，因此该页面是官方分组中的一个 `plugins.item` 条目，而不是设置页标签。
+**插件页面列出、添加、编辑、启用、停用和删除当前 profile 补丁中的 MCP 服务器。**[设置页只保留只读清单](../../archived/architecture/2026-09-09-plugin-management-in-the-web-sidebar.md)，因此该页面是官方分组中的一个 `plugins.item` 条目，而不是设置页标签。
 
 **所有写入由 Host 的 `mcpServers` Remote 负责。** `@deepseek-ai/dsh-api-mcp-controller` 继承 `TypertRemoteService`，提供 `list`、`upsert`、`setEnabled` 和 `removeServer`：
 

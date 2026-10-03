@@ -6,11 +6,11 @@ English | [中文](2026-10-01-mcp-servers-on-the-plugins-page.zh.md)
 
 ## Problem
 
-A user adds an MCP server by writing a `@deepseek-ai/dsh-mcp-client` entry into the profile `cordis.patch.yml`, a home patch, or a `--patch` overlay file. The [MCP client](2026-07-07-mcp-client-plugin.md) schema has no `.volatile()` fields, so the generic [plugin configuration forms](../architecture/2026-09-16-plugin-configuration-on-the-plugins-page.md) cannot edit it. `ConfigEditor` edits only the `config` of an existing entry; no write path inserts or removes an entry. The client logged its connection state and exposed none, so a saved server that failed to connect still showed as an active plugin with no tools.
+A user adds an MCP server by writing a `@deepseek-ai/dsh-mcp-client` entry into the profile `cordis.patch.yml`, a home patch, or a `--patch` overlay file. The [MCP client](../../archived/feature/2026-07-07-mcp-client-plugin.md) schema has no `.volatile()` fields, so the generic [plugin configuration forms](../../archived/architecture/2026-09-16-plugin-configuration-on-the-plugins-page.md) cannot edit it. `ConfigEditor` edits only the `config` of an existing entry; no write path inserts or removes an entry. The client logged its connection state and exposed none, so a saved server that failed to connect still showed as an active plugin with no tools.
 
 ## Decision
 
-**The Plugins page lists, adds, edits, enables, disables, and removes MCP servers in the active profile patch.** [Settings keeps only the read-only inventory](../architecture/2026-09-09-plugin-management-in-the-web-sidebar.md), so the page is a `plugins.item` entry in the Official group, not a Settings tab.
+**The Plugins page lists, adds, edits, enables, disables, and removes MCP servers in the active profile patch.** [Settings keeps only the read-only inventory](../../archived/architecture/2026-09-09-plugin-management-in-the-web-sidebar.md), so the page is a `plugins.item` entry in the Official group, not a Settings tab.
 
 **A Host `mcpServers` Remote owns every write.** `@deepseek-ai/dsh-api-mcp-controller` extends `TypertRemoteService` with `list`, `upsert`, `setEnabled`, and `removeServer`:
 

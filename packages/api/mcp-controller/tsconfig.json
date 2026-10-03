@@ -49,6 +49,12 @@
     },
     {
       "path": "../../core/agent"
+    },
+    {
+      "path": "../../mcp/mcp-policy"
+    },
+    {
+      "path": "../../boot/config-editor"
     }
   ]
 }

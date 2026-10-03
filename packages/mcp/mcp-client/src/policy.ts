@@ -13,19 +13,12 @@ import type { McpToolInfo } from '@deepseek-ai/dsh-mcp-status/types'
 // Side-effect type import: declaration-merges the optional `ctx.sandboxPolicy`.
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 
-/** What happens when the model calls a tool: run it, ask the person first, or refuse it. */
-export type McpToolMode = 'allow' | 'ask' | 'deny'
+import type { McpToolMode, McpToolPolicy } from '@deepseek-ai/dsh-mcp-policy/types'
+
+export type { McpToolMode, McpToolPolicy } from '@deepseek-ai/dsh-mcp-policy/types'
 
 /** Every tool-call mode, in the order a form offers them. */
 export const MCP_TOOL_MODES: readonly McpToolMode[] = ['ask', 'allow', 'deny']
-
-/** One server's tool-call policy. */
-export interface McpToolPolicy {
-  /** Mode of every tool the policy does not name. */
-  default: McpToolMode
-  /** Modes by the server's own tool name; they override `default`. */
-  tools: Record<string, McpToolMode>
-}
 
 /** Policy fields as configuration supplies them; omitted fields take the defaults. */
 export type McpToolPolicyInput = Partial<McpToolPolicy>
@@ -61,19 +54,20 @@ export function resolveToolPolicy(input: McpToolPolicyInput | undefined, label: 
  * other policies still apply; a later listener's refusal is never relaxed.
  * @param ctx - the client's plugin context; the listener lives as long as it.
  * @param server - configured server name, used in the reasons the model and the person read.
- * @param policy - the resolved policy.
+ * @param policy - reads the policy in force at each call.
  * @param tools - the server's currently registered tools.
  */
 export function registerToolPolicy(
   ctx: Context,
   server: string,
-  policy: McpToolPolicy,
+  policy: () => McpToolPolicy,
   tools: () => readonly McpToolInfo[],
 ): void {
   ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
     const tool = tools().find(candidate => candidate.publicName === exec.name)
     if (tool === undefined) return next()
-    const mode = policy.tools[tool.name] ?? policy.default
+    const current = policy()
+    const mode = current.tools[tool.name] ?? current.default
     if (mode === 'deny') {
       return {
         kind: 'deny',

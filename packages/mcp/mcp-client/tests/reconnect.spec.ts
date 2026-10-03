@@ -8,6 +8,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import McpPolicyStore from '@deepseek-ai/dsh-mcp-policy'
 import McpResources from '@deepseek-ai/dsh-mcp-resources'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { Config } from '@deepseek-ai/dsh-mcp-client'
@@ -179,6 +180,15 @@ describe('reconnect supervisor', () => {
       await handle.dispose()
       await ctx.fiber.dispose()
     }
+  })
+
+  it('lets a policy the person stored win over the configured one', async () => {
+    captureLogs(ctx)
+    await ctx.plugin(McpPolicyStore, { servers: { srv: { default: 'deny' } } } as never)
+    await apply(ctx, stdioConfig())
+    await vi.waitFor(() => { expect(ctx.tools.get('mcp__srv__remote')).toBeDefined() })
+    const result = await ctx.tools.execute({ signal: testToolSignal, callId: nextCallId(), name: 'mcp__srv__remote', arguments: {} })
+    expect(result).toMatchObject({ isError: true, error: { info: { code: 'MCP_TOOL_DENIED' } } })
   })
 
   it('reconnects after a transport close, re-syncs tools through the new generation, and serves calls', async () => {

@@ -44,6 +44,8 @@
       "@deepseek-ai/dsh-mcp-selection": ["./packages/mcp/mcp-selection/src/index.ts"],
       "@deepseek-ai/dsh-mcp-selection/types": ["./packages/mcp/mcp-selection/src/types.ts"],
       "@deepseek-ai/dsh-mcp-selection/client": ["./packages/mcp/mcp-selection/src/client.ts"],
+      "@deepseek-ai/dsh-mcp-policy": ["./packages/mcp/mcp-policy/src/index.ts"],
+      "@deepseek-ai/dsh-mcp-policy/types": ["./packages/mcp/mcp-policy/src/types.ts"],
       "@deepseek-ai/dsh-deepseek-account-platform": ["./packages/credentials/deepseek-account-platform/src/index.ts"],
       "@deepseek-ai/dsh-deepseek-account-platform/types": ["./packages/credentials/deepseek-account-platform/src/types.ts"],
       "@deepseek-ai/dsh-deepseek-account": ["./packages/credentials/deepseek-account/src/index.ts"],

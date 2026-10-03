@@ -9,6 +9,7 @@ import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import { apply, inject, NS } from '../src/client/index.ts'
 import type { McpServersToastFace } from '../src/client/McpServersToast.tsx'
 import type { McpTrayFace } from '../src/client/mcp-tray-controller.ts'
+import type { McpAlwaysAllowFace } from '../src/client/McpAlwaysAllow.tsx'
 import { en, zh } from '../src/client/locales.ts'
 
 async function bench(rows: unknown[] = []) {
@@ -19,12 +20,13 @@ async function bench(rows: unknown[] = []) {
   ctx.provide('locale', locale)
   const list = vi.fn(() => Promise.resolve({ ok: true, value: rows }))
   const overview = vi.fn(() => Promise.resolve({ ok: true, value: { readAt: 1, servers: [] } }))
-  const remote = new TestRemote(ctx, { mcpServers: { list, overview } })
+  const allowTool = vi.fn((_name: string) => Promise.resolve({ ok: true, value: { changed: true, application: 'applied', target: 'mcp-docs' } }))
+  const remote = new TestRemote(ctx, { mcpServers: { list, overview, allowTool } })
   const settings = stubConfigForm()
   const forms = vi.fn(() => settings.scope)
   ctx.provide('configForms', { get: forms })
   ctx.provide('layout', { selectPanel: vi.fn() })
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, list, overview, remote, forms }
+  return { ctx, slots: ctx.get('slots') as SlotRegistry, list, overview, remote, forms, allowTool }
 }
 
 /** The Plugins page's item slot and the shell overlay, as their owners declare them. */
@@ -36,6 +38,7 @@ function declareRoot(slots: SlotRegistry): () => void {
       'shell.overlay': { kind: 'list', scope: 'root' },
       'conversation.composer.dock': { kind: 'list', scope: 'root' },
       'conversation.input.right': { kind: 'list', scope: 'root' },
+      'conversation.approval.action': { kind: 'list', scope: 'root' },
     },
   } as never, () => null)
 }
@@ -64,6 +67,22 @@ describe('ui-settings-mcp-servers apply', () => {
     overview.mockClear()
     remote.emit('plugin-manager/changed', [{ reason: 'plugin' }])
     await vi.waitFor(() => { expect(overview).toHaveBeenCalledTimes(1) })
+  })
+
+  it('offers "Always allow" in MCP approval prompts through the Host', async () => {
+    const { ctx, slots, allowTool } = await bench()
+    declareRoot(slots)
+    await ctx.plugin({ inject: [...inject], apply }).await()
+    const [action] = slots.entries('conversation.approval.action')
+    expect(action?.options).toMatchObject({ id: 'mcp-always-allow' })
+    expect(action?.locale).toBe(NS)
+    const face = (action?.inject as () => Pick<McpAlwaysAllowFace, 'allowTool'>)()
+    await expect(face.allowTool('mcp__docs__search')).resolves.toBe(true)
+    expect(allowTool).toHaveBeenCalledWith('mcp__docs__search')
+    allowTool.mockResolvedValueOnce({ ok: true, value: { changed: false, application: 'failed', target: 'x' } })
+    await expect(face.allowTool('mcp__docs__search')).resolves.toBe(false)
+    allowTool.mockResolvedValueOnce({ ok: false, error: new Error('down') } as never)
+    await expect(face.allowTool('mcp__docs__search')).resolves.toBe(false)
   })
 
   it('declares the services it uses', () => {
@@ -133,6 +152,7 @@ describe('ui-settings-mcp-servers apply', () => {
     expect(slots.entries('shell.overlay')).toHaveLength(0)
     expect(slots.entries('conversation.composer.dock')).toHaveLength(0)
     expect(slots.entries('conversation.input.right')).toHaveLength(0)
+    expect(slots.entries('conversation.approval.action')).toHaveLength(0)
   })
 
   it('registers nothing while the Host does not serve the Remote', async () => {

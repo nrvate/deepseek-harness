@@ -24,6 +24,8 @@ import { MCP_TOOL_MODES, registerToolPolicy, resolveToolPolicy } from './policy.
 import type { McpToolPolicyInput } from './policy.ts'
 // Side-effect type import: declaration-merges `ctx.tools` onto Context.
 import type {} from '@deepseek-ai/dsh-tools'
+// Side-effect type import: declaration-merges the optional `ctx.mcpPolicy`.
+import type {} from '@deepseek-ai/dsh-mcp-policy'
 
 export { createMcpToolDefinition } from './tools.ts'
 export type { McpResult, McpToolDefinitionOptions } from './tools.ts'
@@ -208,7 +210,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   // quiesces in-flight work, and unregisters the current generation.
   const connection = startConnection(ctx, config, reconnect)
   registerServerContext(ctx, config.serverName, connection)
-  registerToolPolicy(ctx, config.serverName, toolPolicy, () => connection.handle.tools())
+  // A policy the person set in the store wins over this configuration, and is read live at every call.
+  registerToolPolicy(ctx, config.serverName, () => ctx.get('mcpPolicy')?.policyOf(config.serverName) ?? toolPolicy, () => connection.handle.tools())
   let stopping: Promise<void> | undefined
   const dispose = (): Promise<void> => stopping ??= connection.dispose()
   // Cordis announces unload before awaiting an unfinished apply(). Closing

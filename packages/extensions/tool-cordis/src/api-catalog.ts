@@ -1479,6 +1479,19 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'mcpPolicy',
+    summary: 'Holds the person\'s policies and answers them per server.',
+    description: 'Holds the person\'s policies and answers them per server.',
+    methods: [
+      {
+        signature: 'policyOf(server: string): McpToolPolicy | undefined',
+        description: 'Read one server\'s stored policy.',
+        parameters: [{ name: 'server', description: 'configured server name.' }],
+        returns: 'the policy the person set, or undefined while the store holds none for the server.',
+      },
+    ],
+  },
+  {
     key: 'mcpResources',
     summary: 'Scoped resource access plus three tools shared by configured MCP servers.',
     description: 'Scoped resource access plus three tools shared by configured MCP servers.',
@@ -1541,13 +1554,13 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'rows in composition order; stored literal secrets are replaced by `kept`.',
       },
       {
-        signature: '@Remote upsert(spec: McpServerSpec, options?: McpUpsertOptions): Promise<McpChangeResult>',
+        signature: '@Remote async upsert(spec: McpServerSpec, options?: McpUpsertOptions): Promise<McpChangeResult>',
         description: 'Add an MCP server row, or replace the row `options.id` names. A stdio server runs a command with the Host\'s privileges, so adding or changing one requires the caller to echo the command line it showed the person.',
         parameters: [{ name: 'spec', description: 'configuration to write; secrets are environment variable references.' }, { name: 'options', description: 'row to replace and the confirmed command line.' }],
         returns: 'the persisted change and whether the running profile applied it.',
       },
       {
-        signature: '@Remote removeServer(id: McpEntryId): Promise<McpChangeResult>',
+        signature: '@Remote async removeServer(id: McpEntryId): Promise<McpChangeResult>',
         description: 'Remove one server row from the profile patch. The name is not `remove`: a Remote method may not share a name with a member of its namespace service.',
         parameters: [{ name: 'id', description: 'row id returned by `list`.' }],
         returns: 'the persisted change and whether the running profile applied it.',
@@ -1559,10 +1572,16 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the persisted change and whether the running profile applied it.',
       },
       {
-        signature: '@Remote setToolPolicy(id: McpEntryId, policy: McpToolPolicy): Promise<McpChangeResult>',
-        description: 'Replace the tool-call policy of one editable server row. Changing it runs no command, so it needs no confirmation.',
+        signature: '@Remote async setToolPolicy(id: McpEntryId, policy: McpToolPolicy): Promise<McpChangeResult>',
+        description: 'Replace one server\'s tool-call policy. With the policy store mounted the change applies at the next call without reconnecting the server, and works for every listed row; without it, only an editable row the profile patch owns can change, and its server reloads. It runs no command, so it needs no confirmation.',
         parameters: [{ name: 'id', description: 'row id returned by `list`.' }, { name: 'policy', description: 'the server\'s default mode and its per-tool modes.' }],
         returns: 'the persisted change and whether the running profile applied it.',
+      },
+      {
+        signature: '@Remote async allowTool(publicName: string): Promise<McpChangeResult>',
+        description: 'Let one MCP tool run without asking from now on, by its model-facing name. The change goes to the policy store, so the server keeps its connection.',
+        parameters: [{ name: 'publicName', description: 'the tool\'s model-facing name, as an approval request names it.' }],
+        returns: 'the persisted change; `unknown-server` when no connected server offers the tool.',
       },
       {
         signature: '@Remote async tools(id: McpEntryId): Promise<McpToolsResult>',

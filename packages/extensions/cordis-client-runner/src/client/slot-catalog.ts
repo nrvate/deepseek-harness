@@ -80,6 +80,66 @@ export const CLIENT_NOTES: readonly string[] = [
 // detection is told to skip the data rather than the file.
 export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
   {
+    key: 'conversation.approval.action',
+    kind: 'list',
+    scope: 'session',
+    summary: 'Further answers beside Reject and Allow once, such as a tool owner\'s "Always allow".',
+    doc: 'Further answers beside Reject and Allow once, such as a tool owner\'s\n"Always allow". An action does its own work, then answers through\n`answer`; it renders nothing for requests it does not concern.',
+    registerOptions: [
+      {
+        name: 'id',
+        requirement: 'required',
+        type: 'string',
+        doc: 'Your cell key. Use an id of your own: a fresh id is added beside the shipped entries, while reusing a shipped id puts you in THAT cell and replaces it. Owners that filter by id address you by it.',
+      },
+      {
+        name: 'order',
+        requirement: 'optional',
+        type: 'number',
+        doc: 'Position among the entries, ascending (default 0).',
+      },
+      {
+        name: 'label',
+        requirement: 'optional',
+        type: 'string | (() => string)',
+        doc: 'Display text where the owner projects one (nav rows, tabs). A thunk is re-read on every projection, so localized text follows the active locale without re-registering.',
+      },
+    ],
+    ownerProps: [
+      '/** What an extra approval action receives. */\nexport interface ApprovalActionOwnerProps {\n  /** Tool requesting the decision. */\n  toolName: string\n  /** Tool call correlated with the request, when the requester has one. */\n  callId?: ToolCallId\n  /** Whether the request is already being answered. */\n  disabled: boolean\n  /** Answer the request; the panel ignores a second answer. */\n  answer: (decision: ApprovalDecision) => void\n}',
+    ],
+    ownerPropsReferences: [
+      'ApprovalDecision',
+    ],
+    standardProps: [
+      'useResource: UseResource',
+      'useWorkspaces: SnapshotSelectorHook<WorkspaceSnapshot>',
+      'usePanelInfo: UsePanelInfo',
+      'useSessions: UseSessions',
+      'useSessionStatus: UseSessionStatus',
+      'useSessionRetainInfo: UseSessionRetainInfo',
+      'useWorkspaces: SnapshotSelectorHook<WorkspaceSnapshot>',
+      'useChat: UseChat',
+      'useConversation: UseConversation',
+      'useInput: SnapshotSelectorHook<InputState>',
+      'inputActions: InputActions',
+      'useSession: SessionSnapshotSelector',
+      'sessionId: SessionId',
+      'useProjection: UseProjection',
+      'useTrajectory: UseTrajectory',
+    ],
+    keyDomain: '',
+    hookContext: '',
+    slotInject: '',
+    declaredBy: 'an entry in \'conversation.composer\' (client-ui-approval), so it exists while that entry is mounted',
+    occupants: [
+      'client-ui-settings-mcp-servers McpAlwaysAllow id \'mcp-always-allow\'',
+    ],
+    replaceRisk: 'none',
+    example: 'return {\n  inject: [\'slots\'],\n  apply(ctx) {\n    ctx.slots.inject(\'conversation.approval.action\', () => ctx.slots.register(\n      { name: \'conversation.approval.action\', id: \'my-entry\', order: 100, label: \'My entry\' },\n      () => React.createElement(\'div\', null, \'hello\'),\n    ))\n  },\n}',
+    source: 'packages/client/ui-approval/src/client/contract/slots.ts:47',
+  },
+  {
     key: 'conversation.approval.detail',
     kind: 'single',
     scope: 'session',

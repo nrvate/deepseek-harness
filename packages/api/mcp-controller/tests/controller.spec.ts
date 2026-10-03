@@ -4,7 +4,7 @@ import { realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { Context } from '@deepseek-ai/cordis'
-import { expect, it, onTestFinished, vi } from 'vitest'
+import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import Hmr from '@deepseek-ai/dsh-hmr'
@@ -12,6 +12,8 @@ import {
   boot, initProfile, loadProfileDirectory, readProfileManifest, readProfilePatches, type ProfileContext,
 } from '@deepseek-ai/dsh-app-boot'
 import McpStatus, { type McpServerStatus } from '@deepseek-ai/dsh-mcp-status'
+import McpPolicyStore from '@deepseek-ai/dsh-mcp-policy'
+import ConfigEditor from '@deepseek-ai/dsh-config-editor'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import McpServersController from '../src/index.ts'
 import type { McpEntryId, McpHttpSpec, McpStdioSpec } from '../src/types.ts'
@@ -49,7 +51,7 @@ function stubs(): Map<string, StubHandle> {
   return registry as Map<string, StubHandle>
 }
 
-async function fixture(reload: 'live' | 'startup' = 'live', patch = '[]\n', overlays: PatchOptions[] = [], status = true) {
+async function fixture(reload: 'live' | 'startup' = 'live', patch = '[]\n', overlays: PatchOptions[] = [], status = true, store = false) {
   Reflect.set(globalThis, '__mcpStubs', new Map())
   const temporaryHome = mkdtempSync(join(tmpdir(), 'mcp-controller-'))
   let owner: Context | undefined
@@ -62,7 +64,10 @@ async function fixture(reload: 'live' | 'startup' = 'live', patch = '[]\n', over
   const core = join(dir, 'node_modules', 'core')
   mkdirSync(core, { recursive: true })
   writeFileSync(join(core, 'package.json'), JSON.stringify({ name: 'core', version: '1.0.0', dsh: { bundle: { patch: './cordis.patch.yml' } } }))
-  writeFileSync(join(core, 'cordis.patch.yml'), JSON.stringify([{ insert: [{ id: 'controller', name: 'cordis:mcpServersController' }] }]))
+  writeFileSync(join(core, 'cordis.patch.yml'), JSON.stringify([{ insert: [
+    { id: 'controller', name: 'cordis:mcpServersController' },
+    ...store ? [{ id: 'config-editor', name: 'cordis:configEditor' }, { id: 'mcp-policy', name: 'cordis:mcpPolicy' }] : [],
+  ] }]))
   // The configured plugin is an external service here: it records the config it loads with instead of connecting.
   const client = join(dir, 'node_modules', '@deepseek-ai', 'dsh-mcp-client')
   mkdirSync(client, { recursive: true })
@@ -106,6 +111,8 @@ async function fixture(reload: 'live' | 'startup' = 'live', patch = '[]\n', over
     root.provide('appReady', { onReady: (listener: () => void) => { listener(); return () => {} } })
     root.provide('profileContext', profile)
     root.loader.builtins.mcpServersController = McpServersController
+    root.loader.builtins.configEditor = ConfigEditor
+    root.loader.builtins.mcpPolicy = McpPolicyStore
   })
   if (reload === 'live') {
     await ctx.plugin(Timer)
@@ -511,4 +518,100 @@ it('refuses a tool-call policy for an owned row the form cannot edit', async () 
   const before = read()
   expect(await controller.setToolPolicy(id('mcp-x'), { default: 'allow', tools: {} })).toMatchObject({ error: { code: 'read-only' } })
   expect(read()).toBe(before)
+})
+
+describe('the policy store', () => {
+  async function stored() {
+    const made = await fixture('live', '[]\n', [], true, true)
+    await made.controller.upsert(stdio, { confirmedCommand: 'mcp-files-test-missing --root /tmp' })
+    return made
+  }
+
+  it('keeps a server\'s policy in the store, applies it live, and lists it in force', async () => {
+    const { ctx, controller, read } = await stored()
+    const before = probe(ctx, 'files')
+    const policy = { default: 'deny' as const, tools: { echo: 'allow' as const } }
+    expect(await controller.setToolPolicy(id('mcp-files'), policy)).toEqual({ changed: true, application: 'applied', target: 'mcp-files' })
+    // The client row was not reloaded: it still holds the config it loaded with.
+    expect(probe(ctx, 'files')).toBe(before)
+    expect(ctx.mcpPolicy.policyOf('files')).toEqual(policy)
+    expect(read()).toContain('id: mcp-policy')
+    expect(read()).not.toMatch(/toolPolicy:/)
+    const row = (await controller.list()).find(candidate => candidate.serverName === 'files')
+    expect(row?.toolPolicy).toEqual(policy)
+    expect(row?.spec?.toolPolicy).toEqual(policy)
+  })
+
+  it('routes the form\'s policy to the store, and drops it when the server is removed', async () => {
+    const { ctx, controller, read } = await stored()
+    const policy = { default: 'allow' as const, tools: {} }
+    expect(await controller.upsert({ ...stdio, toolPolicy: policy }, { id: id('mcp-files'), confirmedCommand: 'mcp-files-test-missing --root /tmp' }))
+      .toMatchObject({ application: 'applied' })
+    expect(ctx.mcpPolicy.policyOf('files')).toEqual(policy)
+    expect(read()).not.toMatch(/toolPolicy:/)
+    expect(await controller.removeServer(id('mcp-files'))).toMatchObject({ application: 'applied' })
+    expect(ctx.mcpPolicy.policyOf('files')).toBeUndefined()
+  })
+
+  it('sets the policy of a row from an overlay, which the store can hold although the row is read-only', async () => {
+    const overlay: PatchOptions = { insert: [{ id: 'overlay-mcp', name: '@deepseek-ai/dsh-mcp-client', config: { serverName: 'overlay', transport: 'streamable-http', url: 'http://127.0.0.1:9/o' } }] }
+    const { ctx, controller } = await fixture('live', '[]\n', [overlay], true, true)
+    expect(await controller.setToolPolicy(id('overlay-mcp'), { default: 'allow', tools: {} })).toMatchObject({ application: 'applied' })
+    expect(ctx.mcpPolicy.policyOf('overlay')).toEqual({ default: 'allow', tools: {} })
+    expect(await controller.setToolPolicy(id('missing'), { default: 'allow', tools: {} })).toMatchObject({ error: { code: 'unknown-server' } })
+  })
+
+  it('always allows one tool by its model-facing name, keeping the rest of the policy', async () => {
+    const { ctx, controller } = await stored()
+    await controller.setToolPolicy(id('mcp-files'), { default: 'ask', tools: { other: 'deny' } })
+    expect(await controller.allowTool('mcp__files__echo')).toMatchObject({ changed: true, target: 'mcp-files' })
+    expect(ctx.mcpPolicy.policyOf('files')).toEqual({ default: 'ask', tools: { other: 'deny', echo: 'allow' } })
+    expect(await controller.allowTool('mcp__nobody__echo')).toMatchObject({ error: { code: 'unknown-server' } })
+  })
+
+  it('reports a store write the editor refuses', async () => {
+    const { controller } = await stored()
+    expect(await controller.setToolPolicy(id('mcp-files'), { default: 'sometimes' as never, tools: {} })).toMatchObject({ error: { code: 'operation-error' } })
+  })
+
+  it('reports a store the overlay owns: refused writes, and a stale policy left after removal', async () => {
+    const overlay: PatchOptions = { id: 'mcp-policy', config: { servers: { files: { default: 'deny' } } } }
+    const { ctx, controller } = await fixture('live', '[]\n', [overlay], true, true)
+    expect(ctx.mcpPolicy.policyOf('files')).toEqual({ default: 'deny', tools: {} })
+    const added = await controller.upsert({ ...stdio, toolPolicy: { default: 'allow', tools: {} } }, { confirmedCommand: 'mcp-files-test-missing --root /tmp' })
+    expect(added).toMatchObject({ application: 'failed', error: { code: 'operation-error' } })
+    expect(added.error?.message).toContain('overridden by a home patch or command-line overlay')
+    const removed = await controller.removeServer(id('mcp-files'))
+    expect(removed).toMatchObject({ changed: true, application: 'applied' })
+    expect(removed.warnings?.[0]).toContain('overridden by a home patch or command-line overlay')
+  })
+
+  it('always allows a tool of a server that no row lists, such as one an integration connects', async () => {
+    const { ctx, controller } = await stored()
+    ctx.mcpStatus.register('ghost', {
+      status: () => ({ serverName: 'ghost', state: 'connected', attempt: 0, maxAttempts: 1, toolCount: 1 }),
+      tools: () => [{ name: 'look', publicName: 'mcp__ghost__look', description: '', parameters: [] }],
+      reconnect: () => Promise.resolve(false),
+      stats: () => ({ calls: 0, errors: 0, inputTokens: 0, outputTokens: 0, totalMs: 0, maxMs: 0, connections: 1, schemaTokens: 0, transport: 'stdio', tools: [] }),
+      subscribe: () => () => {},
+      defaultActive: true,
+    })
+    expect(await controller.allowTool('mcp__ghost__look')).toMatchObject({ changed: true, target: 'mcp__ghost__look' })
+    expect(ctx.mcpPolicy.policyOf('ghost')).toEqual({ default: 'ask', tools: { look: 'allow' } })
+  })
+
+  it('writes the row when a store service runs outside the profile, where the editor cannot reach it', async () => {
+    const { ctx, controller, read } = await fixture()
+    await ctx.plugin(McpPolicyStore, {})
+    await ctx.plugin(ConfigEditor)
+    await controller.upsert(stdio, { confirmedCommand: 'mcp-files-test-missing --root /tmp' })
+    expect(await controller.setToolPolicy(id('mcp-files'), { default: 'allow', tools: {} })).toMatchObject({ application: 'applied' })
+    expect(read()).toContain('toolPolicy:')
+  })
+
+  it('cannot always allow without a store, and keeps the row path for policies', async () => {
+    const { controller } = await fixture()
+    await controller.upsert(unreachable)
+    expect(await controller.allowTool('mcp__web__echo')).toMatchObject({ error: { code: 'operation-error', message: 'This profile does not mount the MCP policy store' } })
+  })
 })

@@ -1,7 +1,7 @@
 /** Composer takeover for one pending approval waterfall. */
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { Button, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { ApprovalComposerProps, PendingApproval } from './contract/slots.ts'
+import type { ApprovalActionOwnerProps, ApprovalComposerProps, PendingApproval } from './contract/slots.ts'
 import css from './ApprovalPanel.module.css'
 
 /**
@@ -15,13 +15,15 @@ export function ApprovalPanel(props: ApprovalComposerProps) {
     ? null
     : props.renderSlot('conversation.approval.detail', { callId: approval.callId })
   const reason = approval.displayReason === undefined ? approval.reason : props.resolveReason(approval.displayReason)
-  return <ApprovalFlow key={approval.key} pending={approval} reason={reason} detail={detail} t={props.t} />
+  const actions = (owner: ApprovalActionOwnerProps): ReactNode => props.renderSlot('conversation.approval.action', owner)
+  return <ApprovalFlow key={approval.key} pending={approval} reason={reason} detail={detail} actions={actions} t={props.t} />
 }
 
-function ApprovalFlow({ pending, reason, detail, t }: {
+function ApprovalFlow({ pending, reason, detail, actions, t }: {
   pending: PendingApproval
   reason: string | undefined
   detail: ReactNode
+  actions: (owner: ApprovalActionOwnerProps) => ReactNode
   t: ApprovalComposerProps['t']
 }) {
   const [answered, setAnswered] = useState(false)
@@ -75,6 +77,12 @@ function ApprovalFlow({ pending, reason, detail, t }: {
           {detail !== null && <div className={css.command}>{detail}</div>}
         </div>
         <div className={css.actionRow}>
+          {actions({
+            toolName: pending.toolName,
+            ...pending.callId === undefined ? {} : { callId: pending.callId },
+            disabled: answered,
+            answer,
+          })}
           <Button variant="outline" className={css.reject} disabled={answered} onClick={() => { answer('rejected') }}>
             {t('reject')}
           </Button>

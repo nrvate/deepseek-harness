@@ -31,7 +31,7 @@ The form asks for a **Name** (letters, digits, `_` and `-`; it prefixes the serv
 
 Saving a local command first shows the exact command the harness will run and asks the person to trust it. A server can be edited, but its type cannot change.
 
-The **Tools** dialog lists every tool under the name the model sees, with its first description line and a filter box. Select a tool to read its full description and a table of its parameters with their types and whether each is required. The list updates while the dialog is open. Each tool shows the mode it runs under, and its expanded help has a **When the model calls this tool** select that gives it its own mode or returns it to the server default; a server whose configuration the page cannot edit shows the modes without letting them change.
+The **Tools** dialog lists every tool under the name the model sees, with its first description line and a filter box. Select a tool to read its full description and a table of its parameters with their types and whether each is required. The list updates while the dialog is open. Each tool shows the mode it runs under, and its expanded help has a **When the model calls this tool** select that gives it its own mode or returns it to the server default; these changes take effect at the next call without reconnecting the server. In the approval prompt of an MCP tool call, **Always allow** sets that tool to Allow the same way and then allows the call.
 
 ### Status item
 

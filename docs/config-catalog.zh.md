@@ -2016,7 +2016,8 @@ export interface LspLocalServerConfig {
 ## `@deepseek-ai/dsh-mcp-client`
 
 - `inject`: `tools`
-- `source`: [`packages/mcp/mcp-client/src/index.ts:117`](../packages/mcp/mcp-client/src/index.ts)
+- `refs`: [`McpToolPolicy`](subsystems/mcp.zh.md)
+- `source`: [`packages/mcp/mcp-client/src/index.ts:119`](../packages/mcp/mcp-client/src/index.ts)
 
 ```ts config-catalog
 /** Configuration for one stdio or Streamable HTTP MCP server. */
@@ -2096,6 +2097,23 @@ export interface ReconnectConfig {
   /** Consecutive failed attempts per outage before giving up for good (default 10). */
   maxAttempts?: number
 }
+```
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-mcp-client -->
+
+<!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-mcp-policy -->
+<a id="deepseek-aidsh-mcp-policy"></a>
+
+## `@deepseek-ai/dsh-mcp-policy`
+
+- `refs`: `Volatile` (`@deepseek-ai/cordis`)
+- `source`: [`packages/mcp/mcp-policy/src/index.ts:30`](../packages/mcp/mcp-policy/src/index.ts)
+
+```ts config-catalog
+/** Plugin config. */
+export interface Config {
+  /** Policies by configured server name; changes apply to the next call without a reload. */
+  servers: Volatile<Record<string, McpToolPolicy>>
+}
 
 /** One server's tool-call policy. */
 export interface McpToolPolicy {
@@ -2108,7 +2126,7 @@ export interface McpToolPolicy {
 /** What happens when the model calls a tool: run it, ask the person first, or refuse it. */
 export type McpToolMode = 'allow' | 'ask' | 'deny'
 ```
-<!-- END GENERATED config-catalog:@deepseek-ai/dsh-mcp-client -->
+<!-- END GENERATED config-catalog:@deepseek-ai/dsh-mcp-policy -->
 
 <!-- BEGIN GENERATED config-catalog:@deepseek-ai/dsh-message-feedback -->
 <a id="deepseek-aidsh-message-feedback"></a>

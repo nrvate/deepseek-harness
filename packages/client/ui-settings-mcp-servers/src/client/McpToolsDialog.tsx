@@ -55,7 +55,7 @@ function ToolsBody(props: McpServersCardProps & { tools: NonNullable<McpServersS
   return (
     <div className={css.form}>
       <p className={css.body}>{t('toolsIntro')}</p>
-      {tools.row.spec === undefined && <p className={css.hint}>{t('toolsPolicyReadOnly')}</p>}
+      {tools.row.serverName === '' && <p className={css.hint}>{t('toolsPolicyReadOnly')}</p>}
       <Input aria-label={t('toolsFilter')} placeholder={t('toolsFilter')} value={filter} onChange={(event) => { setFilter(event.target.value) }} />
       {shown.length === 0
         ? <p className={css.body}>{t('toolsNoMatch')}</p>
@@ -88,7 +88,7 @@ function ToolItem(props: McpServersCardProps & { tools: NonNullable<McpServersSt
               id={selectId}
               className={css.select}
               value={own ?? INHERIT}
-              disabled={tools.row.spec === undefined || tools.savingTool !== null}
+              disabled={tools.row.serverName === '' || tools.savingTool !== null}
               onChange={(event) => {
                 const value = event.target.value
                 setToolMode(tool.name, value === INHERIT ? null : value as McpToolMode)

@@ -27,6 +27,7 @@ export type McpServersLocaleKey =
   | 'timeout' | 'timeoutHint' | 'failOnStartup' | 'defaultActive' | 'defaultActiveHint'
   | 'toolPolicy' | 'toolPolicyHint' | 'modeAsk' | 'modeAllow' | 'modeDeny'
   | 'toolMode' | 'toolModeInherit' | 'toolsPolicyReadOnly' | 'rowCallsAllowed' | 'rowCallsBlocked'
+  | 'alwaysAllow' | 'alwaysAllowHint' | 'alwaysAllowFailed'
   | 'selectShort' | 'selectLabel' | 'selectHeading' | 'selectFailed'
   | 'trayThisSession' | 'trayAllSessions' | 'traySplitNote' | 'trayUseServer' | 'statSplit'
   | 'errorInvalid' | 'errorDuplicate' | 'errorSecret' | 'errorReadOnly' | 'errorUnknown'
@@ -155,9 +156,12 @@ export const en: Record<McpServersLocaleKey, string> = {
   modeDeny: 'Block',
   toolMode: 'When the model calls this tool',
   toolModeInherit: 'Server default ({mode})',
-  toolsPolicyReadOnly: 'This server\'s tool-call policy is set outside this page; change it in the profile patch.',
+  toolsPolicyReadOnly: 'This row names no server, so its tools have no policy to change here.',
   rowCallsAllowed: 'Calls allowed',
   rowCallsBlocked: 'Calls blocked',
+  alwaysAllow: 'Always allow',
+  alwaysAllowHint: 'Run this tool without asking from now on. Change it in the tool list on the MCP servers page.',
+  alwaysAllowFailed: 'The tool could not be allowed; allow this call once or reject it.',
   defaultActiveHint: 'When off, the server stays available and a session uses it only after you select it there.',
   selectShort: 'MCP {active}/{total}',
   selectLabel: 'MCP servers in this session: {active} of {total}',
@@ -313,9 +317,12 @@ export const zh: Record<McpServersLocaleKey, string> = {
   modeDeny: '阻止',
   toolMode: '模型调用此工具时',
   toolModeInherit: '服务器默认（{mode}）',
-  toolsPolicyReadOnly: '该服务器的工具调用策略在本页之外设置；请在 profile 补丁中修改。',
+  toolsPolicyReadOnly: '该行没有服务器名称，因此无法在此更改其工具的策略。',
   rowCallsAllowed: '允许调用',
   rowCallsBlocked: '阻止调用',
+  alwaysAllow: '始终允许',
+  alwaysAllowHint: '从现在起运行此工具时不再询问。可在 MCP 服务器页面的工具列表中修改。',
+  alwaysAllowFailed: '无法允许该工具；请仅允许本次调用或拒绝。',
   defaultActiveHint: '关闭后，服务器仍然可用，但会话只有在选择它之后才会使用。',
   selectShort: 'MCP {active}/{total}',
   selectLabel: '本会话使用的 MCP 服务器：{total} 个中的 {active} 个',

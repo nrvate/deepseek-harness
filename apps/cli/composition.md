@@ -190,6 +190,8 @@ flowchart LR
   cfg --> plugin_dsh_base_mcp_status
   plugin_dsh_base_mcp_selection["mcp-selection<br/>@deepseek-ai/dsh-mcp-selection"]
   cfg --> plugin_dsh_base_mcp_selection
+  plugin_dsh_base_mcp_policy["mcp-policy<br/>@deepseek-ai/dsh-mcp-policy"]
+  cfg --> plugin_dsh_base_mcp_policy
   plugin_dsh_base_tools["tools<br/>@deepseek-ai/dsh-tools"]
   cfg --> plugin_dsh_base_tools
   plugin_dsh_base_system_prompt["system-prompt<br/>@deepseek-ai/dsh-system-prompt"]
@@ -297,6 +299,7 @@ flowchart LR
 | `mcp-resources` | `@deepseek-ai/dsh-mcp-resources` |
 | `mcp-status` | `@deepseek-ai/dsh-mcp-status` |
 | `mcp-selection` | `@deepseek-ai/dsh-mcp-selection` |
+| `mcp-policy` | `@deepseek-ai/dsh-mcp-policy` |
 | `tools` | `@deepseek-ai/dsh-tools` |
 | `system-prompt` | `@deepseek-ai/dsh-system-prompt` |
 | `agent-loop` | `@deepseek-ai/dsh-agent-loop` |

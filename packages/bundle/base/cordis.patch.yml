@@ -504,6 +504,9 @@
     - id: mcp-selection
       name: '@deepseek-ai/dsh-mcp-selection'
 
+    - id: mcp-policy
+      name: '@deepseek-ai/dsh-mcp-policy'
+
     # ── rows every mode mounts, whose values each overlay may state ──────────────
 
     # The tool registry. Presentation mode is a deployment choice; omitting it here

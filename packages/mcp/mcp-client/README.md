@@ -88,9 +88,10 @@ When the model calls an MCP tool, the call runs against the remote server with a
 
 Images are supported when the current model accepts image input and the harness attachment feature is enabled; they then appear in the conversation like other images. Otherwise — and for audio or embedded resources — the model sees a clear diagnostic message instead of nothing.
 
+<a id="tool-call-policy"></a>
 ### Tool-call policy
 
-Every call to one of the server's tools passes its `toolPolicy` in the tool registry's `tools/pre-execute` waterfall, so native, PTC, and subagent calls are all covered. `deny` refuses the call with a reason the model can act on. `ask` sends it through the approval service with the server and tool named; a Session running with full access (`danger-full-access`) runs it without asking, and a caller with no approval channel, such as a delegated child with its approval policy pinned to `never`, is refused. `allow` leaves the call to the rest of the waterfall, so hooks and other policies still apply. A later listener's refusal is never relaxed.
+Every call to one of the server's tools passes its `toolPolicy` in the tool registry's `tools/pre-execute` waterfall, so native, PTC, and subagent calls are all covered. `deny` refuses the call with a reason the model can act on. `ask` sends it through the approval service with the server and tool named; a Session running with full access (`danger-full-access`) runs it without asking, and a caller with no approval channel, such as a delegated child with its approval policy pinned to `never`, is refused. `allow` leaves the call to the rest of the waterfall, so hooks and other policies still apply. A later listener's refusal is never relaxed. A policy stored for the server in [mcp-policy](../mcp-policy/README.md) wins over `toolPolicy` and is read at every call, so the MCP servers page changes it without reconnecting the server.
 
 ```yaml
 toolPolicy:

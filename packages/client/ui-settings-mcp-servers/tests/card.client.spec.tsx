@@ -531,10 +531,20 @@ describe('tool-call policy', () => {
     await waitFor(() => { expect(mcpServers.setToolPolicy).toHaveBeenLastCalledWith('mcp-files', { default: 'ask', tools: {} }) })
   })
 
-  it('shows the modes of a server whose policy is set elsewhere without letting them change', async () => {
+  it('changes the modes of a server whose row is set elsewhere, since its policy lives in the store', async () => {
     const { mcpServers } = mount([row('mcp-files', { serverName: 'files', status: connected, owned: false, readOnlyReason: 'unaddressable' })])
     fireEvent.click(await screen.findByRole('button', { name: 'Tools (2)' }))
     const dialog = await screen.findByRole('dialog', { name: 'Tools of files' })
+    await within(dialog).findByText('mcp__files__echo')
+    expect(within(dialog).queryByText(en.toolsPolicyReadOnly)).toBeNull()
+    fireEvent.change(within(dialog).getByLabelText(en.toolMode), { target: { value: 'allow' } })
+    expect(mcpServers.setToolPolicy).toHaveBeenCalledWith('mcp-files', { default: 'ask', tools: { echo: 'allow' } })
+  })
+
+  it('shows the modes of a row that names no server without letting them change', async () => {
+    const { mcpServers } = mount([row('mcp-files', { serverName: '', status: connected, owned: false, readOnlyReason: 'unaddressable' })])
+    fireEvent.click(await screen.findByRole('button', { name: 'Tools (2)' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Tools of mcp-files' })
     await within(dialog).findByText('mcp__files__echo')
     expect(within(dialog).getByText(en.toolsPolicyReadOnly)).toBeTruthy()
     const mode = within(dialog).getByLabelText(en.toolMode) as HTMLSelectElement

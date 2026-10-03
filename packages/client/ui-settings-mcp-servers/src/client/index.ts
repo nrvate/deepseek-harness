@@ -19,6 +19,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 // Type-only: the composer's SlotMap merge (the 'conversation.composer.dock' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+// Type-only: the approval panel's SlotMap merge (the 'conversation.approval.action' entry).
+import type {} from '@deepseek-ai/dsh-client-ui-approval/client'
 // Type-only: the ctx.remote Context merge and the forwarded-event key face.
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
@@ -27,6 +29,7 @@ import { McpServersToast, type McpServersToastFace } from './McpServersToast.tsx
 import { McpServersController } from './mcp-servers-controller.ts'
 import { McpStatusItem } from './McpStatusItem.tsx'
 import { McpServerSelect } from './McpServerSelect.tsx'
+import { McpAlwaysAllow, type McpAlwaysAllowFace } from './McpAlwaysAllow.tsx'
 import { McpTrayController } from './mcp-tray-controller.ts'
 import { MCP_UI_SETTINGS_NAMESPACE, type McpUiSettings } from '../mcp-ui-settings.ts'
 import { en, zh, type McpServersLocaleKey } from './locales.ts'
@@ -36,6 +39,7 @@ export type { McpServersToastProps } from './McpServersToast.tsx'
 export type { McpServersFace, McpServersState } from './mcp-servers-controller.ts'
 export type { McpStatusItemProps } from './McpStatusItem.tsx'
 export type { McpServerSelectProps } from './McpServerSelect.tsx'
+export type { McpAlwaysAllowFace, McpAlwaysAllowProps } from './McpAlwaysAllow.tsx'
 export type { McpTrayFace, McpTrayState } from './mcp-tray-controller.ts'
 export type { McpServersLocaleKey } from './locales.ts'
 
@@ -91,4 +95,13 @@ export function apply(ctx: ClientContext): void {
   ctx.slots.inject('conversation.input.right', () => ctx.slots.register({
     name: 'conversation.input.right', id: 'mcp-servers', order: 90, locale: NS, inject: () => trayFace,
   }, McpServerSelect))
+  const alwaysAllow: McpAlwaysAllowFace = {
+    allowTool: async (publicName) => {
+      const result = await ctx.remote.mcpServers.allowTool(publicName)
+      return result.ok && result.value.application !== 'failed'
+    },
+  }
+  ctx.slots.inject('conversation.approval.action', () => ctx.slots.register({
+    name: 'conversation.approval.action', id: 'mcp-always-allow', locale: NS, inject: () => alwaysAllow,
+  }, McpAlwaysAllow))
 }

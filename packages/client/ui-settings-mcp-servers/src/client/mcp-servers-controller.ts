@@ -466,10 +466,10 @@ export class McpServersController {
     })
   }
 
-  /** Write one tool's mode into the open server's policy; only an editable row has a policy the form can write. */
+  /** Write one tool's mode into the open server's policy; a row without a server name has no policy to address. */
   private async setToolMode(tool: string, mode: McpToolMode | null): Promise<void> {
     const open = this.getSnapshot().tools
-    if (open === null || open.savingTool !== null || open.row.spec === undefined) return
+    if (open === null || open.savingTool !== null || open.row.serverName === '') return
     const { [tool]: _previous, ...rest } = open.row.toolPolicy.tools
     const policy: McpToolPolicy = { default: open.row.toolPolicy.default, tools: mode === null ? rest : { ...rest, [tool]: mode } }
     this.patch({ tools: { ...open, savingTool: tool } })

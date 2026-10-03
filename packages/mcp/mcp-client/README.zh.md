@@ -88,9 +88,10 @@ kind: "package-reference"
 
 当前模型接受图片输入且 harness 启用了附件功能时支持图片；图片会像其他图片一样出现在对话中。不支持图片时——以及服务器返回音频或嵌入资源时——模型会看到清晰的诊断消息，而不是什么都没有。
 
+<a id="tool-call-policy"></a>
 ### 工具调用策略
 
-对该服务器任一工具的每次调用都会在工具注册表的 `tools/pre-execute` waterfall 中经过其 `toolPolicy`，因此原生调用、PTC 调用和子 agent 调用都受其约束。`deny` 拒绝调用，并给出模型可以据此行动的原因。`ask` 通过审批服务发起审批并指明服务器和工具；以完全访问权限（`danger-full-access`）运行的会话不询问直接运行，而没有审批渠道的调用方（例如审批策略固定为 `never` 的委派子级）会被拒绝。`allow` 把调用交给 waterfall 的其余部分，因此 hook 和其他策略仍然生效。后续监听器的拒绝永远不会被放宽。
+对该服务器任一工具的每次调用都会在工具注册表的 `tools/pre-execute` waterfall 中经过其 `toolPolicy`，因此原生调用、PTC 调用和子 agent 调用都受其约束。`deny` 拒绝调用，并给出模型可以据此行动的原因。`ask` 通过审批服务发起审批并指明服务器和工具；以完全访问权限（`danger-full-access`）运行的会话不询问直接运行，而没有审批渠道的调用方（例如审批策略固定为 `never` 的委派子级）会被拒绝。`allow` 把调用交给 waterfall 的其余部分，因此 hook 和其他策略仍然生效。后续监听器的拒绝永远不会被放宽。[mcp-policy](../mcp-policy/README.zh.md) 中为该服务器存储的策略优先于 `toolPolicy`，并在每次调用时读取，因此 MCP 服务器页面修改它时不会使服务器重新连接。
 
 ```yaml
 toolPolicy:

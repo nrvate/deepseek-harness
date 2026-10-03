@@ -65,6 +65,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   mcpServersController: 'mcp.md',
   mcpStatus: 'mcp.md',
   mcpSelection: 'mcp.md',
+  mcpPolicy: 'mcp.md',
   agentLoop: 'core.md',
   agentDefaultModel: 'core.md',
   agentPresets: 'core.md',

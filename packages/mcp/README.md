@@ -30,6 +30,7 @@ The client owns each configured connection; the shared resource package supplies
 | [`mcp-resources/`](mcp-resources/README.md) | Discover and read resources through shared tools with explicit server selection |
 | [`mcp-status/`](mcp-status/README.md) | Live connection state and tool lists of the configured servers, for management surfaces |
 | [`mcp-selection/`](mcp-selection/README.md) | Per-Session choice of which configured servers reach the model |
+| [`mcp-policy/`](mcp-policy/README.md) | Live store of each server's tool-call policy, changed without reconnecting the server |
 
 -----
 

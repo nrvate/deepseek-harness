@@ -6,6 +6,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ApprovalPanel } from '../src/client/ApprovalPanel.tsx'
+import type { ApprovalActionOwnerProps } from '../src/client/contract/slots.ts'
 import type { ApprovalComposerProps, ApprovalInjected } from '../src/client/contract/slots.ts'
 import { PendingApproval } from '../src/client/contract/slots.ts'
 import { apply, inject } from '../src/client/index.ts'
@@ -340,7 +341,8 @@ describe('ApprovalPanel', () => {
     expect(screen.getByText('Tool bash asks')).toBeTruthy()
     expect(document.querySelector('[data-approval-key] [data-state="warning"]')).not.toBeNull()
     expect(screen.getByRole('group', { name: 'Approval details' })).toBeTruthy()
-    expect(props.renderSlot).not.toHaveBeenCalled()
+    expect(props.renderSlot).not.toHaveBeenCalledWith('conversation.approval.detail', expect.anything())
+    expect(props.renderSlot).toHaveBeenCalledWith('conversation.approval.action', expect.objectContaining({ toolName: 'bash', disabled: false }))
     fireEvent.click(screen.getByRole('button', { name: 'Reject' }))
 
     expect(document.querySelector('[data-approval-key]')?.getAttribute('aria-busy')).toBe('true')
@@ -349,13 +351,29 @@ describe('ApprovalPanel', () => {
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Allow once' }).disabled).toBe(true)
   })
 
+  it('renders further actions in the action row, which answer through the panel and are disabled once it is answering', async () => {
+    const pending = new PendingApproval(id('s1'), { toolName: 'mcp__docs__search', callId: 'call-2' as ToolCallId })
+    const owners: ApprovalActionOwnerProps[] = []
+    const renderSlot = vi.fn((name: string, owner?: ApprovalActionOwnerProps) => {
+      if (name !== 'conversation.approval.action' || owner === undefined) return null
+      owners.push(owner)
+      return <button type="button" disabled={owner.disabled} onClick={() => { owner.answer('allowed-once') }}>Always allow</button>
+    })
+    render(<ApprovalPanel {...panelProps(pending, renderSlot as never)} />)
+    expect(owners.at(-1)).toMatchObject({ toolName: 'mcp__docs__search', callId: 'call-2', disabled: false })
+    fireEvent.click(screen.getByRole('button', { name: 'Always allow' }))
+    await expect(pending.result).resolves.toBe('allowed-once')
+    expect(owners.at(-1)?.disabled).toBe(true)
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Always allow' }).disabled).toBe(true)
+  })
+
   it('renders correlated detail and returns allow-once', async () => {
     const pending = new PendingApproval(id('s1'), {
       toolName: 'bash',
       callId: 'call-1' as ToolCallId,
       reason: 'Run this exact command',
     })
-    const renderSlot = vi.fn(() => <code>pnpm test</code>)
+    const renderSlot = vi.fn((name: string) => name === 'conversation.approval.detail' ? <code>pnpm test</code> : null)
     render(<ApprovalPanel {...panelProps(pending, renderSlot)} />)
 
     expect(screen.getByText('Run this exact command')).toBeTruthy()
@@ -416,7 +434,7 @@ describe('ApprovalPanel', () => {
 
   it('ignores unowned input, modified keys, repeats and IME candidate keys', async () => {
     const pending = new PendingApproval(id('s1'), { toolName: 'bash', callId: 'call-1' as ToolCallId })
-    const renderSlot = () => <input aria-label="Approval input" />
+    const renderSlot = (name: string) => name === 'conversation.approval.detail' ? <input aria-label="Approval input" /> : null
     render(<ApprovalPanel {...panelProps(pending, renderSlot)} />)
     const group = screen.getByRole('group', { name: 'Approval details' })
     fireEvent.keyDown(group, { key: 'Enter', code: 'Enter' })

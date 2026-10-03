@@ -16,6 +16,9 @@ import type {} from '@deepseek-ai/dsh-hmr'
 import type {} from '@deepseek-ai/dsh-plugin-manager'
 import type {} from '@deepseek-ai/dsh-mcp-status'
 import type {} from '@deepseek-ai/dsh-mcp-selection'
+import McpPolicyStore from '@deepseek-ai/dsh-mcp-policy'
+import type { ConfigEditor } from '@deepseek-ai/dsh-config-editor'
+import type { Entry } from '@deepseek-ai/cordis-plugin-loader'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import {
   commandLine, MCP_CLIENT_MODULE, readOwnedRows, readToolPolicy, removeRow, setRowEnabled, setRowToolPolicy, upsertRow, type OwnedRow,
@@ -31,6 +34,18 @@ export type * from './types.ts'
 /** Row ids this form creates are `mcp-<serverName>`. */
 const ROW_ID_PREFIX = 'mcp-'
 const SERVER_NAME = /^[A-Za-z0-9_-]{1,32}$/
+
+/** The config editor and the Loader entry of the policy store it writes. */
+interface PolicyStore {
+  editor: ConfigEditor
+  entry: Entry
+}
+
+/** Module of the store that holds the person's tool-call policies. */
+const POLICY_STORE_MODULE = '@deepseek-ai/dsh-mcp-policy'
+
+/** The policy of a server that names none: every call asks first. */
+const ASK_EVERY_CALL: McpToolPolicy = { default: 'ask', tools: {} }
 
 /** Status changes arrive in bursts while a server reconnects; one `plugin-manager/changed` follows each burst. */
 const STATUS_CHANGE_DEBOUNCE_MS = 250
@@ -96,6 +111,7 @@ export class McpServersController extends TypertRemoteService {
     const inventory = new Map((await readPluginInventory(this.ctx)).entries.map(entry => [entry.entryId as string, entry]))
     const loaded = new Map([...this.ctx.loader.entries()].map(entry => [entry.options.id, entry.id]))
     const statuses = this.ctx.get('mcpStatus')
+    const stored = (name: string): McpToolPolicy | undefined => this.ctx.get('mcpPolicy')?.policyOf(name)
     return rows.map((row) => {
       const live = inventory.get(loaded.get(row.id) ?? '')
       const name = this.serverNameOf(row, owned.get(row.id))
@@ -112,12 +128,14 @@ export class McpServersController extends TypertRemoteService {
           ? hasEmbeddedCredentials(mine.spec.url)
           : credentialArguments(mine.spec.args).length > 0
         const reason = embedded ? 'embedded-credentials' as const : undefined
+        // The policy in force: the store's entry wins over the row's own.
+        const toolPolicy = stored(mine.spec.serverName) ?? mine.spec.toolPolicy ?? ASK_EVERY_CALL
         return {
           ...base, serverName: mine.spec.serverName, transport: mine.spec.transport, owned: true,
           defaultActive: mine.spec.defaultActive ?? true,
-          toolPolicy: mine.spec.toolPolicy ?? { default: 'ask', tools: {} },
+          toolPolicy,
           summary: mine.spec.transport === 'stdio' ? maskedCommandLine(mine.spec) : displayUrl(mine.spec.url),
-          ...reason === undefined ? { spec: redact(mine.spec) } : { readOnlyReason: reason },
+          ...reason === undefined ? { spec: { ...redact(mine.spec), toolPolicy } } : { readOnlyReason: reason },
         }
       }
       const config = (row.config ?? {}) as Record<string, unknown>
@@ -127,7 +145,7 @@ export class McpServersController extends TypertRemoteService {
         ...base, serverName: text(config.serverName), transport, owned: mine !== undefined,
         defaultActive: config.defaultActive !== false,
         // A value the form cannot read is shown as the plugin default; the plugin itself validates it at load.
-        toolPolicy: readToolPolicy(config.toolPolicy) ?? { default: 'ask', tools: {} },
+        toolPolicy: stored(text(config.serverName)) ?? readToolPolicy(config.toolPolicy) ?? ASK_EVERY_CALL,
         summary: transport === 'stdio' ? text(config.command) : displayUrl(text(config.url)),
         readOnlyReason: (mine === undefined ? 'unaddressable' : 'custom-expression') satisfies McpReadOnlyReason,
       }
@@ -150,13 +168,24 @@ export class McpServersController extends TypertRemoteService {
    * @returns the persisted change and whether the running profile applied it.
    */
   @Remote
-  upsert(spec: McpServerSpec, options?: McpUpsertOptions): Promise<McpChangeResult> {
+  async upsert(spec: McpServerSpec, options?: McpUpsertOptions): Promise<McpChangeResult> {
+    const store = this.policyStore()
+    // With the store mounted the policy lives there, so a later change to it reconnects nothing.
+    const { toolPolicy, ...rest } = spec
+    const row = store === undefined || toolPolicy === undefined ? spec : rest as McpServerSpec
+    const result = await this.writeServer(row, spec, options)
+    if (store === undefined || toolPolicy === undefined || result.application === 'failed') return result
+    const stored = await this.storePolicy(store, spec.serverName, toolPolicy, result.target)
+    return stored.error === undefined ? result : stored
+  }
+
+  private writeServer(spec: McpServerSpec, checked: McpServerSpec, options?: McpUpsertOptions): Promise<McpChangeResult> {
     const target = options?.id ?? `${ROW_ID_PREFIX}${spec.serverName}`
     return this.change(target, async () => {
       if (!SERVER_NAME.test(spec.serverName)) {
         throw new ChangeRefused({ code: 'invalid-config', message: 'The server name must be 1-32 letters, digits, "_" or "-"' })
       }
-      const refusal = await validateSpec(spec)
+      const refusal = await validateSpec(checked)
       if (refusal !== undefined) throw new ChangeRefused(refusal)
       const rows = await this.list()
       if (rows.some(row => row.id !== target && row.serverName === spec.serverName)) {
@@ -189,11 +218,18 @@ export class McpServersController extends TypertRemoteService {
    * @returns the persisted change and whether the running profile applied it.
    */
   @Remote
-  removeServer(id: McpEntryId): Promise<McpChangeResult> {
-    return this.change(id, async () => {
-      requireOwned(await this.list(), id)
+  async removeServer(id: McpEntryId): Promise<McpChangeResult> {
+    let serverName = ''
+    const result = await this.change(id, async () => {
+      serverName = requireOwned(await this.list(), id).serverName
       return text => removeRow(text, id)
     })
+    const store = this.policyStore()
+    if (result.application === 'failed' || store === undefined || this.ctx.get('mcpPolicy')?.policyOf(serverName) === undefined) return result
+    // The server is gone; a stored policy would otherwise apply to a later server with the same name.
+    const dropped = await this.storePolicy(store, serverName, undefined, id)
+    // The removal itself succeeded; what remains to report is the policy left behind.
+    return dropped.error === undefined ? result : { ...result, warnings: [dropped.error.message] }
   }
 
   /**
@@ -211,20 +247,88 @@ export class McpServersController extends TypertRemoteService {
   }
 
   /**
-   * Replace the tool-call policy of one editable server row. Changing it runs no command, so it needs no confirmation.
+   * Replace one server's tool-call policy. With the policy store mounted the change applies at the
+   * next call without reconnecting the server, and works for every listed row; without it, only an
+   * editable row the profile patch owns can change, and its server reloads. It runs no command, so it
+   * needs no confirmation.
    * @param id - row id returned by `list`.
    * @param policy - the server's default mode and its per-tool modes.
    * @returns the persisted change and whether the running profile applied it.
    */
   @Remote
-  setToolPolicy(id: McpEntryId, policy: McpToolPolicy): Promise<McpChangeResult> {
-    return this.change(id, async () => {
-      const row = requireOwned(await this.list(), id)
-      if (row.readOnlyReason !== undefined) {
-        throw new ChangeRefused({ code: 'read-only', message: 'This server holds values the form cannot edit; change it in the profile patch' })
-      }
-      return text => setRowToolPolicy(text, id, policy)
-    })
+  async setToolPolicy(id: McpEntryId, policy: McpToolPolicy): Promise<McpChangeResult> {
+    const store = this.policyStore()
+    if (store === undefined) {
+      return this.change(id, async () => {
+        const row = requireOwned(await this.list(), id)
+        if (row.readOnlyReason !== undefined) {
+          throw new ChangeRefused({ code: 'read-only', message: 'This server holds values the form cannot edit; change it in the profile patch' })
+        }
+        return text => setRowToolPolicy(text, id, policy)
+      })
+    }
+    const row = (await this.list()).find(candidate => candidate.id === id)
+    if (row === undefined || row.serverName === '') {
+      return { changed: false, application: 'failed', target: id, error: { code: 'unknown-server', message: `No MCP server row "${id}"` } }
+    }
+    return this.storePolicy(store, row.serverName, policy, id)
+  }
+
+  /**
+   * Let one MCP tool run without asking from now on, by its model-facing name. The change goes to the
+   * policy store, so the server keeps its connection.
+   * @param publicName - the tool's model-facing name, as an approval request names it.
+   * @returns the persisted change; `unknown-server` when no connected server offers the tool.
+   */
+  @Remote
+  async allowTool(publicName: string): Promise<McpChangeResult> {
+    const store = this.policyStore()
+    const statuses = this.ctx.get('mcpStatus')
+    const owner = statuses?.servers().map(server => server.serverName).flatMap(server => statuses.tools(server)
+      .filter(tool => tool.publicName === publicName)
+      .map(tool => ({ server, tool: tool.name })))[0]
+    if (owner === undefined) {
+      return { changed: false, application: 'failed', target: publicName, error: { code: 'unknown-server', message: `No MCP server offers the tool "${publicName}"` } }
+    }
+    if (store === undefined) {
+      const message = 'This profile does not mount the MCP policy store'
+      return { changed: false, application: 'failed', target: publicName, error: { code: 'operation-error', message } }
+    }
+    const row = (await this.list()).find(candidate => candidate.serverName === owner.server)
+    const current = row?.toolPolicy ?? ASK_EVERY_CALL
+    return this.storePolicy(store, owner.server, { default: current.default, tools: { ...current.tools, [owner.tool]: 'allow' } }, row?.id ?? publicName)
+  }
+
+  /** The policy store and the Loader entry the config editor writes it through, when both are mounted. */
+  private policyStore(): PolicyStore | undefined {
+    const editor = this.ctx.get('configEditor')
+    if (editor === undefined || this.ctx.get('mcpPolicy') === undefined) return undefined
+    // A profile names the store by module; a composition that registers the class directly is matched by its plugin.
+    const entry = editor.entries().find(candidate => candidate.options.name === POLICY_STORE_MODULE
+      || candidate.fiber?.runtime?.callback === McpPolicyStore)
+    return entry === undefined ? undefined : { editor, entry }
+  }
+
+  /** Write one server's policy into the store, or remove it with `undefined`; the store applies it without a reload. */
+  private async storePolicy(
+    store: PolicyStore,
+    server: string,
+    policy: McpToolPolicy | undefined,
+    target: string,
+  ): Promise<McpChangeResult> {
+    try {
+      await store.editor.edit(store.entry, (current) => {
+        const servers = { ...(current.servers ?? {}) as Record<string, unknown> }
+        if (policy === undefined) Reflect.deleteProperty(servers, server)
+        else servers[server] = policy
+        return { ...current, servers }
+      })
+    } catch (error) {
+      return { changed: false, application: 'failed', target, error: { code: 'operation-error', message: messageOf(error) } }
+    } finally {
+      this.ctx.emit('plugin-manager/changed', { reason: 'plugin' })
+    }
+    return { changed: true, application: 'applied', target }
   }
 
   /**

@@ -47,6 +47,9 @@
     },
     {
       "path": "../../mcp/mcp-selection"
+    },
+    {
+      "path": "../ui-approval"
     }
   ],
   "exclude": [

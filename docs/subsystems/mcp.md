@@ -119,6 +119,23 @@ MCP prompt templates, human-input elicitation, task-based execution, and resourc
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
 
+<a id="ctxmcppolicy--mcppolicystore"></a>
+
+### `ctx.mcpPolicy` — `McpPolicyStore`
+
+Holds the person's policies and answers them per server.
+
+```ts cordis-catalog
+/**
+ * Read one server's stored policy.
+ * @param server - configured server name.
+ * @returns the policy the person set, or undefined while the store holds none for the server.
+ */
+policyOf(server: string): McpToolPolicy | undefined
+```
+
+Source: [`packages/mcp/mcp-policy/src/index.ts`](../../packages/mcp/mcp-policy/src/index.ts)
+
 <a id="ctxmcpresources--mcpresourceruntime"></a>
 
 ### `ctx.mcpResources` — `McpResourceRuntime`
@@ -211,7 +228,7 @@ Remote owner of the profile's MCP server rows.
  * @param options - row to replace and the confirmed command line.
  * @returns the persisted change and whether the running profile applied it.
  */
-@Remote upsert(spec: McpServerSpec, options?: McpUpsertOptions): Promise<McpChangeResult>
+@Remote async upsert(spec: McpServerSpec, options?: McpUpsertOptions): Promise<McpChangeResult>
 
 /**
  * Remove one server row from the profile patch.
@@ -219,7 +236,7 @@ Remote owner of the profile's MCP server rows.
  * @param id - row id returned by `list`.
  * @returns the persisted change and whether the running profile applied it.
  */
-@Remote removeServer(id: McpEntryId): Promise<McpChangeResult>
+@Remote async removeServer(id: McpEntryId): Promise<McpChangeResult>
 
 /**
  * Enable or disable one server row the profile patch owns.
@@ -230,12 +247,23 @@ Remote owner of the profile's MCP server rows.
 @Remote setEnabled(id: McpEntryId, enabled: boolean): Promise<McpChangeResult>
 
 /**
- * Replace the tool-call policy of one editable server row. Changing it runs no command, so it needs no confirmation.
+ * Replace one server's tool-call policy. With the policy store mounted the change applies at the
+ * next call without reconnecting the server, and works for every listed row; without it, only an
+ * editable row the profile patch owns can change, and its server reloads. It runs no command, so it
+ * needs no confirmation.
  * @param id - row id returned by `list`.
  * @param policy - the server's default mode and its per-tool modes.
  * @returns the persisted change and whether the running profile applied it.
  */
-@Remote setToolPolicy(id: McpEntryId, policy: McpToolPolicy): Promise<McpChangeResult>
+@Remote async setToolPolicy(id: McpEntryId, policy: McpToolPolicy): Promise<McpChangeResult>
+
+/**
+ * Let one MCP tool run without asking from now on, by its model-facing name. The change goes to the
+ * policy store, so the server keeps its connection.
+ * @param publicName - the tool's model-facing name, as an approval request names it.
+ * @returns the persisted change; `unknown-server` when no connected server offers the tool.
+ */
+@Remote async allowTool(publicName: string): Promise<McpChangeResult>
 
 /**
  * Read the tools one server offers, with its connection state.

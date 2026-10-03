@@ -12,7 +12,7 @@ Status: implemented
 
 外发操作先询问，凭证不进入工具输出，上传需要选择加入。
 
-**MCP 工具调用遵循按服务器配置的策略。** `mcp-client` 新增 `toolPolicy`：一个 `default` 模式和逐工具模式，取值为 `allow`、`ask` 或 `deny`，默认 `ask`。关卡是客户端为自己的工具注册的 `tools/pre-execute` 监听器，因此原生调用、PTC 调用和子 agent 调用都会经过它；它永远不会放宽后续监听器的拒绝。GUI 在服务器表单中编辑服务器默认值，在工具对话框中编辑逐工具模式。
+**MCP 工具调用遵循按服务器配置的策略。** `mcp-client` 新增 `toolPolicy`：一个 `default` 模式和逐工具模式，取值为 `allow`、`ask` 或 `deny`，默认 `ask`。关卡是客户端为自己的工具注册的 `tools/pre-execute` 监听器，因此原生调用、PTC 调用和子 agent 调用都会经过它；它永远不会放宽后续监听器的拒绝。GUI 在服务器表单中编辑服务器默认值，在工具对话框中编辑逐工具模式，MCP 调用的审批提示还提供**始终允许**。这些修改写入 `mcp-policy`：这是一个存储，Loader 会原地更新它唯一的 volatile 字段。`mcp-client` 的配置是按传输方式区分的 union，其中的字段不能是 volatile，写在那里会使服务器重新连接，丢失其状态以及正在等待审批的调用。
 
 **`web_fetch` 在获取允许列表之外的主机前先询问。** `tool-web` 新增 `fetchApproval`（默认 `ask`）和 `fetchAllowedHosts`。审批提示显示完整 URL。
 

@@ -76,10 +76,12 @@ flowchart LR
   pkg_api_settings_controller["api-settings-controller"]
   svc_credentialsController["ctx.credentialsController<br/>Host credential-surface Remote controller"]
   svc_settingsController["ctx.settingsController<br/>Host settings-surface Remote controller"]
+  pkg_mcp_policy["mcp-policy"]
+  svc_mcpPolicy["ctx.mcpPolicy<br/>Live MCP tool-call policies"]
+  pkg_api_mcp_controller["api-mcp-controller"]
   pkg_mcp_selection["mcp-selection"]
   svc_mcpSelection["ctx.mcpSelection<br/>Per-Session MCP server selection"]
   pkg_subagent["subagent"]
-  pkg_api_mcp_controller["api-mcp-controller"]
   pkg_mcp_status["mcp-status"]
   svc_mcpStatus["ctx.mcpStatus<br/>Live MCP server connection state"]
   svc_mcpServersController["ctx.mcpServersController<br/>Host MCP server Remote controller"]
@@ -359,6 +361,7 @@ flowchart LR
   pkg_lsp_stdio --> svc_lsp
   pkg_mcp_client --> svc_mcpResources
   pkg_mcp_client --> svc_mcpStatus
+  pkg_mcp_policy --> svc_mcpPolicy
   pkg_mcp_resources --> svc_mcpResources
   pkg_mcp_selection --> svc_mcpSelection
   pkg_mcp_status --> svc_mcpStatus
@@ -488,6 +491,8 @@ flowchart LR
   svc_llm --> pkg_agent_loop
   svc_llm --> pkg_compaction_basic
   svc_lsp --> pkg_tool_lsp
+  svc_mcpPolicy --> pkg_api_mcp_controller
+  svc_mcpPolicy --> pkg_mcp_client
   svc_mcpResources --> pkg_mcp_resources
   svc_mcpSelection --> pkg_api_mcp_controller
   svc_mcpSelection --> pkg_mcp_client
@@ -616,6 +621,7 @@ flowchart LR
 | `ctx.jobController` | `core` | [`api-job-controller`](../packages/api/job-controller) | - | - | - | Streams one background job's observation record over the generated Remote namespace; the roster stays on the session control stream. |
 | `ctx.credentialsController` | `core` | [`api-settings-controller`](../packages/api/settings-controller) | - | - | - | Projects the credential-reference seam onto the generated Remote namespace: batch fan-out, view projection, and refusal mapping live here, not on the seam Definition. |
 | `ctx.settingsController` | `core` | [`api-settings-controller`](../packages/api/settings-controller) | - | - | - | Projects the user-settings seam onto the generated Remote namespace: the read is always redacted and every refusal is classified here, not on the seam Definition. |
+| `ctx.mcpPolicy` | `core` | [`mcp-policy`](../packages/mcp/mcp-policy) | - | [`mcp-client`](../packages/mcp/mcp-client), [`api-mcp-controller`](../packages/api/mcp-controller) | - | Holds the person's per-server tool-call policies in a volatile config field, so the controller changes them without reloading any client; each client reads its entry at every call. |
 | `ctx.mcpSelection` | `core` | [`mcp-selection`](../packages/mcp/mcp-selection) | - | [`mcp-client`](../packages/mcp/mcp-client), [`mcp-resources`](../packages/mcp/mcp-resources), [`subagent`](../packages/subagent/subagent), [`api-mcp-controller`](../packages/api/mcp-controller) | - | Folds the Session's logged selection and denies the tools of the servers it does not use; the MCP client, resource tools, subagent seed, and Remote controller read or write it. |
 | `ctx.mcpStatus` | `seam` | [`mcp-status`](../packages/mcp/mcp-status) | [`mcp-client`](../packages/mcp/mcp-client) | [`api-mcp-controller`](../packages/api/mcp-controller), [`mcp-selection`](../packages/mcp/mcp-selection) | - | Each MCP client registers a handle reading its own connection state and tools; management surfaces read them and the reconnect action. |
 | `ctx.mcpServersController` | `core` | [`api-mcp-controller`](../packages/api/mcp-controller) | - | - | - | Adds, edits, enables, and removes MCP server rows in the profile patch; validation, secret handling, and rollback live here, not in the Plugins page. |

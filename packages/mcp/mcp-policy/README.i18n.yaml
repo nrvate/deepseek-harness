@@ -1,0 +1,34 @@
+# Bilingual-pair consistency record for README.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write packages/mcp/mcp-policy/README.md
+/:
+  en: 634aeaad37ec66b0
+  zh: f8b0bb30f25fd7d2
+/deepseek-ai-dsh-mcp-policy:
+  en: 0e757b0fb5350785
+  zh: 2a5e2f5980fc6336
+/deepseek-ai-dsh-mcp-policy/summary:
+  en: 312c7610542565af
+  zh: f71a3a8a3387c449
+/deepseek-ai-dsh-mcp-policy/table-of-contents:
+  en: 122f0d41696980b1
+  zh: 528864635b577290
+/deepseek-ai-dsh-mcp-policy/use-this-package:
+  en: 68a89b78afae6447
+  zh: 60a2e0b80daa973a
+/deepseek-ai-dsh-mcp-policy/understand-the-implementation:
+  en: 720df3b89e4db0a2
+  zh: 04dfc956893d3f3f
+/deepseek-ai-dsh-mcp-policy/model-experience:
+  en: ad2e23890199649b
+  zh: 04d8a7bf1c78b8f8
+/deepseek-ai-dsh-mcp-policy/model-experience/kv-cache-effect:
+  en: ca75c51c89c2c9b0
+  zh: 6c9e01d76d7ff3c7
+/deepseek-ai-dsh-mcp-policy/known-limitations-and-deferred-work:
+  en: 95f26e48e988feba
+  zh: 60fc8852675821ff
+/deepseek-ai-dsh-mcp-policy/known-limitations-and-deferred-work/dev-note:
+  en: e67f633dc6fe7773
+  zh: e88aeb617ffb74ea

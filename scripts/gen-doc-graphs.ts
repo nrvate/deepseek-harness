@@ -288,6 +288,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'Projects the user-settings seam onto the generated Remote namespace: the read is always redacted and every refusal is classified here, not on the seam Definition.',
   },
   {
+    key: 'mcpPolicy',
+    pkg: 'mcp-policy',
+    title: 'Live MCP tool-call policies',
+    mode: 'core',
+    consumers: ['mcp-client', 'api-mcp-controller'],
+    note: 'Holds the person\'s per-server tool-call policies in a volatile config field, so the controller changes them without reloading any client; each client reads its entry at every call.',
+  },
+  {
     key: 'mcpSelection',
     pkg: 'mcp-selection',
     title: 'Per-Session MCP server selection',

@@ -652,7 +652,7 @@ describe('per-tool modes', () => {
   })
 
   it('changes nothing without an open dialog, for a row the form cannot edit, or after teardown', async () => {
-    const readOnly = row('mcp-x', undefined, { status: connected })
+    const readOnly = row('mcp-x', undefined, { status: connected, serverName: '' })
     const { controller, face, mcpServers } = await loaded([readOnly])
     face.setToolMode('echo', 'allow')
     face.openTools(id('mcp-x'))

@@ -12,7 +12,7 @@ A five-area audit of this fork found that data leaves the machine, or reaches th
 
 Outbound actions ask first, credentials stay out of tool output, and uploads are opt-in.
 
-**MCP tool calls follow a per-server policy.** `mcp-client` gains `toolPolicy`: a `default` mode and per-tool modes, each `allow`, `ask`, or `deny`, defaulting to `ask`. The gate is a `tools/pre-execute` listener the client registers for its own tools, so native, PTC, and subagent calls pass through it; it never relaxes a later listener's refusal. The GUI edits the server default in the server form and per-tool modes in the tools dialog.
+**MCP tool calls follow a per-server policy.** `mcp-client` gains `toolPolicy`: a `default` mode and per-tool modes, each `allow`, `ask`, or `deny`, defaulting to `ask`. The gate is a `tools/pre-execute` listener the client registers for its own tools, so native, PTC, and subagent calls pass through it; it never relaxes a later listener's refusal. The GUI edits the server default in the server form and per-tool modes in the tools dialog, and the approval prompt of an MCP call offers **Always allow**. These edits go to `mcp-policy`, a store whose one volatile field the Loader updates in place: the `mcp-client` config is a union over transports, so a field of it cannot be volatile, and writing there would reconnect the server, losing its state and the call awaiting approval.
 
 **`web_fetch` asks before fetching a host outside an allow-list.** `tool-web` gains `fetchApproval` (`ask` by default) and `fetchAllowedHosts`. The approval prompt shows the exact URL.
 

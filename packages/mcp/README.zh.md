@@ -30,6 +30,7 @@ kind: "package-group"
 | [`mcp-resources/`](mcp-resources/README.zh.md) | 通过显式选择服务器的共享工具发现和读取资源 |
 | [`mcp-status/`](mcp-status/README.zh.md) | 已配置服务器的实时连接状态和工具列表，供管理界面使用 |
 | [`mcp-selection/`](mcp-selection/README.zh.md) | 按会话选择哪些已配置的服务器到达模型 |
+| [`mcp-policy/`](mcp-policy/README.zh.md) | 实时保存每个服务器的工具调用策略，修改时无需重新连接服务器 |
 
 -----
 

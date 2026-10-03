@@ -39,6 +39,16 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       scope: 'session'
       owner: ApprovalDetailOwnerProps
     }
+    /**
+     * Further answers beside Reject and Allow once, such as a tool owner's
+     * "Always allow". An action does its own work, then answers through
+     * `answer`; it renders nothing for requests it does not concern.
+     */
+    'conversation.approval.action': {
+      kind: 'list'
+      scope: 'session'
+      owner: ApprovalActionOwnerProps
+    }
   }
 }
 
@@ -46,6 +56,18 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export interface ApprovalDetailOwnerProps {
   /** Tool call correlated with the request. */
   callId: ToolCallId
+}
+
+/** What an extra approval action receives. */
+export interface ApprovalActionOwnerProps {
+  /** Tool requesting the decision. */
+  toolName: string
+  /** Tool call correlated with the request, when the requester has one. */
+  callId?: ToolCallId
+  /** Whether the request is already being answered. */
+  disabled: boolean
+  /** Answer the request; the panel ignores a second answer. */
+  answer: (decision: ApprovalDecision) => void
 }
 
 /** Client-visible fields of an approval request projected through Remote Events. */
@@ -188,7 +210,7 @@ export interface ApprovalInjected {
 /** Full props of the approval composer takeover. */
 export type ApprovalComposerProps =
   PropsRuntime<'conversation.composer'>
-  & PropsRenderSlots<'conversation.approval.detail'>
+  & PropsRenderSlots<'conversation.approval.detail' | 'conversation.approval.action'>
   & { matched: PendingApproval }
   & PropsLocale<'approval'>
   & ApprovalInjected

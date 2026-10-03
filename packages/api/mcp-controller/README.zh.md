@@ -30,7 +30,8 @@ kind: "package-reference"
 | `upsert(spec, { id?, confirmedCommand? })` | 添加 `mcp-<serverName>`，或替换 `id` 所指行中受托管的键 |
 | `setEnabled(id, enabled)` | 在 profile 补丁所拥有的行上写入 `disabled` |
 | `removeServer(id)` | 删除 profile 补丁所拥有的行 |
-| `setToolPolicy(id, policy)` | 只替换可编辑行的 `toolPolicy`；它不运行任何命令，因此无需确认 |
+| `setToolPolicy(id, policy)` | 替换一个服务器的工具调用策略。挂载 [mcp-policy](../../mcp/mcp-policy/README.zh.md) 时，策略通过配置编辑器写入该存储，生效时不会使服务器重新连接，且适用于每一个列出的行；否则只有可编辑且由补丁拥有的行可以修改，其服务器会重新加载。它不运行任何命令，因此无需确认 |
+| `allowTool(publicName)` | 按面向模型的名称，让一个工具从现在起无需询问即可运行，并保留其服务器策略的其余部分；需要策略存储 |
 | `tools(id)` | 服务器当前提供的工具及其连接状态 |
 | `reconnectServer(id)` | 请服务器的客户端立即连接；返回是否开始了尝试 |
 | `overview(sessionId?)` | 一次调用返回每一行的连接状态和用量计数，以及读取时的 Host 时钟；传入会话 id 时，每一行还以 `sessionStats` 给出该会话的部分 |
@@ -42,7 +43,7 @@ stdio 服务器会以 Host 的权限运行命令。在 `confirmedCommand` 等于
 
 ### 密钥
 
-`env` 或 `headers` 的值可以是字面量、环境变量引用（`{ kind: 'env', name, scheme? }`，写为 `!!js process.env.NAME` 或 `Bearer` 模板）、文件中已有的 `expression`，或 `kept`。环境变量引用必须指向保存变更时 Host 环境中已设置的变量：Loader 会拒绝 `env` 值未定义的配置，`Bearer` 请求头则会发送文本 `undefined`，因此 `upsert` 会以 `invalid-config` 拒绝。形似凭证的键下的字面量会以 `literal-secret` 被拒绝（`env` 为 `KEY`、`PASSWORD`、`SECRET`、`TOKEN`；`headers` 除这些外还有 `authorization`、`cookie`），含用户名、密码或形似凭证的查询参数的 URL，以及为形似凭证的选项携带值的命令行参数（`--token x`、`--api-key=x`）同样被拒绝。当手写文件中已存在此类字面量时，`list` 以 `kept` 代替返回，`upsert` 接受 `kept` 以保持已存储的值不变。`expression` 仅在与同一键下已存储的源码一致时才被接受，因此客户端无法提交代码。URL 或参数内嵌凭证的行会以 `embedded-credentials` 只读列出，显示不含凭证的 URL，命令行中的这些参数值显示为 `***`。每一行都列出其 `toolPolicy`，未指定时为插件默认值。
+`env` 或 `headers` 的值可以是字面量、环境变量引用（`{ kind: 'env', name, scheme? }`，写为 `!!js process.env.NAME` 或 `Bearer` 模板）、文件中已有的 `expression`，或 `kept`。环境变量引用必须指向保存变更时 Host 环境中已设置的变量：Loader 会拒绝 `env` 值未定义的配置，`Bearer` 请求头则会发送文本 `undefined`，因此 `upsert` 会以 `invalid-config` 拒绝。形似凭证的键下的字面量会以 `literal-secret` 被拒绝（`env` 为 `KEY`、`PASSWORD`、`SECRET`、`TOKEN`；`headers` 除这些外还有 `authorization`、`cookie`），含用户名、密码或形似凭证的查询参数的 URL，以及为形似凭证的选项携带值的命令行参数（`--token x`、`--api-key=x`）同样被拒绝。当手写文件中已存在此类字面量时，`list` 以 `kept` 代替返回，`upsert` 接受 `kept` 以保持已存储的值不变。`expression` 仅在与同一键下已存储的源码一致时才被接受，因此客户端无法提交代码。URL 或参数内嵌凭证的行会以 `embedded-credentials` 只读列出，显示不含凭证的 URL，命令行中的这些参数值显示为 `***`。每一行都列出生效中的 `toolPolicy`：存储的策略，否则为该行自己的策略，再否则为插件默认值。挂载存储时，`upsert` 把规格中的 `toolPolicy` 写入存储而不是写入该行，`removeServer` 会删除该服务器存储的策略。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现

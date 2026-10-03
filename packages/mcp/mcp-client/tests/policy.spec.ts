@@ -26,7 +26,7 @@ async function bench(policy: McpToolPolicy) {
       execute: () => { ran.push(name); return Promise.resolve('done') },
     }))
   }
-  await ctx.plugin({ apply: (inner: Context) => { registerToolPolicy(inner, 'srv', policy, () => [info('read'), info('send')]) } })
+  await ctx.plugin({ apply: (inner: Context) => { registerToolPolicy(inner, 'srv', () => policy, () => [info('read'), info('send')]) } })
   let seq = 0
   const call = (name: string, agent?: Agent) => ctx.tools.execute({
     name, arguments: {}, callId: ToolCallId(`policy-${++seq}`), signal: new AbortController().signal,

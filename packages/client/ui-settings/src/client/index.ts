@@ -36,7 +36,9 @@ export const inject = ['remote', 'remote.settings']
 export function apply(ctx: Context): void {
   const schema = new SettingsSchemaService(ctx)
   // Every form uses the persistence mode resolved from the connected Host.
-  const persistence = ctx.remote.$host.isLoopback ? 'host' : 'memory'
+  // Fork (nrvate): keep host persistence for remote, non-loopback pages too, so
+  // settings stay viewable and editable from a public URL served behind Access.
+  const persistence = 'host'
   const mirror = new SettingsDescribeMirror(ctx, persistence)
   ctx.effect(() => {
     const disposers = [

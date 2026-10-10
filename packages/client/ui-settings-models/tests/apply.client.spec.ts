@@ -243,8 +243,17 @@ describe('ui-settings-models apply', () => {
     expect(() => b.locale.register('settings.models', 'en', {})).not.toThrow()
   })
 
-  it('keeps remote-browser acknowledgement in process memory', async () => {
-    const b = await bench(false)
+  // Fork (nrvate): a remote browser uses Host persistence, so the notice reads the Host document.
+  it('reads remote-browser acknowledgement from the Host document', async () => {
+    const mock = RemoteMock.create().load(remoteDefaultResponses)
+    mock.remote.settings.describe.mockResolvedValue(ok({
+      writable: true, hasDocument: false, namespaces: [{
+        ns: WELCOME_NOTICE_SETTINGS_NAMESPACE,
+        schema: JSON.parse(JSON.stringify(Schema.object({ [WELCOME_NOTICE_ACK_FIELD]: Schema.string() }).toJSON())) as JsonValue,
+        value: {}, autoGenerate: true, applies: 'live' as const, secrets: [], revision: 0,
+      }],
+    }))
+    const b = await bench(false, mock)
     declare(b.slots)
     await b.ctx.plugin({ inject: [...inject], apply }).await()
     const entry = b.slots.entries('settings.onboarding')
@@ -254,9 +263,12 @@ describe('ui-settings-models apply', () => {
     )()
 
     await injected.controller.load()
-    expect(injected.controller.store.getSnapshot()).toEqual({
-      status: 'ready', acknowledged: false, error: null,
+    await vi.waitFor(() => {
+      expect(injected.controller.store.getSnapshot()).toEqual({
+        status: 'ready', acknowledged: false, error: null,
+      })
     })
+    expect(mock.remote.settings.describe).toHaveBeenCalled()
   })
 })
 

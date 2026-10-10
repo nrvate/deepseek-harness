@@ -60,9 +60,6 @@
       "path": "../../workspace/workspace"
     },
     {
-      "path": "../../jobs/jobs"
-    },
-    {
       "path": "../../typert/protocol"
     },
     {
@@ -76,6 +73,9 @@
     },
     {
       "path": "../../mcp/mcp-selection"
+    },
+    {
+      "path": "../../session/working-directory"
     }
   ]
 }

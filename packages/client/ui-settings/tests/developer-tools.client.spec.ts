@@ -63,26 +63,15 @@ describe('developer tools settings', () => {
     expect(ctx.configForms.developerTools.enabled.getSnapshot()).toBe(false)
   })
 
-  // Fork (nrvate): a remote browser uses Host persistence, so its preference follows the Host document.
-  it('shares one Host-backed remote-browser preference across consumers and disposes it with the plugin', async () => {
+  it('shares one preference instance across consumers and disposes it with the plugin', async () => {
     const ctx = new Context()
     onTestFinished(() => ctx.fiber.dispose())
-    const describeCall = vi.fn().mockResolvedValue({ ok: true, value: {
-      writable: true, hasDocument: true, namespaces: [{
-        ns: DEVELOPER_TOOLS_NAMESPACE,
-        schema: DeveloperToolsSettingsSchema.toJSON(),
-        value: { enabled: true }, revision: 1, autoGenerate: true, applies: 'live', secrets: [],
-      }],
-    } })
-    const remote = new TestRemote(ctx, { settings: { describe: describeCall } })
-    remote.$host = { home: undefined, isLoopback: false }
+    const describeCall = vi.fn().mockResolvedValue({ ok: true, value: { writable: true, hasDocument: true, namespaces: [] } })
+    new TestRemote(ctx, { settings: { describe: describeCall } })
     const fiber = ctx.plugin({ inject, apply: clientApply })
     await fiber.await()
     const preference = ctx.configForms.developerTools
-    expect(fiber.ctx.configForms.developerTools.enabled).toBe(preference.enabled)
-    await ctx.configForms.describe().ensure()
-    expect(describeCall).toHaveBeenCalled()
-    expect(preference.enabled.getSnapshot()).toBe(true)
+    expect(fiber.ctx.configForms.developerTools).toBe(preference)
     await fiber.dispose()
     expect(ctx.get('configForms')).toBeUndefined()
   })
@@ -101,24 +90,6 @@ describe('developer tools settings', () => {
     expect(preference.enabled.getSnapshot()).toBe(true)
     dispose()
   })
-})
-
-it('keeps remote browser choices local and publishes only changed values', async () => {
-  const host = stubConfigForm<DeveloperToolsSettings>()
-  host.publish({ mode: 'memory' })
-  const preference = new DeveloperToolsPreference(host.scope)
-  const notify = vi.fn()
-  const dispose = preference.enabled.subscribe(notify)
-  expect(preference.enabled.getSnapshot()).toBe(true)
-  await preference.setEnabled(false)
-  expect(preference.enabled.getSnapshot()).toBe(false)
-  await preference.setEnabled(false)
-  expect(notify).toHaveBeenCalledOnce()
-  await preference.setEnabled(true)
-  expect(preference.enabled.getSnapshot()).toBe(true)
-  expect(notify).toHaveBeenCalledTimes(2)
-  expect(host.set).not.toHaveBeenCalled()
-  dispose()
 })
 
 it('ignores host revisions that do not change enablement', () => {

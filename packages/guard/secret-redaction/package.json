@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-secret-redaction",
   "description": "Tool-output guard plugin: replaces known credentials and well-known token formats in every tool result before the model or the session log sees it",
-  "version": "0.2.0-rc.2",
+  "version": "0.2.1-rc.2",
   "publishConfig": {
     "access": "public"
   },

@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-mcp-selection",
   "description": "Per-Session choice of which configured MCP servers reach the model, logged and enforced through the tool registry",
-  "version": "0.2.0-rc.2",
+  "version": "0.2.1-rc.2",
   "publishConfig": {
     "access": "public"
   },

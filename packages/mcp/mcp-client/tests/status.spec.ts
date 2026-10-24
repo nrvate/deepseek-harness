@@ -3,6 +3,7 @@
  * `mcpStatus`, and for its reconnect-now action. Isolated file so vi.mock of
  * the MCP SDK doesn't pollute other test suites.
  */
+import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -305,7 +306,7 @@ describe('published connection status', () => {
 
   describe('usage counters', () => {
     let seq = 0
-    const call = (name: string, args: Record<string, unknown>) => ctx.tools.execute({
+    const call = (name: string, args: Record<string, unknown>) => executeToolFixture(ctx, {
       name, arguments: args, callId: ToolCallId(`status-${++seq}`), signal: new AbortController().signal,
     })
 
@@ -357,7 +358,7 @@ describe('published connection status', () => {
     it('attributes a call to the Session that made it and keeps the server totals', async () => {
       const { handle } = start()
       await handle.ready
-      const inSession = (id: string) => ctx.tools.execute({
+      const inSession = (id: string) => executeToolFixture(ctx, {
         name: 'mcp__srv__remote', arguments: { q: 'abcd' }, callId: ToolCallId(`session-${++seq}`),
         signal: new AbortController().signal, agent: { session: { id } } as Agent,
       })

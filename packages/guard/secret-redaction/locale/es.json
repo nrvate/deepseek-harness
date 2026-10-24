@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Ocultación de secretos",
+    "description": "Reemplaza las credenciales conocidas y los formatos de token habituales en los resultados de las herramientas antes de que los vean el modelo o el registro de la sesión."
+  }
+}

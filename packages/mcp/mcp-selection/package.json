@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-mcp-selection",
   "description": "Per-Session choice of which configured MCP servers reach the model, logged and enforced through the tool registry",
-  "version": "0.2.1-rc.2",
+  "version": "0.2.1-rc.3",
   "publishConfig": {
     "access": "public"
   },
@@ -27,9 +27,11 @@
       "default": "./lib/types/client.js"
     },
     "./src/*": "./src/*",
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "files": [
+    "locale/*.json",
     "lib/index.js",
     "lib/types/**/*.js",
     "lib/types/**/*.d.ts"
@@ -57,6 +59,8 @@
     "@deepseek-ai/dsh-session": "workspace:*",
     "@deepseek-ai/dsh-session-projection": "workspace:*",
     "@deepseek-ai/dsh-system-prompt": "workspace:*",
+    "@deepseek-ai/dsh-tool-executor-native": "workspace:*",
+    "@deepseek-ai/dsh-tool-testkit": "workspace:*",
     "@deepseek-ai/dsh-tools": "workspace:*"
   }
 }

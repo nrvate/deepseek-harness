@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Secret redaction",
+    "description": "Replace known credentials and common token formats in tool results before the model or the session log sees them."
+  }
+}

@@ -13,7 +13,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-mcp-status'
 import { createScope, type Scope } from '@deepseek-ai/dsh-scope'
 import type { Session } from '@deepseek-ai/dsh-session'
-import type { ProjectionDefinition } from '@deepseek-ai/dsh-session-projection'
+import type { ProjectionDefinition, ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
 import type {} from '@deepseek-ai/dsh-tools'
 import { z as zod } from 'zod'
 import type { ZodType } from 'zod'
@@ -72,11 +72,16 @@ export class McpSelection extends Service {
   private readonly sharedTools = new Set<string>()
   /** Set while this service changes restrictions, whose `tools/change` it must not answer. */
   private refreshing = false
+  private projection!: ProjectionHandle<McpServersProjection>
 
   /** @param ctx - the context that owns the selection state and its registrations. */
   constructor(ctx: Context) {
     super(ctx, 'mcpSelection')
-    ctx.sessionProjections.register(mcpServersProjectionDefinition)
+  }
+
+  protected async [Service.init](): Promise<void> {
+    const ctx = this.ctx
+    this.projection = await ctx.sessionProjections.register(mcpServersProjectionDefinition)
     ctx.on('agent/created', ({ agent }) => {
       this.masks.set(agent, { denied: new Set() })
       agent.ctx.effect(() => async () => {
@@ -98,7 +103,7 @@ export class McpSelection extends Service {
    * @returns the logged server names, or undefined while the Session follows the configured defaults.
    */
   logged(session: Session): readonly string[] | undefined {
-    return this.ctx.sessionProjections.stateOf(session, 'mcpServers')?.active ?? undefined
+    return this.projection.stateOf(session).active ?? undefined
   }
 
   /**

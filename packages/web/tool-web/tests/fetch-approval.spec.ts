@@ -1,4 +1,5 @@
 /** Asking before `web_fetch` sends a URL off the machine, through the real registry, seam, and tool plugin. */
+import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -34,11 +35,15 @@ async function bench(config: ToolWeb.Config = {}) {
   const request = vi.fn((_request: { reason?: string; displayReason?: { en: string } }) => Promise.resolve<'allowed-once' | 'rejected'>('allowed-once'))
   ctx.provide('approval', { request } as never)
   let seq = 0
-  /** Call as the test Session's agent, or with no agent when `caller` is null. */
-  const call = (url: unknown, caller: Agent | null = agent) => ctx.tools.execute({
-    name: 'web_fetch', arguments: { url }, callId: ToolCallId(`fetch-${++seq}`), signal: new AbortController().signal,
-    ...caller === null ? {} : { agent: caller },
-  })
+  /** Call in a model step that admits `web_fetch`, as the test Session's agent, or with no agent when `caller` is null. */
+  const call = async (url: unknown, caller: Agent | null = agent) => {
+    const signal = new AbortController().signal
+    const toolSet = await ctx.tools.resolve({ agent, modelSelection: { provider: 'deepseek-official', model: 'deepseek-v4-flash' }, signal })
+    return executeToolFixture(ctx, {
+      name: 'web_fetch', arguments: { url }, callId: ToolCallId(`fetch-${++seq}`), signal, toolSet,
+      ...caller === null ? {} : { agent: caller },
+    })
+  }
   return { ctx, fetched, request, call }
 }
 

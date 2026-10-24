@@ -43,8 +43,9 @@ export function assertAllowedHosts(allowed: readonly string[]): void {
 }
 
 /**
- * Gate every `web_fetch` call. A call that already fails validation, an allowed
- * host, and the `allow` setting run as before; a Session with full access runs
+ * Gate every `web_fetch` call. A call that already fails validation, a call the
+ * step did not admit (it fails as `UNKNOWN_TOOL`), an allowed host, and the
+ * `allow` setting run as before; a Session with full access runs
  * without asking, as the person chose; any other call asks with the exact URL.
  * A later listener's refusal is never relaxed.
  * @param ctx - the tool plugin's context; the listener lives as long as it.
@@ -54,6 +55,7 @@ export function assertAllowedHosts(allowed: readonly string[]): void {
 export function registerFetchApproval(ctx: Context, approval: FetchApproval, allowed: readonly string[]): void {
   ctx.on('tools/pre-execute', async (exec, next): Promise<PreToolDecision> => {
     if (exec.name !== 'web_fetch' || approval === 'allow') return next()
+    if (ctx.tools.executable(exec.name, exec.agent, exec.toolSet) === undefined) return next()
     const url = String((exec.arguments as { url?: unknown } | null)?.url)
     let host: string | undefined
     try {

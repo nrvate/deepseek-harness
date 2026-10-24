@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "MCP-Richtlinie für Tool-Aufrufe",
+    "description": "Speichert die Richtlinien für Tool-Aufrufe, die Sie für MCP-Server festlegen, und wendet sie bei jedem Aufruf an."
+  }
+}

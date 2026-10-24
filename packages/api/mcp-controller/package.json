@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-api-mcp-controller",
   "description": "Remote owner for adding, editing, enabling, and removing MCP server rows in the profile patch",
-  "version": "0.2.1-rc.2",
+  "version": "0.2.1-rc.3",
   "publishConfig": {
     "access": "public"
   },
@@ -31,9 +31,11 @@
       "default": "./lib/typert.remote-client.js"
     },
     "./src/*": "./src/*",
+    "./locale/*.json": "./locale/*.json",
     "./package.json": "./package.json"
   },
   "files": [
+    "locale/*.json",
     "lib/index.js",
     "lib/types/**/*.js",
     "lib/types/**/*.d.ts",

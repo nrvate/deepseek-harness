@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "MCP-Serverstatus",
+    "description": "Verfolgt den Verbindungsstatus und die Tool-Listen der konfigurierten MCP-Server."
+  }
+}

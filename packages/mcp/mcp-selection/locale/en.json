@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "MCP server selection",
+    "description": "Choose which configured MCP servers each session offers to the model."
+  }
+}

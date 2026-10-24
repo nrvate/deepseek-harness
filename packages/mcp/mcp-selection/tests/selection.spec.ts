@@ -9,7 +9,9 @@ import LlmRuntime, { createUserMessage } from '@deepseek-ai/dsh-llm'
 import SessionStore, { Session, SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
-import ToolRuntime, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
+import { defineContentToolFixture } from '@deepseek-ai/dsh-tool-testkit'
+import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import McpStatus, { type McpServerHandle } from '@deepseek-ai/dsh-mcp-status'
@@ -43,6 +45,7 @@ async function harness(adapter: MockAdapter): Promise<Context> {
   await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(NativeToolExecutor)
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(McpStatus)
@@ -95,7 +98,7 @@ describe('configured defaults', () => {
 
     expect(lastRequestTools(adapter)).toEqual(['mcp__alpha__search', 'read'])
     expect(events(agent, 'mcp/servers')).toEqual([])
-    expect(ctx.sessionProjections.stateOf(agent.session, 'mcpServers')).toEqual({ active: null })
+    expect(ctx.mcpSelection.logged(agent.session)).toBeUndefined()
   })
 
   it('follows a server that connects later, while the Session has logged no selection', async () => {

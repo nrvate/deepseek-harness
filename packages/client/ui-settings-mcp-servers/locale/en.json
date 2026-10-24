@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "MCP server settings",
+    "description": "Add and manage MCP servers on the Plugins page, and show their status below the prompt box."
+  }
+}

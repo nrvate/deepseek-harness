@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Interface de gerenciamento de servidores MCP",
+    "description": "Permite que os clientes adicionem, editem, ativem e removam servidores MCP no perfil."
+  }
+}

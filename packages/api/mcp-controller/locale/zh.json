@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "MCP 服务器管理接口",
+    "description": "让客户端在 profile 中添加、编辑、启用和移除 MCP 服务器。"
+  }
+}

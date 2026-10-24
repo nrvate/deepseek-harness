@@ -32,7 +32,7 @@ import { McpServerSelect } from './McpServerSelect.tsx'
 import { McpAlwaysAllow, type McpAlwaysAllowFace } from './McpAlwaysAllow.tsx'
 import { McpTrayController } from './mcp-tray-controller.ts'
 import { MCP_UI_SETTINGS_NAMESPACE, type McpUiSettings } from '../mcp-ui-settings.ts'
-import { en, zh, type McpServersLocaleKey } from './locales.ts'
+import { en, ja, es, fr, de, ru, pt, zh, type McpServersLocaleKey } from './locales.ts'
 
 export type { McpServersCardProps } from './McpServersCard.tsx'
 export type { McpServersToastProps } from './McpServersToast.tsx'
@@ -63,7 +63,7 @@ export const inject = ['slots', 'locale', 'remote', 'remote.mcpServers', 'config
  */
 export function apply(ctx: ClientContext): void {
   const t = ctx.locale.bind(NS)
-  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-settings-mcp-servers: dictionaries')
+  ctx.effect(() => ctx.locale.register(NS, { zh, en, ja, es, fr, de, ru, pt }), 'ui-settings-mcp-servers: dictionaries')
   const form = ctx.configForms.get<McpUiSettings>(MCP_UI_SETTINGS_NAMESPACE)
   const controller = new McpServersController(ctx, form)
   ctx.effect(() => () => { controller.dispose() }, 'ui-settings-mcp-servers: controller')

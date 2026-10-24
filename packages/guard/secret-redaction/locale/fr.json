@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Masquage des secrets",
+    "description": "Remplace les identifiants connus et les formats de jetons courants dans les résultats des outils avant que le modèle ou le journal de session ne les voie."
+  }
+}

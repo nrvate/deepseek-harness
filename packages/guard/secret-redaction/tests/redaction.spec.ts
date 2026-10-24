@@ -1,4 +1,5 @@
 /** Redaction of tool results, through the real tool registry. */
+import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -97,7 +98,7 @@ async function bench(config: Partial<Redaction.Config> = {}, provider?: object) 
   await ctx.plugin(Redaction, Redaction.Config(config))
   let seq = 0
   const call = async (name: string, text: string): Promise<string> => {
-    const result = await ctx.tools.execute({ name, arguments: { text }, callId: ToolCallId(`r-${++seq}`), signal: new AbortController().signal })
+    const result = await executeToolFixture(ctx, { name, arguments: { text }, callId: ToolCallId(`r-${++seq}`), signal: new AbortController().signal })
     return result.content.map(block => block.type === 'text' ? block.text : '').join('')
   }
   return { ctx, call }
@@ -163,7 +164,7 @@ describe('the post-execute guard', () => {
     expect(await call('echo', 'ignored')).toBe('replaced value')
     // Context another listener attaches survives the redaction.
     decision = { kind: 'accept', content: [{ type: 'text', text: GITHUB }], additionalContexts: [createUserMessage({ content: [{ type: 'text', text: 'note' }], source: { kind: 'user' } })] }
-    const result = await ctx.tools.execute({ name: 'echo', arguments: { text: 'x' }, callId: ToolCallId('r-context'), signal: new AbortController().signal })
+    const result = await executeToolFixture(ctx, { name: 'echo', arguments: { text: 'x' }, callId: ToolCallId('r-context'), signal: new AbortController().signal })
     expect(result.content).toEqual([{ type: 'text', text: '[redacted: GitHub token]' }])
     expect(result.additionalContexts).toHaveLength(1)
   })

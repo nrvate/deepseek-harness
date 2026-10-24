@@ -1,4 +1,5 @@
 /** The tool-call policy gate, through the real tool registry and its approval routing. */
+import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
@@ -28,7 +29,7 @@ async function bench(policy: McpToolPolicy) {
   }
   await ctx.plugin({ apply: (inner: Context) => { registerToolPolicy(inner, 'srv', () => policy, () => [info('read'), info('send')]) } })
   let seq = 0
-  const call = (name: string, agent?: Agent) => ctx.tools.execute({
+  const call = (name: string, agent?: Agent) => executeToolFixture(ctx, {
     name, arguments: {}, callId: ToolCallId(`policy-${++seq}`), signal: new AbortController().signal,
     ...agent === undefined ? {} : { agent },
   })

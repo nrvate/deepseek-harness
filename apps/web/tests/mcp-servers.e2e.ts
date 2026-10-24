@@ -3,6 +3,7 @@
 // disabled, edited, and removed from the browser, and the file is read back after
 // each step. Zero model calls: everything is client state plus the profile patch on
 // a blank frame, so there is no fixture and a stray stream would fail loud.
+import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { join } from 'node:path'
@@ -274,7 +275,7 @@ describe('web e2e: MCP servers page', () => {
     await expect.poll(() => scaffold.ctx.mcpSelection.active(agent.session), { timeout: 10_000 }).toEqual(['files'])
     expect(everythingTools()).toEqual([])
     expect(await menu.isVisible()).toBe(true)
-    const refused = await scaffold.ctx.tools.execute({
+    const refused = await executeToolFixture(scaffold.ctx, {
       name: 'mcp__everything__echo', arguments: { message: 'hidden' }, callId: ToolCallId('mcp-deselected'),
       signal: new AbortController().signal, agent,
     })
@@ -306,7 +307,7 @@ describe('web e2e: MCP servers page', () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-mcp-servers-status-item'))
     // Two real calls through the Host's tool registry, so the counters have something to show without a model.
     for (const callId of ['mcp-status-1', 'mcp-status-2']) {
-      const result = await scaffold.ctx.tools.execute({
+      const result = await executeToolFixture(scaffold.ctx, {
         name: 'mcp__everything__echo', arguments: { message: 'counted' }, callId: ToolCallId(callId), signal: new AbortController().signal,
       })
       expect(result.isError).not.toBe(true)

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "MCP server management API",
+    "description": "Lets clients add, edit, enable, and remove MCP servers in the profile."
+  }
+}

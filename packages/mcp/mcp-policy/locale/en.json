@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "MCP tool-call policy",
+    "description": "Store the tool-call policies you set for MCP servers and apply them to every call."
+  }
+}

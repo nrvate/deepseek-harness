@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Schwärzung von Geheimnissen",
+    "description": "Ersetzt bekannte Anmeldedaten und gängige Token-Formate in Tool-Ergebnissen, bevor das Modell oder das Sitzungsprotokoll sie sieht."
+  }
+}

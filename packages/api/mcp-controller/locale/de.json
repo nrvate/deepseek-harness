@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Schnittstelle zur MCP-Serververwaltung",
+    "description": "Ermöglicht Clients, MCP-Server im Profil hinzuzufügen, zu bearbeiten, zu aktivieren und zu entfernen."
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Configuración de servidores MCP",
+    "description": "Añade y administra servidores MCP en la página de plugins y muestra su estado debajo del cuadro de mensaje."
+  }
+}

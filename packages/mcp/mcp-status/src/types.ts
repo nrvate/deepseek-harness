@@ -1,32 +1,10 @@
-/** Records an MCP client publishes about its server and consumers read. */
-
-/** Where a server's connection stands. */
-export type McpConnectionState =
-  /** The first attempt, started when the plugin loaded or the person asked to reconnect, is in flight. */
-  | 'connecting'
-  /** The server answered and its tools are registered. */
-  | 'connected'
-  /** The connection was lost or an attempt failed; the next attempt is waiting or in flight. */
-  | 'reconnecting'
-  /** No attempt is pending: the retry budget is spent, reconnecting is off, or a failed generation could not be closed. */
-  | 'failed'
-
-/** One server's connection state. */
-export interface McpServerStatus {
-  /** The configured `serverName`. */
-  serverName: string
-  state: McpConnectionState
-  /** Consecutive failed attempts in the current outage; 0 while connected. */
-  attempt: number
-  /** Failed attempts allowed before the client stops, as configured. */
-  maxAttempts: number
-  /** The last failure's message, kept until the next successful connection. */
-  error?: string
-  /** Epoch milliseconds of the last successful connection. */
-  connectedAt?: number
-  /** Tools registered from this server right now. */
-  toolCount: number
-}
+/**
+ * Tool lists and usage counters an MCP client publishes about its server.
+ * Connection state is the client's `McpConnectionStatus`, not part of these records.
+ * Types only — no runtime code.
+ *
+ * @module @deepseek-ai/dsh-mcp-status/types
+ */
 
 /** One parameter of a tool's input schema. */
 export interface McpToolParameter {
@@ -99,12 +77,26 @@ export interface McpConfiguredServer {
   defaultActive: boolean
 }
 
+/** One finished tool call, as a client reports it for usage counters. */
+export interface McpCallRecord {
+  /** The server's own name for the tool. */
+  tool: string
+  /** Wall time from the request to its result or failure. */
+  ms: number
+  /** Whether the call threw or the server marked its result as an error. */
+  failed: boolean
+  /** Length of the JSON arguments sent. */
+  inputChars: number
+  /** Length of the text blocks returned; binary blocks are not counted. */
+  outputChars: number
+  /** The Session whose model made the call; absent for a call made outside any Session. */
+  session?: string
+}
+
 /** What a client hands the registry for one server; every read reflects the live connection. */
 export interface McpServerHandle {
   /** Whether a Session that has made no selection of its own uses this server, as configured. */
   readonly defaultActive: boolean
-  /** @returns the current connection state. */
-  status(): McpServerStatus
   /** @returns the tools registered from the server right now. */
   tools(): readonly McpToolInfo[]
   /**
@@ -114,12 +106,7 @@ export interface McpServerHandle {
    */
   stats(session?: string): McpServerStats
   /**
-   * Connect now instead of waiting for the next scheduled attempt, and restart the retry budget.
-   * @returns false when a connection is already live or being made, so nothing changed.
-   */
-  reconnect(): Promise<boolean>
-  /**
-   * Observe state and tool changes.
+   * Observe tool-list changes.
    * @param listener - called after each change has been applied.
    * @returns the disposer that stops the observation.
    */

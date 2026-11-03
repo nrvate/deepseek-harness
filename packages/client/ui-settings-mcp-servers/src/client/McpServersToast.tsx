@@ -14,8 +14,10 @@ export type McpServersToastProps = InjectFace<McpServersToastFace> & PropsLocale
 const TEXT: Record<McpNotice['kind'], McpServersLocaleKey> = {
   saved: 'noticeSaved',
   removed: 'noticeRemoved',
+  restored: 'noticeRestored',
   enabled: 'noticeEnabled',
   disabled: 'noticeDisabled',
+  restarted: 'noticeRestarted',
   failed: 'noticeFailed',
   'refresh-failed': 'noticeRefreshFailed',
 }
@@ -32,7 +34,7 @@ export function McpServersToast({ useMcpServers, dismissNotice, t }: McpServersT
   return (
     <Toast
       key={notice.seq}
-      text={t(notice.restart && !failed ? 'noticeRestart' : TEXT[notice.kind])}
+      text={notice.detail === '' ? t(TEXT[notice.kind]) : t('noticeFailedDetail', { detail: notice.detail })}
       {...failed ? { icon: <IconWarningOutlineRegular /> } : { tone: 'success' as const }}
       onDone={dismissNotice}
     />

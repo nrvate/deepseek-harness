@@ -23,6 +23,8 @@
 
 MCP 服务器需要主动配置。在目标 Cordis 作用域中，为每台服务器配置一个 `@deepseek-ai/dsh-mcp-client` 条目。每个随附 profile 都提供[工具注册表](tools.zh.md)，并统一挂载共享资源服务一次；用户只需配置客户端条目。调用方没有可见的已配置服务器时，在 native 或 PTC 模式下都不会获得 MCP 提示词文本或工具。
 
+Web 与 Desktop profile 还统一挂载一次 [MCP 服务器管理器](../../packages/mcp/mcp-manager/README.zh.md)。它运行通过 Settings 配置的服务器，以及已安装插件在自身生命周期内注册的服务器，并向 Remote 客户端提供它们的状态、重启与探测操作。
+
 | 选择 | 配置维护位置 |
 |---|---|
 | 服务器身份、本地进程或 HTTP 端点、凭据和进程环境 | [客户端配置](../../packages/mcp/mcp-client/README.zh.md#use-this-package) |
@@ -38,7 +40,7 @@ MCP 服务器需要主动配置。在目标 Cordis 作用域中，为每台服�
 <a id="responsibilities-and-scope"></a>
 ## 职责与作用域
 
-客户端是每服务器一个的连接插件，也是 Harness 工具注册表的消费者。它不发布共享的 `ctx.mcp` 服务。外部服务器实现 MCP 操作；SDK 拥有协议交换；客户端将发现的工具适配到 Harness 执行过程。
+客户端是每服务器一个的连接插件，也是 Harness 工具注册表的消费者。它不发布共享的 `ctx.mcp` 服务；管理器为其挂载的宿主全局服务器发布 `ctx.mcpManager`。外部服务器实现 MCP 操作；SDK 拥有协议交换；客户端将发现的工具适配到 Harness 执行过程。
 
 `mcp-resources` 拥有共享资源工具，并在调用方作用域中选择提供方。每个 MCP 客户端通过自己的连接提供资源操作。作用域中的首个提供方启用本地共享工具，移除最后一个提供方时移除这些工具；继承的提供方仍然可见。服务独立于任何单一客户端拥有这些工具注册。只要可见的客户端条目保持激活，连接失败就不会移除共享资源工具。
 
@@ -107,6 +109,7 @@ interface McpResourceProvider {
 
 - [MCP 包组](../../packages/mcp/README.zh.md) — 包入口。
 - [MCP 资源](../../packages/mcp/mcp-resources/README.zh.md) — 共享工具与资源提供方语义。
+- [MCP 管理器](../../packages/mcp/mcp-manager/README.zh.md) — 通过 Settings 配置与插件注册的服务器、状态及 Remote 操作。
 - [资源可见性参考](../../packages/mcp/mcp-resources/README.zh.md) — profile 统一挂载及由已配置服务器决定的可见性。
 - [第三方记忆服务器](../user/guide/mcp-memory.zh.md) — 产品配置指南。
 - [协议协商参考](../../packages/mcp/mcp-client/README.zh.md) — SDK 职责与兼容性决策。
@@ -118,6 +121,71 @@ interface McpResourceProvider {
 ## Cordis API
 
 Generated from source by `scripts/gen-cordis-catalog.ts` (verified fresh by `pnpm run verify-cordis-catalog` in doc-sync; regenerate with `pnpm run gen-cordis-catalog`) — the language sides differ only in locale-specific paired document paths. Signature blocks use a `ts cordis-catalog` fence and keep the original source JSDoc; dispatch modes are defined in the [primer](../cordis-primer.zh.md#dispatch-modes), and the framework-inherited `ctx` API lives in [cordis-api/inherited.md](../cordis-api/inherited.md).
+
+<a id="ctxmcpmanager--mcpservermanager"></a>
+
+### `ctx.mcpManager` — `McpServerManager`
+
+The manager service. Reconciliation and `restart` serialize instance replacement. Probes run independently and are cancelled before replacement or disposal waits for their cleanup.
+
+```ts cordis-catalog
+/**
+ * Read configured and registered servers and retained runtime records without mounting or probing.
+ * @returns configured entries in document order, then registered entries, then retained records for removed entries.
+ */
+list(): McpManagedServerView[]
+
+/**
+ * Contribute one server for the calling plugin's lifetime. A registered
+ * entry is enabled while registered; its removal awaits the instance's
+ * unmount, so plugin disposal withdraws the server's tools before settling.
+ * @param name - server key and tool namespace, unique across configured and registered servers.
+ * @param entry - transport, endpoint, and budgets, validated like a configured entry.
+ * @returns an idempotent disposer that removes the registration.
+ * @throws when the name is taken, the entry is invalid, or the manager is disposed.
+ */
+register(name: string, entry: McpServerRegistration): () => void
+
+/**
+ * Stream server views for a management surface: the current list on
+ * subscription, then the complete list again after each status or entry change.
+ * @param signal - subscription lifetime; aborting ends only this stream.
+ * @returns coalesced server lists until the subscriber or the manager stops.
+ */
+@Remote({ mode: 'stream' }) async* watch(signal: AbortSignal): AsyncIterable<McpManagedServerView[]>
+
+/**
+ * Rebuild one server from its current entry: dispose the live instance (if
+ * any) and mount a fresh one with a fresh reconnect budget. Incomplete
+ * cleanup blocks replacement until the Host restarts.
+ * @param name - the configured or registered server key.
+ * @throws when the manager is disposed, no such entry exists, or cleanup is incomplete.
+ */
+@Remote async restart(name: string): Promise<void>
+
+/**
+ * Probe one server for a management surface; see {@link McpServerManager.probe}.
+ * @param name - the configured or registered server key.
+ * @param signal - caller cancellation.
+ * @returns the stage-classified probe outcome and independent cleanup result.
+ */
+@Remote('probe') probeFromClient(name: string, signal: AbortSignal): Promise<McpProbeResult>
+
+/**
+ * Probe one configured server without touching its live instance: resolve
+ * the entry's templates, connect, list tools, close. A disabled entry can be
+ * probed — that is how a management surface tests it before enabling.
+ * Configuration changes and manager disposal cancel the probe.
+ * @param name - the configured or registered server key.
+ * @param options - probe budget, listing caps, and abort signal.
+ * @returns the stage-classified probe outcome and independent cleanup result.
+ * @throws when the manager is disposed, the entry is absent or changing, cleanup is
+ * incomplete, options are invalid, or a required credentials provider is missing.
+ */
+async probe(name: string, options?: McpProbeOptions): Promise<McpProbeResult>
+```
+
+Source: [`packages/mcp/mcp-manager/src/index.ts`](../../packages/mcp/mcp-manager/src/index.ts)
 
 <a id="ctxmcppolicy--mcppolicystore"></a>
 
@@ -177,6 +245,14 @@ logged(session: Session): readonly string[] | undefined
 active(session: Session): string[]
 
 /**
+ * Resolve whether a Session with no selection of its own uses one server.
+ * @param server - configured server name.
+ * @param configured - the client's own `defaultActive`.
+ * @returns the override in this plugin's config, else `configured`.
+ */
+defaultOf(server: string, configured: boolean): boolean
+
+/**
  * Whether one server reaches an agent's model requests.
  * @param server - configured server name.
  * @param agent - the agent whose Session decides; a caller with no agent is not restricted.
@@ -210,74 +286,22 @@ Source: [`packages/mcp/mcp-selection/src/index.ts`](../../packages/mcp/mcp-selec
 
 ### `ctx.mcpServersController` — `McpServersController`
 
-Remote owner of the profile's MCP server rows.
+Remote owner of the MCP reads and writes the manager and Settings do not cover.
 
 ```ts cordis-catalog
 /**
- * List every MCP server row of the running profile, including rows from bundles, the
- * home patch, and command-line overlays that cannot be changed here.
- * @returns rows in composition order; stored literal secrets are replaced by `kept`.
+ * Read the tools one server offers.
+ * @param serverName - the server's configured name.
+ * @returns the tools registered from it right now; empty when it is not connected or has no client.
  */
-@Remote async list(): Promise<McpServerInfo[]>
+@Remote tools(serverName: string): McpToolsResult
 
 /**
- * Add an MCP server row, or replace the row `options.id` names. A stdio server runs a
- * command with the Host's privileges, so adding or changing one requires the caller to
- * echo the command line it showed the person.
- * @param spec - configuration to write; secrets are environment variable references.
- * @param options - row to replace and the confirmed command line.
- * @returns the persisted change and whether the running profile applied it.
- */
-@Remote async upsert(spec: McpServerSpec, options?: McpUpsertOptions): Promise<McpChangeResult>
-
-/**
- * Remove one server row from the profile patch.
- * The name is not `remove`: a Remote method may not share a name with a member of its namespace service.
- * @param id - row id returned by `list`.
- * @returns the persisted change and whether the running profile applied it.
- */
-@Remote async removeServer(id: McpEntryId): Promise<McpChangeResult>
-
-/**
- * Enable or disable one server row the profile patch owns.
- * @param id - row id returned by `list`.
- * @param enabled - whether the row loads.
- * @returns the persisted change and whether the running profile applied it.
- */
-@Remote setEnabled(id: McpEntryId, enabled: boolean): Promise<McpChangeResult>
-
-/**
- * Replace one server's tool-call policy. With the policy store mounted the change applies at the
- * next call without reconnecting the server, and works for every listed row; without it, only an
- * editable row the profile patch owns can change, and its server reloads. It runs no command, so it
- * needs no confirmation.
- * @param id - row id returned by `list`.
- * @param policy - the server's default mode and its per-tool modes.
- * @returns the persisted change and whether the running profile applied it.
- */
-@Remote async setToolPolicy(id: McpEntryId, policy: McpToolPolicy): Promise<McpChangeResult>
-
-/**
- * Let one MCP tool run without asking from now on, by its model-facing name. The change goes to the
- * policy store, so the server keeps its connection.
- * @param publicName - the tool's model-facing name, as an approval request names it.
- * @returns the persisted change; `unknown-server` when no connected server offers the tool.
- */
-@Remote async allowTool(publicName: string): Promise<McpChangeResult>
-
-/**
- * Read the tools one server offers, with its connection state.
- * @param id - row id returned by `list`.
- * @returns the tools registered from the server right now; empty when it is not connected or has no client.
- */
-@Remote async tools(id: McpEntryId): Promise<McpToolsResult>
-
-/**
- * Read every configured server's connection state and usage counters in one call.
+ * Read every running client's usage counters in one call.
  * @param sessionId - Session whose own share of the counters to include; omitted reads the totals only.
- * @returns one entry per row in composition order, with the Host clock the figures were read at.
+ * @returns one entry per running client, with the Host clock the figures were read at.
  */
-@Remote async overview(sessionId?: string): Promise<McpOverview>
+@Remote overview(sessionId?: string): McpOverview
 
 /**
  * Replace the servers one Session uses. The choice is logged on the Session and
@@ -290,11 +314,12 @@ Remote owner of the profile's MCP server rows.
 @Remote setSessionServers(agent: Agent, active: string[]): McpSessionServers
 
 /**
- * Ask one server's client to connect now instead of waiting out its retry delay, restarting its retry budget.
- * @param id - row id returned by `list`.
- * @returns whether a new attempt started.
+ * Let one MCP tool run without asking from now on, by its model-facing name. The
+ * change goes to the policy store, so the server keeps its connection.
+ * @param publicName - the tool's model-facing name, as an approval request names it.
+ * @returns the server and tool now allowed, or why nothing changed.
  */
-@Remote async reconnectServer(id: McpEntryId): Promise<McpReconnectResult>
+@Remote async allowTool(publicName: string): Promise<McpAllowToolResult>
 ```
 
 Types: [Agent](core.zh.md)
@@ -311,29 +336,16 @@ The shared registry the MCP clients register into.
 /**
  * Publish one server and relay its changes as `mcp-status/changed`.
  * @param server - configured server name.
- * @param handle - live reads and the reconnect action for the server.
+ * @param handle - live reads of the server's tools and usage.
  * @returns the disposer that removes this registration.
  */
 register(server: string, handle: McpServerHandle): () => void
-
-/**
- * Read every registered server's state.
- * @returns one status per registration, in registration order.
- */
-list(): McpServerStatus[]
 
 /**
  * Name every registered server with its configured default.
  * @returns one entry per registration, in registration order.
  */
 servers(): McpConfiguredServer[]
-
-/**
- * Read one server's state.
- * @param server - configured server name.
- * @returns its status, or undefined when no client registered it.
- */
-get(server: string): McpServerStatus | undefined
 
 /**
  * Read one server's tools.
@@ -349,16 +361,36 @@ tools(server: string): readonly McpToolInfo[]
  * @returns its stats, or undefined when no client registered it.
  */
 stats(server: string, session?: string): McpServerStats | undefined
-
-/**
- * Ask one server's client to connect now.
- * @param server - configured server name.
- * @returns whether a new attempt started; false for an unknown server or one already live or connecting.
- */
-async reconnect(server: string): Promise<boolean>
 ```
 
 Source: [`packages/mcp/mcp-status/src/index.ts`](../../packages/mcp/mcp-status/src/index.ts)
+
+<a id="mcp-manager-events"></a>
+
+### `mcp-manager/*` events
+
+<a id="mcp-managerstatus--parallel"></a>
+
+#### `mcp-manager/status` — parallel
+
+One managed server's status transitioned. Emitted for every published change while the manager is live and either the entry is configured or registered, or a runtime record remains. Removed entries may emit cleanup failures; `watch` and `list()` report removals. Lifecycle operations do not wait for listeners. Synchronous throws and returned promise rejections are logged without skipping other listeners.
+
+```ts cordis-catalog
+/**
+ * One managed server's status transitioned. Emitted for every published
+ * change while the manager is live and either the entry is configured or
+ * registered, or a runtime record remains. Removed entries may emit cleanup
+ * failures; `watch` and `list()` report removals.
+ * Lifecycle operations do not wait for listeners. Synchronous throws and
+ * returned promise rejections are logged without skipping other listeners.
+ * @param name - the configured `servers` key or registered name.
+ * @param status - the status now current for that server.
+ * @mode parallel
+ */
+'mcp-manager/status'(name: string, status: McpManagedServerStatus): void | Promise<void>
+```
+
+Source: [`packages/mcp/mcp-manager/src/types.ts`](../../packages/mcp/mcp-manager/src/types.ts)
 
 <a id="mcp-status-events"></a>
 
@@ -368,11 +400,11 @@ Source: [`packages/mcp/mcp-status/src/index.ts`](../../packages/mcp/mcp-status/s
 
 #### `mcp-status/changed` — emit
 
-A registered server's connection state or tool list changed, or a server was registered or removed.
+A registered server's tool list changed, or a server was registered or removed.
 
 ```ts cordis-catalog
 /**
- * A registered server's connection state or tool list changed, or a server was registered or removed.
+ * A registered server's tool list changed, or a server was registered or removed.
  * @mode emit
  * @param server - the configured `serverName`.
  */

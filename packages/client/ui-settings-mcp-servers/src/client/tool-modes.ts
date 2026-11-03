@@ -14,12 +14,3 @@ export const TOOL_MODE_LABEL: Record<McpToolMode, McpServersLocaleKey> = {
 
 /** The policy of a server that names none: every call asks first. */
 export const ASK_EVERY_CALL: McpToolPolicy = { default: 'ask', tools: {} }
-
-/**
- * Whether a policy is the plugin default, which the profile patch leaves unwritten.
- * @param policy - the policy to test.
- * @returns true when every call asks first and no tool has its own mode.
- */
-export function asksEveryCall(policy: McpToolPolicy): boolean {
-  return policy.default === 'ask' && Object.keys(policy.tools).length === 0
-}

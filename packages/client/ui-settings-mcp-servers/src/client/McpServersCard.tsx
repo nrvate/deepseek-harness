@@ -1,18 +1,20 @@
 /**
- * The MCP servers page: the profile's servers with their state, an enable
- * switch, and edit and remove actions, plus the dialogs those actions open.
+ * The MCP servers page: the servers the MCP manager runs with their live
+ * status, an enable switch, and test, edit, remove, and restore actions, plus
+ * the dialogs those actions open.
  */
 import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { Button, StateDot, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { McpServerInfo } from '@deepseek-ai/dsh-api-remotes/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { McpServerEditor, RemoveDialog } from './McpServerEditor.tsx'
+import { McpProbeDialog } from './McpProbeDialog.tsx'
 import { McpToolsDialog } from './McpToolsDialog.tsx'
-import { connectionView } from './server-state.ts'
-import type { McpServersFace } from './mcp-servers-controller.ts'
+import { entrySummary } from './entries.ts'
+import { connectionView, problemOf, restartable, useNow } from './server-state.ts'
+import type { McpServerRow, McpServerSource, McpServersFace, McpServersState } from './mcp-servers-controller.ts'
 import type { McpServersLocaleKey } from './locales.ts'
 import css from './McpServers.module.css'
 
@@ -22,19 +24,12 @@ export type McpServersCardProps =
   & PropsLocale<'settings.mcpServers'>
   & InjectFace<McpServersFace>
 
-const PHASE: Record<NonNullable<McpServerInfo['fiberPhase']> | 'off', { dot: StateDotState; key: McpServersLocaleKey }> = {
-  active: { dot: 'done', key: 'phaseLoaded' },
-  pending: { dot: 'ongoing', key: 'phaseLoading' },
-  loading: { dot: 'ongoing', key: 'phaseLoading' },
-  unloading: { dot: 'warning', key: 'phaseLoading' },
-  failed: { dot: 'error', key: 'phaseFailed' },
-  off: { dot: 'idle', key: 'phaseOff' },
-}
-
-const REASON: Record<NonNullable<McpServerInfo['readOnlyReason']>, McpServersLocaleKey> = {
-  unaddressable: 'readOnlyOutside',
-  'custom-expression': 'readOnlyExpression',
-  'embedded-credentials': 'readOnlyCredentials',
+const SOURCE: Record<McpServerSource, McpServersLocaleKey | undefined> = {
+  user: undefined,
+  inherited: 'sourceInherited',
+  overridden: 'sourceOverridden',
+  plugin: 'sourcePlugin',
+  removed: 'sourceRemoved',
 }
 
 /**
@@ -55,7 +50,7 @@ function McpServersPage(props: McpServersCardProps): ReactNode {
     <div className={css.page}>
       <div className={css.head}>
         <p className={css.intro}>{t('intro')}</p>
-        <Button variant="primary" size="sm" onClick={openAdd}>{t('add')}</Button>
+        <Button variant="primary" size="sm" disabled={state.status !== 'ready' || !state.writable} onClick={openAdd}>{t('add')}</Button>
       </div>
       <div className={css.preference}>
         <span className={css.label}>{t('statusItemToggle')}</span>
@@ -66,24 +61,24 @@ function McpServersPage(props: McpServersCardProps): ReactNode {
           onChange={props.setStatusItem}
         />
       </div>
-      <ServerList {...props} status={state.status} rows={state.rows} pending={state.pending} />
+      <ServerList {...props} state={state} />
       <McpServerEditor {...props} editor={state.editor} />
       <RemoveDialog {...props} removal={state.removal} />
-      <McpToolsDialog {...props} tools={state.tools} />
+      <McpToolsDialog {...props} tools={state.tools} rows={state.rows} writable={state.writable} />
+      <McpProbeDialog {...props} probeState={state.probe} />
     </div>
   )
 }
 
-function ServerList(props: McpServersCardProps & {
-  status: 'idle' | 'loading' | 'ready' | 'failed'
-  rows: readonly McpServerInfo[]
-  pending: string | null
-}): ReactNode {
-  const { t, status, rows, load } = props
-  if (status === 'idle' || status === 'loading') {
+function ServerList(props: McpServersCardProps & { state: McpServersState }): ReactNode {
+  const { t, state, load } = props
+  const counting = state.rows.some(row => row.status?.state === 'reconnecting')
+  const now = useNow(counting)
+  if (state.status === 'idle' || state.status === 'loading') {
     return <div className={css.center} role="status"><StateDot state="ongoing" /></div>
   }
-  if (status === 'failed') {
+  if (state.status === 'missing') return <p className={css.empty}>{t('managerMissing')}</p>
+  if (state.status === 'failed') {
     return (
       <div className={css.failure} role="alert">
         <span>{t('loadFailed')}</span>
@@ -91,61 +86,64 @@ function ServerList(props: McpServersCardProps & {
       </div>
     )
   }
-  return (
-    <>
-      {rows.length === 0
-        ? <p className={css.empty}>{t('empty')}</p>
-        : <ul className={css.list}>{rows.map(row => <ServerRow key={row.id} {...props} row={row} />)}</ul>}
-      {rows.some(row => row.status === undefined) && <p className={css.note}>{t('statusNote')}</p>}
-    </>
-  )
+  return state.rows.length === 0
+    ? <p className={css.empty}>{t('empty')}</p>
+    : <ul className={css.list}>{state.rows.map(row => <ServerRow key={row.name} {...props} row={row} now={now} />)}</ul>
 }
 
-/** The dot and label of a row: its client's connection state when it reports one, else the plugin's load phase. */
-function stateOf(row: McpServerInfo, t: McpServersCardProps['t']): { dot: StateDotState; text: string } {
-  if (row.enabled && row.status !== undefined) return connectionView(row.status, t)
-  const phase = PHASE[row.enabled ? row.fiberPhase ?? 'off' : 'off']
-  return { dot: phase.dot, text: t(phase.key) }
+/** The dot and label of a row: the manager's status when it lists the server, else waiting for its first report. */
+function stateOf(row: McpServerRow, t: McpServersCardProps['t'], now: number): { dot: StateDotState; text: string } {
+  if (row.status !== undefined) return connectionView(row.status, t, now)
+  if (row.entry?.enabled === false) return { dot: 'idle', text: t('phaseOff') }
+  return { dot: 'ongoing', text: t('phaseLoading') }
 }
 
-function ServerRow(props: McpServersCardProps & { row: McpServerInfo; pending: string | null }): ReactNode {
-  const { t, row, pending, toggle, openEdit, askRemove, openTools, reconnect } = props
-  const state = stateOf(row, t)
-  const name = row.serverName === '' ? row.id : row.serverName
-  const connection = row.enabled ? row.status : undefined
-  const retryable = connection?.state === 'failed' || connection?.state === 'reconnecting'
+function ServerRow(props: McpServersCardProps & { state: McpServersState; row: McpServerRow; now: number }): ReactNode {
+  const { t, row, now, state, toggle, openEdit, askRemove, openTools, restart, probe } = props
+  const view = stateOf(row, t, now)
+  const { status, entry } = row
+  const problem = status === undefined ? undefined : problemOf(status)
+  const source = SOURCE[row.source]
+  const busy = state.pending !== null
   return (
     <li className={css.row}>
-      <StateDot state={state.dot} />
+      <StateDot state={view.dot} />
       <div className={css.rowBody}>
         <div className={css.rowTitle}>
-          <span className={css.name}>{name}</span>
-          <Tag>{t(row.transport === 'stdio' ? 'transportStdio' : 'transportHttp')}</Tag>
-          <Tag tone={state.dot === 'error' ? 'danger' : state.dot === 'warning' ? 'warning' : 'outline'}>{state.text}</Tag>
-          {row.toolPolicy.default === 'allow' && <Tag tone="warning">{t('rowCallsAllowed')}</Tag>}
-          {row.toolPolicy.default === 'deny' && <Tag>{t('rowCallsBlocked')}</Tag>}
+          <span className={css.name}>{row.name}</span>
+          {entry !== undefined && <Tag>{t(entry.transport === 'stdio' ? 'transportStdio' : 'transportHttp')}</Tag>}
+          <Tag tone={view.dot === 'error' ? 'danger' : view.dot === 'warning' ? 'warning' : 'outline'}>{view.text}</Tag>
+          {source !== undefined && <Tag>{t(source)}</Tag>}
+          {row.policy.default === 'allow' && <Tag tone="warning">{t('rowCallsAllowed')}</Tag>}
+          {row.policy.default === 'deny' && <Tag>{t('rowCallsBlocked')}</Tag>}
         </div>
-        <div className={css.summary}>{row.summary}</div>
-        {connection?.error !== undefined && connection.state !== 'connected' && <div className={css.problem}>{connection.error}</div>}
-        {row.readOnlyReason !== undefined && <div className={css.reason}>{t(REASON[row.readOnlyReason])}</div>}
+        {entry !== undefined && <div className={css.summary}>{entrySummary(entry)}</div>}
+        {problem !== undefined && <div className={css.problem}>{problem}</div>}
       </div>
       <div className={css.actions}>
-        {connection !== undefined && connection.toolCount > 0 && (
-          <Button variant="ghost" size="sm" onClick={() => { openTools(row.id) }}>{t('toolsButton', { count: connection.toolCount })}</Button>
+        {status?.state === 'connected' && status.toolCount > 0 && (
+          <Button variant="ghost" size="sm" onClick={() => { openTools(row.name) }}>{t('toolsButton', { count: status.toolCount })}</Button>
         )}
-        {retryable && (
-          <Button variant="ghost" size="sm" disabled={pending !== null} onClick={() => { reconnect(row.id) }}>{t('reconnect')}</Button>
+        {status !== undefined && restartable(status) && (
+          <Button variant="ghost" size="sm" disabled={busy} onClick={() => { restart(row.name) }}>{t('reconnect')}</Button>
         )}
-        {row.spec !== undefined && (
-          <Button variant="ghost" size="sm" onClick={() => { openEdit(row.id) }}>{t('edit')}</Button>
+        {row.source !== 'removed' && (
+          <Button variant="ghost" size="sm" disabled={state.probe?.status === 'running'} onClick={() => { probe(row.name) }}>{t('probe')}</Button>
         )}
-        {row.owned && <Button variant="ghost" size="sm" onClick={() => { askRemove(row.id) }}>{t('remove')}</Button>}
-        <Switch
-          label={t('enableServer', { name })}
-          checked={row.enabled}
-          disabled={!row.owned || pending !== null}
-          onChange={(next) => { toggle(row.id, next) }}
-        />
+        {entry !== undefined && state.writable && (
+          <Button variant="ghost" size="sm" onClick={() => { openEdit(row.name) }}>{t('edit')}</Button>
+        )}
+        {(row.source === 'user' || row.source === 'overridden') && state.writable && (
+          <Button variant="ghost" size="sm" onClick={() => { askRemove(row.name) }}>{t(row.source === 'user' ? 'remove' : 'restore')}</Button>
+        )}
+        {entry !== undefined && (
+          <Switch
+            label={t('enableServer', { name: row.name })}
+            checked={entry.enabled}
+            disabled={!state.writable || busy}
+            onChange={(next) => { toggle(row.name, next) }}
+          />
+        )}
       </div>
     </li>
   )

@@ -1,31 +1,29 @@
 /** The status item's state: the preference, reads on mount and on Host changes, polling only while open, and a Session's selection. */
-import { Context } from '@deepseek-ai/cordis'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { stubConfigForm, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
-import type { McpEntryId, McpOverview, McpServerOverview, SessionId } from '@deepseek-ai/dsh-api-remotes/client'
-import { McpTrayController } from '../src/client/mcp-tray-controller.ts'
-import type { McpUiSettings } from '../src/mcp-ui-settings.ts'
+import { stubConfigForm } from '@deepseek-ai/dsh-client-test-runtime'
+import type { McpServerUsage, SessionId } from '@deepseek-ai/dsh-api-remotes/client'
+import { joinTray, McpTrayController } from '../src/client/mcp-tray-controller.ts'
+import { connected, fakeHost, ok, usage, view } from './fake-host.client.ts'
 
 afterEach(() => { vi.useRealTimers() })
 
-const server: McpServerOverview = { id: 'mcp-a' as McpEntryId, serverName: 'a', enabled: true, defaultActive: true }
+const server = usage('a')
+/** How the item lists a running client the manager has not reported. */
+const shown = { serverName: 'a', status: undefined, usage: server }
 const session = 'session-1' as SessionId
-function answer(servers: McpServerOverview[] = [server], readAt = 1000): { ok: true; value: McpOverview } {
-  return { ok: true, value: { readAt, servers } }
+function answer(servers: McpServerUsage[] = [server], readAt = 1000) {
+  return ok({ readAt, servers })
 }
 const failure = { ok: false as const, error: new Error('down') }
 
 function bench(preference?: boolean) {
-  const ctx = new Context()
-  const overview = vi.fn((_sessionId?: string) => Promise.resolve(answer()))
-  const setSessionServers = vi.fn((_sessionId: string, active: string[]) => Promise.resolve({ ok: true as const, value: { active } }))
-  new TestRemote(ctx, { mcpServers: { overview, setSessionServers } })
-  const selectPanel = vi.fn()
-  ctx.provide('layout', { selectPanel })
-  const settings = stubConfigForm<McpUiSettings>()
+  const host = fakeHost({ overview: [server] })
+  const overview = host.mcpServers.overview
+  overview.mockImplementation(() => Promise.resolve(answer()))
+  const settings = stubConfigForm<{ statusItem: boolean }>()
   if (preference !== undefined) settings.publish({ value: { statusItem: preference }, writable: true })
-  const controller = new McpTrayController(ctx, settings.scope)
-  return { controller, face: controller.inject(), overview, setSessionServers, settings, selectPanel }
+  const controller = new McpTrayController(host.ctx, settings.scope, host.fleet)
+  return { ...host, controller, face: controller.inject(), overview, setSessionServers: host.mcpServers.setSessionServers, settings }
 }
 
 /** Let the pending read settle under fake timers. */
@@ -42,7 +40,7 @@ describe('preference', () => {
   it('still reads while hidden, because the composer selector shows the same servers', async () => {
     const { controller, face, overview } = bench(false)
     face.load(session)
-    await vi.waitFor(() => { expect(controller.getSnapshot()).toMatchObject({ visible: false, loaded: true, servers: [server] }) })
+    await vi.waitFor(() => { expect(controller.getSnapshot()).toMatchObject({ visible: false, loaded: true, servers: [shown] }) })
     controller.refresh()
     await vi.waitFor(() => { expect(overview).toHaveBeenCalledTimes(2) })
   })
@@ -76,7 +74,7 @@ describe('reading', () => {
     await Promise.resolve()
     expect(overview).not.toHaveBeenCalled()
     face.load(session)
-    await vi.waitFor(() => { expect(controller.getSnapshot()).toMatchObject({ loaded: true, servers: [server], readAt: 1000 }) })
+    await vi.waitFor(() => { expect(controller.getSnapshot()).toMatchObject({ loaded: true, servers: [shown], readAt: 1000 }) })
     // The read names the Session on screen, and the snapshot records whose figures it holds.
     expect(overview).toHaveBeenLastCalledWith(session)
     expect(controller.getSnapshot().statsSession).toBe(session)
@@ -92,7 +90,7 @@ describe('reading', () => {
     controller.refresh()
     await vi.waitFor(() => { expect(overview).toHaveBeenCalledTimes(2) })
     await Promise.resolve()
-    expect(controller.getSnapshot().servers).toEqual([server])
+    expect(controller.getSnapshot().servers).toEqual([shown])
   })
 
   it('counts a failed first read as loaded with nothing to show', async () => {
@@ -113,7 +111,7 @@ describe('reading', () => {
     slow.resolve(answer([], 5))
     await slow.promise
     await Promise.resolve()
-    expect(controller.getSnapshot().servers).toEqual([server])
+    expect(controller.getSnapshot().servers).toEqual([shown])
 
     const late = Promise.withResolvers<ReturnType<typeof answer>>()
     overview.mockReturnValueOnce(late.promise)
@@ -123,6 +121,28 @@ describe('reading', () => {
     await late.promise
     await Promise.resolve()
     expect(controller.getSnapshot().readAt).toBe(1000)
+  })
+})
+
+describe('joining the manager\'s list', () => {
+  it('lists managed servers in the manager\'s order with their usage, then clients the manager does not run, and leaves out removed ones', () => {
+    const rows = joinTray([view('b', connected(2)), view('a', { state: 'disabled' }), view('gone', connected(), false)], [usage('a'), usage('static')])
+    expect(rows.map(row => [row.serverName, row.status?.state, row.usage?.serverName])).toEqual([
+      ['b', 'connected', undefined], ['a', 'disabled', 'a'], ['static', undefined, 'static'],
+    ])
+    expect(joinTray(undefined, [])).toEqual([])
+  })
+
+  it('follows the manager stream once a consumer has mounted', async () => {
+    const { controller, face, publish } = bench()
+    face.load(session)
+    await vi.waitFor(() => { expect(controller.getSnapshot().loaded).toBe(true) })
+    publish([view('a', connected(4))])
+    await vi.waitFor(() => { expect(controller.getSnapshot().servers).toEqual([{ serverName: 'a', status: connected(4), usage: server }]) })
+    controller.dispose()
+    publish([view('a', { state: 'disabled' })])
+    await Promise.resolve()
+    expect(controller.getSnapshot().servers[0]?.status?.state).toBe('connected')
   })
 })
 

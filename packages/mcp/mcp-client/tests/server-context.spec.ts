@@ -26,9 +26,7 @@ async function setup() {
 }
 
 const idleHandle: McpServerHandle = {
-  status: () => ({ serverName: 'docs', state: 'connected', attempt: 0, maxAttempts: 10, toolCount: 0 }),
   tools: () => [],
-  reconnect: () => Promise.resolve(false),
   stats: () => ({ calls: 0, errors: 0, inputTokens: 0, outputTokens: 0, totalMs: 0, maxMs: 0, connections: 1, schemaTokens: 0, transport: 'stdio', tools: [] }),
   subscribe: () => () => {},
   defaultActive: true,
@@ -46,11 +44,11 @@ describe('MCP server context', () => {
       })
     } })
     expect(renderPrompt(await ctx.systemPrompt.assemble())).toContain(instructions)
-    expect(ctx.mcpStatus.get('docs')).toMatchObject({ state: 'connected' })
+    expect(ctx.mcpStatus.servers()).toEqual([{ serverName: 'docs', defaultActive: true }])
     instructions = 'MCP server: docs\nUpdated instructions.'
     expect(renderPrompt(await ctx.systemPrompt.assemble())).toContain(instructions)
     await fiber.dispose()
-    expect(ctx.mcpStatus.get('docs')).toBeUndefined()
+    expect(ctx.mcpStatus.servers()).toEqual([])
     expect(renderPrompt(await ctx.systemPrompt.assemble())).not.toContain('MCP server: docs')
     const result = await executeToolFixture(ctx, {
       name: 'list_mcp_resources', arguments: { server: 'docs' },

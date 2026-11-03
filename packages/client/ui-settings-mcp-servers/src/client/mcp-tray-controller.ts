@@ -1,16 +1,18 @@
 /**
  * State shared by the MCP status item below the prompt box and the server
- * selector in the composer: every configured server's connection state and
- * usage, read from the Host when either mounts, when the Host reports a change,
- * and on a short interval while the status panel is open. It also sends one
- * Session's server selection to the Host.
+ * selector in the composer: every server's live status from the MCP manager,
+ * joined with the usage counters of its running client. Usage is read when
+ * either consumer mounts, when the Host reports a change, and on a short
+ * interval while the status panel is open. It also sends one Session's server
+ * selection to the Host.
  */
 import type { Context as ClientContext } from '@deepseek-ai/cordis'
-import type { McpServerOverview, SessionId } from '@deepseek-ai/dsh-api-remotes/client'
+import type { McpManagedServerStatus, McpServerUsage, SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { MainPanelId } from '@deepseek-ai/dsh-client-ui-layout/client'
 import { DEFAULT_STATUS_ITEM, type McpUiSettings } from '../mcp-ui-settings.ts'
+import type { McpFleet, McpFleetState } from './fleet.ts'
 
 /** Usage counters change with every tool call and announce nothing, so an open panel re-reads on this interval. */
 const OPEN_PANEL_POLL_MS = 2_000
@@ -21,16 +23,42 @@ const OPEN_PANEL_POLL_MS = 2_000
  */
 const PLUGINS_PANEL = 'plugins' as MainPanelId
 
+/** One server as the status item and the selector show it. */
+export interface McpTrayServer {
+  readonly serverName: string
+  /** The manager's live status; absent for a client the manager does not run, such as one a profile row mounts. */
+  readonly status: McpManagedServerStatus | undefined
+  /** Usage counters of the running client; absent while no client runs for the server. */
+  readonly usage: McpServerUsage | undefined
+}
+
+/**
+ * Join the manager's list with the running clients' usage.
+ * @param fleet - the manager's last reported list.
+ * @param usage - the last usage overview.
+ * @returns managed servers in the manager's order, then clients the manager does not run; removed servers are left out.
+ */
+export function joinTray(fleet: McpFleetState['servers'], usage: readonly McpServerUsage[]): McpTrayServer[] {
+  const byName = new Map(usage.map(server => [server.serverName, server]))
+  const managed = (fleet ?? []).filter(view => view.configured)
+  const names = new Set(managed.map(view => view.name))
+  return [
+    ...managed.map(view => ({ serverName: view.name, status: view.status, usage: byName.get(view.name) })),
+    ...usage.filter(server => !names.has(server.serverName))
+      .map(server => ({ serverName: server.serverName, status: undefined, usage: server })),
+  ]
+}
+
 /** What the status item renders. */
 export interface McpTrayState {
   /** The person's preference; false hides the item entirely. */
   readonly visible: boolean
   /** Whether the Host has answered at least once. */
   readonly loaded: boolean
-  readonly servers: readonly McpServerOverview[]
+  readonly servers: readonly McpTrayServer[]
   /** Host clock of the last read, in epoch milliseconds. */
   readonly readAt: number
-  /** The Session whose own figures `servers[].sessionStats` hold; undefined before the first read. */
+  /** The Session whose own figures `servers[].usage.sessionStats` hold; undefined before the first read. */
   readonly statsSession: SessionId | undefined
   /** Why the last selection change did not land; cleared by the next one that does. */
   readonly problem: string | undefined
@@ -60,12 +88,15 @@ export class McpTrayController {
   private disposed = false
   /** The Session on screen, whose share of the usage each read asks for. */
   private session: SessionId | undefined
+  private usage: readonly McpServerUsage[] = []
+  private readonly unsubscribeFleet: () => void
 
   /**
    * @param ctx - the plugin's context, whose `remote.mcpServers` namespace answers.
    * @param form - the plugin's preference form; `statusItem` decides whether the item shows.
+   * @param fleet - the manager's live server list.
    */
-  constructor(private readonly ctx: ClientContext, private readonly form: ConfigForm<McpUiSettings>) {
+  constructor(private readonly ctx: ClientContext, private readonly form: ConfigForm<McpUiSettings>, private readonly fleet: McpFleet) {
     this.store = createSnapshotStore<McpTrayState>({
       visible: this.preference(), loaded: false, servers: [], readAt: 0, statsSession: undefined, problem: undefined, open: false,
     })
@@ -75,6 +106,11 @@ export class McpTrayController {
       if (!visible) this.stopPolling()
       this.patch({ visible, open: visible && this.getSnapshot().open })
     })
+    this.unsubscribeFleet = fleet.store.subscribe(() => { this.rejoin() })
+  }
+
+  private rejoin(): void {
+    this.patch({ servers: joinTray(this.fleet.store.getSnapshot().servers, this.usage) })
   }
 
   private preference(): boolean {
@@ -96,6 +132,7 @@ export class McpTrayController {
     this.disposed = true
     this.stopPolling()
     this.unsubscribe()
+    this.unsubscribeFleet()
   }
 
   /** Re-read after the Host reports a change, once a consumer has mounted. */
@@ -106,11 +143,17 @@ export class McpTrayController {
   private async read(): Promise<void> {
     const generation = ++this.generation
     const session = this.session
+    this.fleet.start()
     const result = await this.ctx.remote.mcpServers.overview(session)
     if (this.disposed || generation !== this.generation) return
     // A failed read keeps the figures already on screen; the next read replaces them.
-    if (result.ok) this.patch({ loaded: true, servers: result.value.servers, readAt: result.value.readAt, statsSession: session })
-    else this.patch({ loaded: true })
+    if (result.ok) {
+      this.usage = result.value.servers
+      this.patch({ loaded: true, readAt: result.value.readAt, statsSession: session })
+      this.rejoin()
+    } else {
+      this.patch({ loaded: true })
+    }
   }
 
   private async select(sessionId: SessionId, servers: readonly string[]): Promise<boolean> {

@@ -23,16 +23,24 @@ import type { ToolDefinition, ToolExecution, ToolExecutionResult } from '@deepse
 import { assertSupportedJsonSchema } from '@deepseek-ai/dsh-tools'
 import type { JsonSchemaNode } from '@deepseek-ai/dsh-tools'
 import type { JsonValue } from '@deepseek-ai/dsh-util-values'
-import type { McpToolInfo, McpToolParameter } from '@deepseek-ai/dsh-mcp-status'
+import { describeError, McpLocalError } from './diagnostic.ts'
+import type { McpCallRecord, McpToolInfo } from '@deepseek-ai/dsh-mcp-status/types'
+import { describeTool, textChars } from './usage.ts'
 
 /** Resolved options relevant to tool bridging. */
 export interface ToolBridgeOptions {
-  /** Whether a registry conflict is contained or rejects this synchronization. */
-  registrationFailure: 'contain' | 'throw'
   serverName: string
   toolCallTimeoutMs: number
+  /** Generation cancellation combined with each tool execution's signal. */
+  signal: AbortSignal
   /**
-   * Told which tools a synchronization registered, once they are registered; empty after a rollback.
+   * Remove secret values from tool-call failures before they reach callers.
+   * @param text - transport or protocol failure text, or MCP `isError` result text.
+   * @returns the text with secret values replaced.
+   */
+  redact?: (text: string) => string
+  /**
+   * Told which tools a synchronization registered, once they are registered.
    * `schemaChars` is the length of their definitions as the model receives them.
    */
   onTools?: (tools: McpToolInfo[], schemaChars: number) => void
@@ -40,31 +48,8 @@ export interface ToolBridgeOptions {
   onCall?: (call: McpCallRecord) => void
 }
 
-/** One finished tool call, for usage counters. */
-export interface McpCallRecord {
-  /** The server's own name for the tool. */
-  tool: string
-  /** Wall time from the request to its result or failure. */
-  ms: number
-  /** Whether the call threw or the server marked its result as an error. */
-  failed: boolean
-  /** Length of the JSON arguments sent. */
-  inputChars: number
-  /** Length of the text blocks returned; binary blocks are not counted. */
-  outputChars: number
-  /** The Session whose model made the call; absent for a call made outside any Session. */
-  session?: string
-}
-
-/** Summed length of the text blocks of a raw result, 0 for anything else. */
-function textChars(result: unknown): number {
-  if (!isPlainObject(result) || !Array.isArray(result.content)) return 0
-  let chars = 0
-  for (const block of result.content) {
-    if (isPlainObject(block) && block.type === 'text' && typeof block.text === 'string') chars += block.text.length
-  }
-  return chars
-}
+/** Registration failed after the prior generation was removed and partial registrations were rolled back. */
+export class McpToolRegistrationError extends McpLocalError {}
 
 /** State for one sync generation: the current set of disposers keyed by public name. */
 export type ToolDisposers = Map<string, () => void>
@@ -120,42 +105,6 @@ export function publicToolName(serverName: string, rawName: string): string {
   return `${normalized.slice(0, MAX_PUBLIC_NAME_LENGTH - HASH_LENGTH - 1)}_${hash}`
 }
 
-/** `type` of one schema property, several joined with `|`, `any` when the schema gives none. */
-function schemaType(property: Record<string, unknown>): string {
-  const { type } = property
-  if (typeof type === 'string') return type
-  if (Array.isArray(type)) return type.filter((item): item is string => typeof item === 'string').join('|') || 'any'
-  return 'any'
-}
-
-/**
- * Describe one server tool for display: its description and the parameters of its input schema.
- * @param publicName - the name the model sees.
- * @param tool - the server's tool definition.
- * @returns the tool's name, description, and parameters.
- */
-export function describeTool(
-  publicName: string,
-  tool: { name: string; description?: string | undefined; inputSchema: Record<string, unknown> },
-): McpToolInfo {
-  const properties = isPlainObject(tool.inputSchema.properties) ? tool.inputSchema.properties : {}
-  const required = Array.isArray(tool.inputSchema.required) ? tool.inputSchema.required : []
-  const parameters = Object.entries(properties).map(([name, property]): McpToolParameter => {
-    const schema = isPlainObject(property) ? property : {}
-    return {
-      name,
-      type: schemaType(schema),
-      required: required.includes(name),
-      description: typeof schema.description === 'string' ? schema.description : '',
-    }
-  })
-  return { name: tool.name, publicName, description: tool.description ?? '', parameters }
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
 /**
  * Sync the MCP server's tool list into the harness ToolRuntime.
  *
@@ -168,15 +117,18 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * 2. Swap: dispose the previous generation, register the new one. A registry
  *    conflict here can only mean a foreign registration squats on this
  *    server's `mcp__<serverName>__` namespace — the partial generation is
- *    rolled back (zero tools from this server) and logged. Initial strict
- *    synchronization may propagate the conflict so its parent transaction
- *    rejects; ordinary clients and later re-syncs return an empty map.
+ *    rolled back (zero tools from this server), logged, and rejected so the
+ *    supervisor closes the failed connection generation.
  *
  * @param client - Connected MCP Client instance used to list and call tools.
  * @param ctx - Cordis context providing the `tools` service for registration.
- * @param opts - Bridge options: server namespace and per-call timeout.
+ * @param opts - server namespace, call timeout, generation signal, and optional error formatter.
  * @param previous - Disposer map from the prior sync generation; disposed
  *   during the swap phase (only after the fetch phase succeeded).
+ * @param eligible - Judged again at the commit point, after the listing
+ *   settled: a sync whose generation was abandoned meanwhile (startup budget
+ *   elapsed, connection closed) publishes nothing and leaves `previous`
+ *   untouched.
  * @returns A map of registered public tool names to their unregister
  *   disposers — the exact set of live registrations owned by this server.
  */
@@ -185,6 +137,7 @@ export async function syncTools(
   ctx: Context,
   opts: ToolBridgeOptions,
   previous: ToolDisposers,
+  eligible: () => boolean = () => true,
 ): Promise<ToolDisposers> {
   // Phase 1: fetch and build the next generation without touching the registry.
   const definitions = new Map<string, ToolDefinition>()
@@ -192,7 +145,7 @@ export async function syncTools(
   let schemaChars = 0
   const response = client.getServerCapabilities()?.tools === undefined
     ? { tools: [] }
-    : await client.listTools(undefined, { cacheMode: 'refresh' })
+    : await client.listTools(undefined, { cacheMode: 'refresh', signal: opts.signal })
   for (const tool of response.tools) {
     const publicName = publicToolName(opts.serverName, tool.name)
     if (definitions.has(publicName)) {
@@ -219,11 +172,16 @@ export async function syncTools(
         try {
           const result = await client.callTool(
             { name: tool.name, arguments: args },
-            { signal: execution.signal, timeout: opts.toolCallTimeoutMs, toolDefinition: tool },
+            { signal: AbortSignal.any([execution.signal, opts.signal]),
+              timeout: opts.toolCallTimeoutMs, toolDefinition: tool },
           )
-          record.failed = isPlainObject(result) && result.isError === true
+          record.failed = result.isError === true
           record.outputChars = textChars(result)
-          return result
+          if (result.isError !== true || opts.redact === undefined) return result
+          return { isError: true, content: [{ type: 'text', text: opts.redact(extractText(result.content as JsonValue[], tool.name)) }] }
+        } catch (error) {
+          if (opts.redact === undefined) throw error
+          throw new Error(opts.redact(describeError(error)))
         } finally {
           opts.onCall?.({ ...record, ms: Date.now() - started })
         }
@@ -231,7 +189,10 @@ export async function syncTools(
     }))
   }
 
-  // Phase 2: swap generations.
+  // Phase 2: swap generations — but only for a generation still entitled to
+  // publish. The listing above is the slow await an abandonment can overtake;
+  // state is published at its commit point or not at all.
+  if (!eligible()) return previous
   for (const dispose of previous.values()) dispose()
   const disposers: ToolDisposers = new Map()
   try {
@@ -245,8 +206,7 @@ export async function syncTools(
     for (const dispose of disposers.values()) dispose()
     ctx.logger.error(`mcp-client(${opts.serverName}): tool registration failed, no tools registered: ${String(error)}`)
     opts.onTools?.([], 0)
-    if (opts.registrationFailure === 'throw') throw error
-    return new Map()
+    throw new McpToolRegistrationError('MCP tool registration failed', { cause: error })
   }
   opts.onTools?.(infos, schemaChars)
   return disposers

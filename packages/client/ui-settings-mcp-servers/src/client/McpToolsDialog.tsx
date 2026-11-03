@@ -7,10 +7,11 @@ import { useState } from 'react'
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import { Button, Input, Modal, StateDot, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { McpToolInfo, McpToolMode } from '@deepseek-ai/dsh-api-remotes/client'
+import type { McpToolInfo, McpToolMode, McpToolPolicy } from '@deepseek-ai/dsh-api-remotes/client'
 import { TOOL_MODE_LABEL, TOOL_MODES } from './tool-modes.ts'
 import type { McpServersCardProps } from './McpServersCard.tsx'
-import type { McpServersState } from './mcp-servers-controller.ts'
+import type { McpServerRow, McpServersState } from './mcp-servers-controller.ts'
+import { ASK_EVERY_CALL } from './tool-modes.ts'
 import css from './McpServers.module.css'
 
 /** The first line of a description, for the collapsed row. */
@@ -20,13 +21,16 @@ function firstLine(text: string): string {
 
 /**
  * Render the tools dialog.
- * @param props - page actions and locale, with the open tools state or null.
+ * @param props - page actions and locale, with the open tools state or null, the listed servers, and whether Settings accepts writes.
  * @returns the dialog, or null while none is open.
  */
-export function McpToolsDialog(props: McpServersCardProps & { tools: McpServersState['tools'] }): ReactNode {
-  const { t, tools, closeTools } = props
+export function McpToolsDialog(
+  props: McpServersCardProps & { tools: McpServersState['tools']; rows: readonly McpServerRow[]; writable: boolean },
+): ReactNode {
+  const { t, tools, closeTools, rows } = props
   if (tools === null) return null
-  const name = tools.row.serverName === '' ? tools.row.id : tools.row.serverName
+  const name = tools.name
+  const policy = rows.find(row => row.name === name)?.policy ?? ASK_EVERY_CALL
   return (
     <Modal
       open
@@ -37,12 +41,19 @@ export function McpToolsDialog(props: McpServersCardProps & { tools: McpServersS
       contentClassName={clsx(css.dialogBody)}
       footer={<Button variant="outline" onClick={closeTools}>{t('close')}</Button>}
     >
-      <ToolsBody {...props} tools={tools} />
+      <ToolsBody {...props} tools={tools} policy={policy} />
     </Modal>
   )
 }
 
-function ToolsBody(props: McpServersCardProps & { tools: NonNullable<McpServersState['tools']> }): ReactNode {
+/** What the dialog body and its rows read besides the page props. */
+interface ToolsProps {
+  tools: NonNullable<McpServersState['tools']>
+  policy: McpToolPolicy
+  writable: boolean
+}
+
+function ToolsBody(props: McpServersCardProps & ToolsProps): ReactNode {
   const { t, tools } = props
   const [filter, setFilter] = useState('')
   if (tools.status === 'loading') return <div className={css.center} role="status"><StateDot state="ongoing" /></div>
@@ -55,11 +66,11 @@ function ToolsBody(props: McpServersCardProps & { tools: NonNullable<McpServersS
   return (
     <div className={css.form}>
       <p className={css.body}>{t('toolsIntro')}</p>
-      {tools.row.serverName === '' && <p className={css.hint}>{t('toolsPolicyReadOnly')}</p>}
+      {!props.writable && <p className={css.hint}>{t('toolsPolicyReadOnly')}</p>}
       <Input aria-label={t('toolsFilter')} placeholder={t('toolsFilter')} value={filter} onChange={(event) => { setFilter(event.target.value) }} />
       {shown.length === 0
         ? <p className={css.body}>{t('toolsNoMatch')}</p>
-        : <ul className={css.toolList}>{shown.map(tool => <ToolItem key={tool.name} {...props} tools={tools} tool={tool} />)}</ul>}
+        : <ul className={css.toolList}>{shown.map(tool => <ToolItem key={tool.name} {...props} tool={tool} />)}</ul>}
     </div>
   )
 }
@@ -67,9 +78,8 @@ function ToolsBody(props: McpServersCardProps & { tools: NonNullable<McpServersS
 /** The select value that follows the server default. */
 const INHERIT = 'inherit'
 
-function ToolItem(props: McpServersCardProps & { tools: NonNullable<McpServersState['tools']>; tool: McpToolInfo }): ReactNode {
-  const { t, tools, tool, setToolMode } = props
-  const policy = tools.row.toolPolicy
+function ToolItem(props: McpServersCardProps & ToolsProps & { tool: McpToolInfo }): ReactNode {
+  const { t, tools, tool, policy, writable, setToolMode } = props
   const own = policy.tools[tool.name]
   const effective = own ?? policy.default
   const selectId = `mcp-tool-mode-${tool.name}`
@@ -88,7 +98,7 @@ function ToolItem(props: McpServersCardProps & { tools: NonNullable<McpServersSt
               id={selectId}
               className={css.select}
               value={own ?? INHERIT}
-              disabled={tools.row.serverName === '' || tools.savingTool !== null}
+              disabled={!writable || tools.savingTool !== null}
               onChange={(event) => {
                 const value = event.target.value
                 setToolMode(tool.name, value === INHERIT ? null : value as McpToolMode)

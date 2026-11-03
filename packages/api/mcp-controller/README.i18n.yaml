@@ -3,35 +3,32 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/api/mcp-controller/README.md
 /:
-  en: 847b5549c2990d54
-  zh: f2136b86d0432831
+  en: 891493e3161cf020
+  zh: 674ac9c2a8c3bb24
 /deepseek-ai-dsh-api-mcp-controller:
   en: 4f92f41a07b7a3bc
   zh: d11f2060532634f1
 /deepseek-ai-dsh-api-mcp-controller/summary:
-  en: 3f19a7e34fd4a87e
-  zh: 827079a71d8548b8
+  en: ff67361ec937dd79
+  zh: f1ec3bd1f43bd9ac
 /deepseek-ai-dsh-api-mcp-controller/table-of-contents:
   en: 122f0d41696980b1
   zh: 528864635b577290
 /deepseek-ai-dsh-api-mcp-controller/use-this-package:
-  en: 7f0be9a2b3dd4067
-  zh: 88f478ac99ba3c15
-/deepseek-ai-dsh-api-mcp-controller/use-this-package/secrets:
-  en: 76274dd4b1b1ae3f
-  zh: 32bc601f2adb3e04
+  en: 7114a0a097634139
+  zh: bbeaf3559df3fb46
 /deepseek-ai-dsh-api-mcp-controller/understand-the-implementation:
-  en: a3b080b62d3a90cb
-  zh: 1cd8b53ed95e3571
+  en: 481a83b1a4f68b03
+  zh: 276ebc4d85639522
 /deepseek-ai-dsh-api-mcp-controller/model-experience:
-  en: 19d0e3975f629bcf
-  zh: bbd7c97af9a84b28
+  en: 554b7bef35131897
+  zh: 10497c279721fc8e
 /deepseek-ai-dsh-api-mcp-controller/model-experience/kv-cache-effect:
-  en: 1b23e2cab3d0973b
-  zh: d092bcb90bc7d8f7
+  en: 30be63de02b78c64
+  zh: 74d7c03db88588fc
 /deepseek-ai-dsh-api-mcp-controller/known-limitations-and-deferred-work:
-  en: 6450bf6922ed6d02
-  zh: 66892c90d8b27262
+  en: 37c486e92c2cb49d
+  zh: 7e2f0b55dc9a5124
 /deepseek-ai-dsh-api-mcp-controller/known-limitations-and-deferred-work/dev-note:
-  en: 73e1f011a177f1f4
-  zh: 22db2b3af0c13adf
+  en: 12b84be36fe0a40c
+  zh: 4ca67d1c66e2eea5

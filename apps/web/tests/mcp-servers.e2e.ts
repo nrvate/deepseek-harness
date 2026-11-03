@@ -1,8 +1,9 @@
 // Web e2e scenario: the MCP servers page on the Plugins page, through the real
-// wire down to the profile's `cordis.patch.yml`. A server is added, confirmed,
-// disabled, edited, and removed from the browser, and the file is read back after
-// each step. Zero model calls: everything is client state plus the profile patch on
-// a blank frame, so there is no fixture and a stray stream would fail loud.
+// wire down to the MCP manager's Settings entry. A server is added, confirmed,
+// tested, disabled, edited, and removed from the browser, and the Host's Settings
+// view is read back after each step. Zero model calls: everything is client state
+// plus the profile settings on a blank frame, so there is no fixture and a stray
+// stream would fail loud.
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
@@ -31,8 +32,6 @@ describe('web e2e: MCP servers page', () => {
   let sessionId: SessionId
 
   beforeAll(async () => {
-    // The Host evaluates `process.env` references in its own process, so the referenced variable must exist here.
-    process.env.E2E_MCP_TOKEN = 'e2e-only-value'
     scaffold = await launchWebScaffold({
       extraOverlayPath: fileURLToPath(new URL('./pin-browse-picker.overlay.yml', import.meta.url)),
     })
@@ -48,7 +47,6 @@ describe('web e2e: MCP servers page', () => {
   }, 120_000)
 
   afterAll(async () => {
-    Reflect.deleteProperty(process.env, 'E2E_MCP_TOKEN')
     await browser?.close()
     await scaffold?.close()
   })
@@ -56,6 +54,17 @@ describe('web e2e: MCP servers page', () => {
   /** The profile patch as the Host has written it so far. */
   async function patch(): Promise<string> {
     return readFile(join(scaffold.harnessHome, 'profiles', 'scaffold', 'cordis.patch.yml'), 'utf8').catch(() => '')
+  }
+
+  /** One profile entry's user section, as the Host's Settings view reports it. */
+  function userSection(ns: string): Record<string, unknown> {
+    const user = scaffold.ctx.settings.describe().find(row => row.ns === ns)?.user
+    return typeof user === 'object' && user !== null ? user as Record<string, unknown> : {}
+  }
+
+  /** The MCP manager's user-layer server entries. */
+  function servers(): Record<string, Record<string, unknown>> {
+    return (userSection('mcp-manager').servers ?? {}) as Record<string, Record<string, unknown>>
   }
 
   /** Open the MCP servers page from the Plugins panel's Official group. */
@@ -71,7 +80,7 @@ describe('web e2e: MCP servers page', () => {
     return panel
   }
 
-  it('starts empty and adds an HTTP server whose token is an environment reference', async () => {
+  it('starts empty and adds an HTTP server whose token goes to the credentials store', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-mcp-servers-add-http'))
     const panel = await openPage()
     await panel.getByText('尚未配置 MCP 服务器。', { exact: true }).waitFor({ timeout: 10_000 })
@@ -84,60 +93,62 @@ describe('web e2e: MCP servers page', () => {
     await dialog.getByRole('button', { name: '添加一项', exact: true }).click()
     await dialog.getByLabel('条目名称').fill('Authorization')
     await dialog.getByLabel('取值类型').selectOption('bearer')
-    await dialog.getByLabel('值', { exact: true }).fill('E2E_MCP_TOKEN')
+    // The form proposes a credential name from the server and header names.
+    expect(await dialog.getByLabel('凭据名称', { exact: true }).inputValue()).toBe('MCP_WEB_AUTHORIZATION')
+    await dialog.getByText('未设置', { exact: true }).waitFor({ timeout: 10_000 })
+    await dialog.getByLabel('密钥值', { exact: true }).fill('e2e-only-value')
     await dialog.getByRole('button', { name: '保存', exact: true }).click()
     await dialog.waitFor({ state: 'detached', timeout: 15_000 })
 
-    const saved = await patch()
-    expect(saved).toContain('id: mcp-web')
-    expect(saved).toContain('serverName: web')
-    expect(saved).toContain('url: http://127.0.0.1:9/mcp')
-    expect(saved).toContain('Authorization: !!js "`Bearer ${process.env.E2E_MCP_TOKEN}`"')
+    await expect.poll(() => servers().web, { timeout: 15_000 }).toMatchObject({
+      transport: 'streamable-http', url: 'http://127.0.0.1:9/mcp', headers: { Authorization: 'Bearer ${credential:MCP_WEB_AUTHORIZATION}' },
+    })
+    // The secret itself went to the credentials store, never to the profile.
+    expect(await patch()).not.toContain('e2e-only-value')
     const row = panel.getByRole('listitem').filter({ hasText: 'web' })
     await row.getByText('HTTP 端点', { exact: true }).waitFor({ timeout: 10_000 })
-    // Nothing listens on that port, so the client reports the failed attempt instead of "loaded".
+    // Nothing listens on that port, so the manager reports the failed attempt.
     await row.getByText(/^(重连中|未连接)/).first().waitFor({ timeout: 15_000 })
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
-  it('refuses a typed credential and leaves the file as it was', async () => {
-    onTestFailed(() => saveFailureShot(page, 'web-e2e-mcp-servers-secret'))
+  it('refuses a malformed credential name before writing anything', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-mcp-servers-credential-name'))
     const panel = await openPage()
-    const before = await patch()
+    const before = JSON.stringify(servers())
     await panel.getByRole('button', { name: '添加服务器', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '添加 MCP 服务器' })
     await dialog.getByLabel('名称', { exact: true }).fill('leaky')
     await dialog.getByRole('tab', { name: 'HTTP 端点' }).click()
     await dialog.getByLabel('URL', { exact: true }).fill('http://127.0.0.1:9/leaky')
     await dialog.getByRole('button', { name: '添加一项', exact: true }).click()
-    await dialog.getByLabel('条目名称').fill('Authorization')
-    await dialog.getByLabel('取值类型').selectOption('literal')
-    await dialog.getByLabel('值', { exact: true }).fill('Bearer hunter2')
+    await dialog.getByLabel('条目名称').fill('X-Key')
+    await dialog.getByLabel('取值类型').selectOption('credential')
+    await dialog.getByLabel('凭据名称', { exact: true }).fill('9-not-a-name')
     await dialog.getByRole('button', { name: '保存', exact: true }).click()
-    await dialog.getByRole('alert').getByText('不能在此直接输入凭证', { exact: false }).waitFor({ timeout: 10_000 })
-    expect(await patch()).toBe(before)
-    expect(await patch()).not.toContain('hunter2')
+    await dialog.getByRole('alert').getByText('凭据名称只能使用', { exact: false }).waitFor({ timeout: 10_000 })
+    expect(JSON.stringify(servers())).toBe(before)
     await dialog.getByRole('button', { name: '取消', exact: true }).click()
   }, 60_000)
 
-  it('refuses a reference to a variable the harness has not set, in view beside the buttons', async () => {
-    onTestFailed(() => saveFailureShot(page, 'web-e2e-mcp-servers-unset-variable'))
+  it('shows the manager\'s reason when it refuses an entry, in view beside the buttons', async () => {
+    onTestFailed(() => saveFailureShot(page, 'web-e2e-mcp-servers-refused'))
     const panel = await openPage()
-    const before = await patch()
+    const before = JSON.stringify(servers())
     await panel.getByRole('button', { name: '添加服务器', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '添加 MCP 服务器' })
-    await dialog.getByLabel('名称', { exact: true }).fill('unset')
+    await dialog.getByLabel('名称', { exact: true }).fill('broken')
     await dialog.getByRole('tab', { name: 'HTTP 端点' }).click()
-    await dialog.getByLabel('URL', { exact: true }).fill('http://127.0.0.1:9/unset')
+    await dialog.getByLabel('URL', { exact: true }).fill('http://127.0.0.1:9/broken')
     await dialog.getByRole('button', { name: '添加一项', exact: true }).click()
     await dialog.getByLabel('条目名称').fill('X-Api-Version')
-    await dialog.getByLabel('取值类型').selectOption('env')
-    await dialog.getByLabel('值', { exact: true }).fill('E2E_MCP_NEVER_SET')
+    // Text that looks like a template but is not one: the manager refuses it at the write.
+    await dialog.getByLabel('值', { exact: true }).fill('${credential:}')
     await dialog.getByRole('button', { name: '保存', exact: true }).click()
     const alert = dialog.getByRole('alert')
-    await alert.getByText('E2E_MCP_NEVER_SET', { exact: false }).waitFor({ timeout: 10_000 })
+    await alert.getByText('servers.broken', { exact: false }).waitFor({ timeout: 10_000 })
     expect(await alert.isVisible()).toBe(true)
-    expect(await patch()).toBe(before)
+    expect(JSON.stringify(servers())).toBe(before)
     await dialog.getByRole('button', { name: '取消', exact: true }).click()
   }, 60_000)
 
@@ -160,10 +171,9 @@ describe('web e2e: MCP servers page', () => {
     await action.click()
     await page.getByRole('dialog').waitFor({ state: 'detached', timeout: 15_000 })
 
-    const saved = await patch()
-    expect(saved).toContain('id: mcp-files')
-    expect(saved).toContain('command: mcp-e2e-missing')
-    expect(saved).toContain('- --root')
+    await expect.poll(() => servers().files, { timeout: 15_000 }).toMatchObject({
+      transport: 'stdio', command: 'mcp-e2e-missing', args: ['--root', '/tmp'],
+    })
     expect(tripwire.pageErrors).toEqual([])
   }, 60_000)
 
@@ -173,26 +183,28 @@ describe('web e2e: MCP servers page', () => {
     const row = panel.getByRole('listitem').filter({ hasText: 'web' }).first()
 
     await row.getByRole('switch', { name: '启用 web' }).click()
-    await expect.poll(patch, { timeout: 15_000 }).toContain('disabled: true')
+    await expect.poll(() => servers().web?.enabled, { timeout: 15_000 }).toBe(false)
     await row.getByText('已关闭', { exact: true }).waitFor({ timeout: 15_000 })
     await row.getByRole('switch', { name: '启用 web' }).click()
-    await expect.poll(async () => (await patch()).includes('disabled: true'), { timeout: 15_000 }).toBe(false)
+    await expect.poll(() => servers().web?.enabled, { timeout: 15_000 }).toBe(true)
 
     await row.getByRole('button', { name: '编辑', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: '编辑 MCP 服务器' })
     expect(await dialog.getByLabel('名称', { exact: true }).inputValue()).toBe('web')
+    // The stored credential is reported, and the field offers to keep it.
+    await dialog.getByText('已存储', { exact: true }).waitFor({ timeout: 10_000 })
     await dialog.getByLabel('URL', { exact: true }).fill('http://127.0.0.1:9/changed')
     await dialog.getByRole('button', { name: '保存', exact: true }).click()
     await dialog.waitFor({ state: 'detached', timeout: 15_000 })
-    expect(await patch()).toContain('url: http://127.0.0.1:9/changed')
-    expect(await patch()).toContain('Bearer ${process.env.E2E_MCP_TOKEN}')
+    await expect.poll(() => servers().web, { timeout: 15_000 }).toMatchObject({
+      url: 'http://127.0.0.1:9/changed', headers: { Authorization: 'Bearer ${credential:MCP_WEB_AUTHORIZATION}' },
+    })
 
     await row.getByRole('button', { name: '移除', exact: true }).click()
     const removal = page.getByRole('dialog', { name: '移除此服务器？' })
     await removal.getByRole('button', { name: '移除服务器', exact: true }).click()
     await removal.waitFor({ state: 'detached', timeout: 15_000 })
-    await expect.poll(async () => (await patch()).includes('id: mcp-web'), { timeout: 15_000 }).toBe(false)
-    expect(await patch()).toContain('id: mcp-files')
+    await expect.poll(() => Object.keys(servers()), { timeout: 15_000 }).toEqual(['files'])
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 
@@ -228,7 +240,7 @@ describe('web e2e: MCP servers page', () => {
     const mode = details.getByLabel('模型调用此工具时')
     expect(await mode.inputValue()).toBe('inherit')
     await mode.selectOption('allow')
-    await expect.poll(patch, { timeout: 15_000 }).toContain('echo: allow')
+    await expect.poll(() => userSection('mcp-policy').servers, { timeout: 15_000 }).toMatchObject({ everything: { tools: { echo: 'allow' } } })
     await expect.poll(() => details.locator('summary').textContent(), { timeout: 10_000 }).toContain('允许')
 
     await tools.getByLabel('筛选工具').fill('zzz-no-such-tool')
@@ -240,7 +252,7 @@ describe('web e2e: MCP servers page', () => {
     expect(tripwire.pageErrors).toEqual([])
   }, 120_000)
 
-  it('shows why a server that cannot connect is not connected, and reconnects on request', async () => {
+  it('shows why a server that cannot connect is not connected, restarts it on request, and tests it', async () => {
     onTestFailed(() => saveFailureShot(page, 'web-e2e-mcp-servers-failed-state'))
     const panel = await openPage()
     const row = panel.getByRole('listitem').filter({ hasText: 'files' }).first()
@@ -249,6 +261,13 @@ describe('web e2e: MCP servers page', () => {
     await row.getByRole('button', { name: '重新连接', exact: true }).waitFor()
     await row.getByRole('button', { name: '重新连接', exact: true }).click()
     await row.getByText(/^(连接中|重连中|未连接)/).first().waitFor({ timeout: 30_000 })
+
+    // A test connects apart from the running instance and reports the stage that failed.
+    await row.getByRole('button', { name: '测试', exact: true }).click()
+    const probe = page.getByRole('dialog', { name: '测试 files' })
+    await probe.getByRole('alert').waitFor({ timeout: 30_000 })
+    await probe.getByRole('button', { name: '关闭', exact: true }).last().click()
+    await probe.waitFor({ state: 'detached' })
     expect(tripwire.pageErrors).toEqual([])
   }, 90_000)
 

@@ -1,55 +1,62 @@
 // @vitest-environment jsdom
 /** The MCP status item as the composer dock renders it, driven through the real tray controller. */
-import { Context } from '@deepseek-ai/cordis'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { bindSnapshotSelector, makeTranslate, stubConfigForm, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
-import type {
-  McpEntryId, McpServerOverview, McpServerStats, McpServerStatus, SessionId,
-} from '@deepseek-ai/dsh-api-remotes/client'
+import { afterEach, describe, expect, it } from 'vitest'
+import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import type { McpManagedServerStatus, McpServerStats, SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import { McpStatusItem, type McpStatusItemProps } from '../src/client/McpStatusItem.tsx'
 import { McpTrayController } from '../src/client/mcp-tray-controller.ts'
 import { en } from '../src/client/locales.ts'
-import type { McpUiSettings } from '../src/mcp-ui-settings.ts'
+import { fakeHost, ok, stats, usage, view } from './fake-host.client.ts'
 
 afterEach(cleanup)
 
 const t = makeTranslate(en) as McpStatusItemProps['t']
 const READ_AT = 10_000_000
 
-const status = (state: McpServerStatus['state'], rest: Partial<McpServerStatus> = {}): McpServerStatus => (
-  { serverName: 's', state, attempt: 0, maxAttempts: 10, toolCount: 3, ...rest }
-)
-const stats = (rest: Partial<McpServerStats> = {}): McpServerStats => ({
-  calls: 0, errors: 0, inputTokens: 0, outputTokens: 0, totalMs: 0, maxMs: 0, connections: 1, schemaTokens: 0, transport: 'stdio', tools: [], ...rest,
-})
-const server = (name: string, rest: Partial<McpServerOverview> = {}): McpServerOverview => (
-  { id: `mcp-${name}` as McpEntryId, serverName: name, enabled: true, defaultActive: true, ...rest }
-)
+const up = (toolCount = 3, connectedAt = READ_AT): McpManagedServerStatus => ({ state: 'connected', toolCount, connectedAt })
+const failed = (lastError?: string): McpManagedServerStatus => ({ state: 'failed', reason: 'gave-up', ...lastError === undefined ? {} : { lastError } })
+const off: McpManagedServerStatus = { state: 'disabled' }
+const reconnecting: McpManagedServerStatus = { state: 'reconnecting', attempt: 1, maxAttempts: 10, nextRetryAtMs: Date.now() + 60_000, lastError: 'timeout' }
+
+/** One server as the manager reports it and, when it carries figures, as its running client does. */
+interface Spec {
+  name: string
+  /** Absent for a client the manager does not run. */
+  status?: McpManagedServerStatus
+  stats?: McpServerStats
+  sessionStats?: McpServerStats
+  defaultActive?: boolean
+}
+const server = (name: string, rest: Omit<Spec, 'name'> = {}): Spec => ({ name, ...rest })
 
 const SESSION = 'session-1' as SessionId
 /** The Session's logged selection: null while it follows the defaults, undefined when the Host offers no selection. */
 type Logged = readonly string[] | null | undefined
 
-function mount(servers: McpServerOverview[], preference = true, logged?: Logged) {
-  const ctx = new Context()
-  const overview = vi.fn((_sessionId?: string) => Promise.resolve({ ok: true as const, value: { readAt: READ_AT, servers } }))
-  const setSessionServers = vi.fn((_sessionId: string, active: string[]) => Promise.resolve({ ok: true as const, value: { active } }))
-  new TestRemote(ctx, { mcpServers: { overview, setSessionServers } })
-  const selectPanel = vi.fn()
-  ctx.provide('layout', { selectPanel })
-  const settings = stubConfigForm<McpUiSettings>()
+function mount(servers: Spec[], preference = true, logged?: Logged) {
+  const host = fakeHost()
+  host.mcpServers.overview.mockImplementation(() => Promise.resolve(ok({
+    readAt: READ_AT,
+    servers: servers.filter(spec => spec.stats !== undefined).map(spec => usage(spec.name, {
+      defaultActive: spec.defaultActive !== false, stats: spec.stats!,
+      ...spec.sessionStats === undefined ? {} : { sessionStats: spec.sessionStats },
+    })),
+  })))
+  host.publish(servers.filter(spec => spec.status !== undefined).map(spec => view(spec.name, spec.status)))
+  const settings = host.form
   settings.publish({ value: { statusItem: preference }, writable: true })
-  const controller = new McpTrayController(ctx, settings.scope)
+  const controller = new McpTrayController(host.ctx, settings.scope, host.fleet)
   const { hooks, ...actions } = controller.inject()
   const propsFor = (selection: Logged) => ({
     ...actions, t, sessionId: SESSION, useMcpTray: bindSnapshotSelector(hooks.mcpTray),
     useProjection: (_key: 'mcpServers') => selection === undefined ? undefined : { active: selection },
   }) as McpStatusItemProps
-  const view = render(<McpStatusItem {...propsFor(logged)} />)
+  const rendered = render(<McpStatusItem {...propsFor(logged)} />)
   /** Deliver the Session's next logged selection, as a projection frame does. */
-  const log = (selection: Logged): void => { view.rerender(<McpStatusItem {...propsFor(selection)} />) }
-  return { ...view, controller, overview, setSessionServers, selectPanel, settings, log }
+  const log = (selection: Logged): void => { rendered.rerender(<McpStatusItem {...propsFor(selection)} />) }
+  const { overview, setSessionServers } = host.mcpServers
+  return { ...rendered, controller, overview, setSessionServers, selectPanel: host.selectPanel, settings, log }
 }
 
 async function openPanel(): Promise<HTMLElement> {
@@ -70,9 +77,9 @@ describe('McpStatusItem', () => {
 
   it('counts connected servers among the enabled ones', async () => {
     mount([
-      server('a', { status: status('connected') }),
-      server('b', { status: status('reconnecting', { attempt: 1 }) }),
-      server('c', { enabled: false, status: status('connected') }),
+      server('a', { status: up() }),
+      server('b', { status: reconnecting }),
+      server('c', { status: off }),
     ])
     const trigger = await screen.findByRole('button', { name: 'MCP servers: 1 of 2 connected' })
     expect(trigger.textContent).toBe('MCP 1/2')
@@ -80,10 +87,11 @@ describe('McpStatusItem', () => {
   })
 
   it.each([
-    ['every enabled server connected', [server('a', { status: status('connected') })], 'MCP 1/1'],
-    ['a failed server', [server('a', { status: status('failed') }), server('b', { status: status('connected') })], 'MCP 1/2'],
-    ['a server with no status yet', [server('a')], 'MCP 0/1'],
-    ['only disabled servers', [server('a', { enabled: false })], 'MCP 0/0'],
+    ['every enabled server connected', [server('a', { status: up() })], 'MCP 1/1'],
+    ['a failed server', [server('a', { status: failed() }), server('b', { status: up() })], 'MCP 1/2'],
+    ['a server still connecting', [server('a', { status: { state: 'connecting', attempt: 0 } })], 'MCP 0/1'],
+    ['a running client the manager does not run', [server('a', { stats: stats() })], 'MCP 1/1'],
+    ['only disabled servers', [server('a', { status: off })], 'MCP 0/0'],
   ] as const)('summarizes %s', async (_label, servers, text) => {
     mount([...servers])
     expect((await screen.findByRole('button', { name: /^MCP servers:/ })).textContent).toBe(text)
@@ -92,7 +100,7 @@ describe('McpStatusItem', () => {
   it('opens a panel with totals across servers and one block per server', async () => {
     mount([
       server('alpha', {
-        status: status('connected', { connectedAt: READ_AT - 5_400_000, toolCount: 13 }),
+        status: up(13, READ_AT - 5_400_000),
         stats: stats({
           calls: 1_200, errors: 3, inputTokens: 4_000, outputTokens: 250_000, totalMs: 240_000, maxMs: 2_500,
           lastCallAt: READ_AT - 65_000, connections: 2, schemaTokens: 1_800,
@@ -104,7 +112,7 @@ describe('McpStatusItem', () => {
         }),
       }),
       server('beta', {
-        status: status('failed', { attempt: 10, error: 'connection refused', toolCount: 0 }),
+        status: failed('connection refused'),
         stats: stats({ transport: 'streamable-http', schemaTokens: 200 }),
       }),
     ])
@@ -141,7 +149,7 @@ describe('McpStatusItem', () => {
 
   it('lists at most five tools per server', async () => {
     mount([server('a', {
-      status: status('connected'),
+      status: up(),
       stats: stats({ calls: 21, tools: ['t1', 't2', 't3', 't4', 't5', 't6'].map((name, index) => ({ name, calls: 6 - index, errors: 0, totalMs: 10 })) }),
     })])
     const panel = await openPanel()
@@ -149,34 +157,33 @@ describe('McpStatusItem', () => {
     expect(within(panel).queryByText('t6')).toBeNull()
   })
 
-  it('shows a disabled server as off, one without a status as loading, and names a nameless one by its row id', async () => {
+  it('shows a disabled server as off, a client outside the manager as loaded, and a reconnect with its last error', async () => {
     mount([
-      server('', { enabled: false, status: status('failed', { error: 'stale' }) }),
-      server('pending'),
-      server('ok', { status: status('connected', { error: 'old' }), stats: stats() }),
+      server('disabled', { status: off }),
+      server('static', { stats: stats() }),
+      server('ok', { status: up(), stats: stats() }),
+      server('flaky', { status: reconnecting }),
     ])
     const panel = await openPanel()
-    expect(within(panel).getByText('mcp-')).toBeTruthy()
     expect(within(panel).getByText(en.phaseOff)).toBeTruthy()
-    expect(within(panel).getByText(en.phaseLoading)).toBeTruthy()
-    // A disabled row's stale error and a connected row's old error are not shown.
-    expect(within(panel).queryByText('stale')).toBeNull()
-    expect(within(panel).queryByText('old')).toBeNull()
-    // No call yet: no latency figures, and no connection time without a recorded connect.
+    expect(within(panel).getByText(en.phaseLoaded)).toBeTruthy()
+    expect(within(panel).getByText(/^Reconnecting \(1\/10\), next try in/)).toBeTruthy()
+    expect(within(panel).getByText('timeout')).toBeTruthy()
+    // No call yet: no latency figures.
     expect(within(panel).queryByText(en.statAverage)).toBeNull()
-    expect(within(panel).queryByText(en.statUptime)).toBeNull()
     expect(within(panel).queryByText(en.statServer)).toBeNull()
     expect(within(panel).queryByText(en.statTopTools)).toBeNull()
   })
 
-  it('shows a tool count of zero for a server that reports usage but no status', async () => {
+  it('shows no tool count or uptime for a client the manager does not report', async () => {
     mount([server('odd', { stats: stats() })])
     const panel = await openPanel()
-    expect(within(panel).getByText(en.statTools).nextElementSibling?.textContent).toBe('0')
+    expect(within(panel).queryByText(en.statTools)).toBeNull()
+    expect(within(panel).queryByText(en.statUptime)).toBeNull()
   })
 
   it('closes on Escape, on a press outside, and on a second click', async () => {
-    mount([server('a', { status: status('connected') })])
+    mount([server('a', { status: up(), stats: stats() })])
     await openPanel()
     fireEvent.keyDown(document, { key: 'a' })
     expect(screen.queryByRole('dialog')).toBeTruthy()
@@ -193,7 +200,7 @@ describe('McpStatusItem', () => {
   })
 
   it('opens the Plugins panel from the manage button and closes itself', async () => {
-    const { selectPanel } = mount([server('a', { status: status('connected') })])
+    const { selectPanel } = mount([server('a', { status: up(), stats: stats() })])
     const panel = await openPanel()
     fireEvent.click(within(panel).getByRole('button', { name: en.trayManage }))
     expect(selectPanel).toHaveBeenCalledWith('plugins')
@@ -201,7 +208,7 @@ describe('McpStatusItem', () => {
   })
 
   it('disappears with an open panel when the preference turns off', async () => {
-    const { settings, container } = mount([server('a', { status: status('connected') })])
+    const { settings, container } = mount([server('a', { status: up(), stats: stats() })])
     await openPanel()
     settings.publish({ value: { statusItem: false } })
     await waitFor(() => { expect(container.textContent).toBe('') })
@@ -211,9 +218,9 @@ describe('McpStatusItem', () => {
   describe('per-Session figures', () => {
     it('shows this Session beside all Sessions, in the totals and per server', async () => {
       mount([
-        server('alpha', { status: status('connected'), stats: stats({ calls: 12, errors: 2, inputTokens: 400, outputTokens: 800 }), sessionStats: stats({ calls: 3, inputTokens: 100, outputTokens: 40 }) }),
-        server('beta', { status: status('connected'), stats: stats({ calls: 5 }), sessionStats: stats({ calls: 1 }) }),
-        server('quiet', { status: status('connected'), stats: stats() }),
+        server('alpha', { status: up(), stats: stats({ calls: 12, errors: 2, inputTokens: 400, outputTokens: 800 }), sessionStats: stats({ calls: 3, inputTokens: 100, outputTokens: 40 }) }),
+        server('beta', { status: up(), stats: stats({ calls: 5 }), sessionStats: stats({ calls: 1 }) }),
+        server('quiet', { status: up(), stats: stats() }),
       ])
       const panel = await openPanel()
       const counters = (caption: string): string =>
@@ -227,7 +234,7 @@ describe('McpStatusItem', () => {
     })
 
     it('shows only the totals while the figures on hand were read for another Session', async () => {
-      const { controller } = mount([server('alpha', { status: status('connected'), stats: stats({ calls: 12 }), sessionStats: stats({ calls: 3 }) })])
+      const { controller } = mount([server('alpha', { status: up(), stats: stats({ calls: 12 }), sessionStats: stats({ calls: 3 }) })])
       const panel = await openPanel()
       const other = controller.inject()
       other.load('session-2' as SessionId)
@@ -240,9 +247,9 @@ describe('McpStatusItem', () => {
 
   describe('per-Session selection', () => {
     const three = [
-      server('alpha', { status: status('connected'), stats: stats({ schemaTokens: 1_000 }) }),
-      server('beta', { status: status('connected'), defaultActive: false, stats: stats({ schemaTokens: 400 }) }),
-      server('off', { enabled: false }),
+      server('alpha', { status: up(), stats: stats({ schemaTokens: 1_000 }) }),
+      server('beta', { status: up(), defaultActive: false, stats: stats({ schemaTokens: 400 }) }),
+      server('off', { status: off }),
     ]
     const toggle = (panel: HTMLElement, name: string): HTMLElement =>
       within(panel).getByRole('switch', { name: `Use ${name} in this session` })
@@ -254,7 +261,7 @@ describe('McpStatusItem', () => {
       expect(within(panel).getByText('Tool definitions: ≈1.4K tokens per request')).toBeTruthy()
     })
 
-    it('shows each enabled server\'s default, and counts only the definitions the Session carries', async () => {
+    it('shows each running server\'s default, and counts only the definitions the Session carries', async () => {
       mount(three, true, null)
       const panel = await openPanel()
       expect(toggle(panel, 'alpha').getAttribute('aria-checked')).toBe('true')

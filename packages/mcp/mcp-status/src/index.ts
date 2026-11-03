@@ -1,24 +1,25 @@
 /**
- * Registry of the live connection state and tool lists of configured MCP
+ * Registry of the live tool lists and usage counters of configured MCP
  * servers. MCP clients register one handle per server; consumers read the
- * handles and are told when any of them changes.
+ * handles and are told when a tool list changes. Connection state is each
+ * client's own status (`connectionStatusOf`, or `mcpManager` for managed servers).
  *
  * @module @deepseek-ai/dsh-mcp-status
  */
 import { Service, type Context } from '@deepseek-ai/cordis'
-import type { McpConfiguredServer, McpServerHandle, McpServerStats, McpServerStatus, McpToolInfo } from './types.ts'
+import type { McpConfiguredServer, McpServerHandle, McpServerStats, McpToolInfo } from './types.ts'
 
 export type * from './types.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
-    /** Live state of the configured MCP servers. */
+    /** Live tool lists and usage of the configured MCP servers. */
     mcpStatus: McpStatusRuntime
   }
 
   interface Events {
     /**
-     * A registered server's connection state or tool list changed, or a server was registered or removed.
+     * A registered server's tool list changed, or a server was registered or removed.
      * @mode emit
      * @param server - the configured `serverName`.
      */
@@ -29,6 +30,8 @@ declare module '@deepseek-ai/cordis' {
 /** The shared registry the MCP clients register into. */
 export class McpStatusRuntime extends Service {
   private readonly entries = new Set<{ server: string; handle: McpServerHandle }>()
+  /** Every server name in first-registration order; a re-registration, such as a restart, keeps its place. */
+  private readonly order: string[] = []
 
   /** @param ctx - the context that owns the registry. */
   constructor(ctx: Context) {
@@ -38,13 +41,14 @@ export class McpStatusRuntime extends Service {
   /**
    * Publish one server and relay its changes as `mcp-status/changed`.
    * @param server - configured server name.
-   * @param handle - live reads and the reconnect action for the server.
+   * @param handle - live reads of the server's tools and usage.
    * @returns the disposer that removes this registration.
    */
   register(server: string, handle: McpServerHandle): () => void {
     const entry = { server, handle }
     // oxlint-disable-next-line typescript/no-misused-promises -- the disposer below is synchronous
     return this.ctx.effect(() => {
+      if (!this.order.includes(server)) this.order.push(server)
       this.entries.add(entry)
       const unsubscribe = handle.subscribe(() => { this.ctx.emit('mcp-status/changed', server) })
       this.ctx.emit('mcp-status/changed', server)
@@ -57,28 +61,13 @@ export class McpStatusRuntime extends Service {
   }
 
   /**
-   * Read every registered server's state.
-   * @returns one status per registration, in registration order.
-   */
-  list(): McpServerStatus[] {
-    return [...this.entries].map(entry => entry.handle.status())
-  }
-
-  /**
    * Name every registered server with its configured default.
-   * @returns one entry per registration, in registration order.
+   * @returns one entry per registration, in the order each name first registered.
    */
   servers(): McpConfiguredServer[] {
-    return [...this.entries].map(entry => ({ serverName: entry.server, defaultActive: entry.handle.defaultActive }))
-  }
-
-  /**
-   * Read one server's state.
-   * @param server - configured server name.
-   * @returns its status, or undefined when no client registered it.
-   */
-  get(server: string): McpServerStatus | undefined {
-    return this.find(server)?.status()
+    return [...this.entries]
+      .sort((left, right) => this.order.indexOf(left.server) - this.order.indexOf(right.server))
+      .map(entry => ({ serverName: entry.server, defaultActive: entry.handle.defaultActive }))
   }
 
   /**
@@ -98,15 +87,6 @@ export class McpStatusRuntime extends Service {
    */
   stats(server: string, session?: string): McpServerStats | undefined {
     return this.find(server)?.stats(session)
-  }
-
-  /**
-   * Ask one server's client to connect now.
-   * @param server - configured server name.
-   * @returns whether a new attempt started; false for an unknown server or one already live or connecting.
-   */
-  async reconnect(server: string): Promise<boolean> {
-    return await this.find(server)?.reconnect() ?? false
   }
 
   private find(server: string): McpServerHandle | undefined {

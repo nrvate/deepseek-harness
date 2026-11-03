@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { stubConfigForm, TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
+import { fakeHost, ok } from './fake-host.client.ts'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import type { SessionId } from '@deepseek-ai/dsh-api-remotes/client'
 import { apply, inject, NS } from '../src/client/index.ts'
@@ -12,21 +13,20 @@ import type { McpTrayFace } from '../src/client/mcp-tray-controller.ts'
 import type { McpAlwaysAllowFace } from '../src/client/McpAlwaysAllow.tsx'
 import { en, zh } from '../src/client/locales.ts'
 
-async function bench(rows: unknown[] = []) {
-  const ctx = new Context()
+async function bench() {
+  const host = fakeHost()
+  const ctx = host.ctx
   await ctx.plugin(SlotRegistry).await()
   const locale = new LocaleRuntime(ctx)
   locale.setLocale('zh')
   ctx.provide('locale', locale)
-  const list = vi.fn(() => Promise.resolve({ ok: true, value: rows }))
-  const overview = vi.fn(() => Promise.resolve({ ok: true, value: { readAt: 1, servers: [] } }))
-  const allowTool = vi.fn((_name: string) => Promise.resolve({ ok: true, value: { changed: true, application: 'applied', target: 'mcp-docs' } }))
-  const remote = new TestRemote(ctx, { mcpServers: { list, overview, allowTool } })
   const settings = stubConfigForm()
   const forms = vi.fn(() => settings.scope)
   ctx.provide('configForms', { get: forms })
-  ctx.provide('layout', { selectPanel: vi.fn() })
-  return { ctx, slots: ctx.get('slots') as SlotRegistry, list, overview, remote, forms, allowTool }
+  return {
+    ctx, slots: ctx.get('slots') as SlotRegistry, describe: host.settings.describe, overview: host.mcpServers.overview,
+    remote: host.remote, forms, allowTool: host.mcpServers.allowTool, watch: host.mcpManager.watch,
+  }
 }
 
 /** The Plugins page's item slot and the shell overlay, as their owners declare them. */
@@ -79,14 +79,16 @@ describe('ui-settings-mcp-servers apply', () => {
     const face = (action?.inject as () => Pick<McpAlwaysAllowFace, 'allowTool'>)()
     await expect(face.allowTool('mcp__docs__search')).resolves.toBe(true)
     expect(allowTool).toHaveBeenCalledWith('mcp__docs__search')
-    allowTool.mockResolvedValueOnce({ ok: true, value: { changed: false, application: 'failed', target: 'x' } })
+    allowTool.mockResolvedValueOnce(ok({ ok: false, code: 'no-policy-store', message: 'none' }) as never)
     await expect(face.allowTool('mcp__docs__search')).resolves.toBe(false)
     allowTool.mockResolvedValueOnce({ ok: false, error: new Error('down') } as never)
     await expect(face.allowTool('mcp__docs__search')).resolves.toBe(false)
   })
 
   it('declares the services it uses', () => {
-    expect(inject).toEqual(['slots', 'locale', 'remote', 'remote.mcpServers', 'configForms', 'layout'])
+    expect(inject).toEqual([
+      'slots', 'locale', 'remote', 'remote.mcpServers', 'remote.mcpManager', 'remote.settings', 'remote.credentials', 'configForms', 'layout',
+    ])
   })
 
   it('has a Chinese entry for every English key', () => {
@@ -120,8 +122,8 @@ describe('ui-settings-mcp-servers apply', () => {
     expect(Object.keys(face.hooks)).toEqual(['mcpServers'])
   })
 
-  it('re-reads an opened page when the Host reports a plugin change, and ignores one before it opens', async () => {
-    const { ctx, slots, list, remote } = await bench()
+  it('re-reads an opened page when the Host reports a plugin or Settings change, and ignores one before it opens', async () => {
+    const { ctx, slots, describe: list, remote, watch } = await bench()
     declareRoot(slots)
     await ctx.plugin({ inject: [...inject], apply }).await()
     const face = (slots.entries('plugins.item')[0]?.inject as () => { load: () => void; hooks: { mcpServers: { getSnapshot(): { status: string } } } })()
@@ -137,6 +139,14 @@ describe('ui-settings-mcp-servers apply', () => {
     await vi.waitFor(() => { expect(list).toHaveBeenCalledTimes(1) })
     ctx.emit('connection/reset')
     await vi.waitFor(() => { expect(list).toHaveBeenCalledTimes(2) })
+    // Only the namespaces the page shows trigger a re-read.
+    remote.emit('settings/document-updated', ['llm-deepseek', 4])
+    await Promise.resolve()
+    expect(list).toHaveBeenCalledTimes(2)
+    remote.emit('settings/document-updated', ['mcp-policy', 2])
+    await vi.waitFor(() => { expect(list).toHaveBeenCalledTimes(3) })
+    // Opening the page opened the manager's list stream once.
+    expect(watch).toHaveBeenCalledTimes(1)
   })
 
   it('collapses the page and the toast on teardown', async () => {

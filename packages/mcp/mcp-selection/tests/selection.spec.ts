@@ -23,10 +23,8 @@ function connect(ctx: Context, server: string, tools: string[], defaultActive = 
   const names = tools.map(tool => `mcp__${server}__${tool}`)
   const handle: McpServerHandle = {
     defaultActive,
-    status: () => ({ serverName: server, state: 'connected', attempt: 0, maxAttempts: 10, toolCount: names.length }),
     tools: () => names.map((publicName, index) => ({ name: tools[index] ?? '', publicName, description: '', parameters: [] })),
     stats: () => ({ calls: 0, errors: 0, inputTokens: 0, outputTokens: 0, totalMs: 0, maxMs: 0, connections: 1, schemaTokens: 0, transport: 'stdio', tools: [] }),
-    reconnect: () => Promise.resolve(false),
     subscribe: () => () => {},
   }
   const disposers = [
@@ -38,7 +36,7 @@ function connect(ctx: Context, server: string, tools: string[], defaultActive = 
   return () => { for (const dispose of disposers.reverse()) dispose() }
 }
 
-async function harness(adapter: MockAdapter): Promise<Context> {
+async function harness(adapter: MockAdapter, defaultActive: Record<string, boolean> = {}): Promise<Context> {
   const ctx = new Context()
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(SessionStore)
@@ -49,7 +47,7 @@ async function harness(adapter: MockAdapter): Promise<Context> {
   await ctx.plugin(AgentRegistry)
   await ctx.plugin(AgentLoop, { agents: [] })
   await ctx.plugin(McpStatus)
-  await ctx.plugin(McpSelection)
+  await ctx.plugin(McpSelection, { defaultActive })
   ctx.llm.registerAdapter(['mock'], adapter)
   ctx.tools.register(defineContentToolFixture({
     name: 'read', description: 'a tool no MCP server owns', parameters: {}, execute: () => Promise.resolve([{ type: 'text', text: 'ran read' }]),
@@ -112,6 +110,21 @@ describe('configured defaults', () => {
     connect(ctx, 'beta', ['fetch'], false)
     await turn(ctx, agent)
     expect(lastRequestTools(adapter)).toEqual(['mcp__alpha__search', 'read'])
+  })
+
+  it('lets the plugin config override each client default', async () => {
+    const adapter = new MockAdapter([textResponse('ok')])
+    const ctx = await harness(adapter, { alpha: false, beta: true })
+    connect(ctx, 'alpha', ['search'])
+    connect(ctx, 'beta', ['fetch'], false)
+    connect(ctx, 'gamma', ['look'])
+    const agent = await create(ctx, 'overrides')
+
+    expect(ctx.mcpSelection.active(agent.session)).toEqual(['beta', 'gamma'])
+    expect(ctx.mcpSelection.defaultOf('alpha', true)).toBe(false)
+    expect(ctx.mcpSelection.defaultOf('gamma', true)).toBe(true)
+    await turn(ctx, agent)
+    expect(lastRequestTools(adapter)).toEqual(['mcp__beta__fetch', 'mcp__gamma__look', 'read'])
   })
 
   it('leaves a caller with no agent unrestricted', async () => {

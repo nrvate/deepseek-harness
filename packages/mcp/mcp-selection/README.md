@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-mcp-selection` lets each Session use a subset of the configured MCP servers. A configured server is available to every Session; a Session carries the tools and instructions of only the servers it uses. Shipped profiles mount it once as `mcp-selection`. Until a Session selects for itself, it uses every server whose [`mcp-client`](../mcp-client/README.md) entry leaves `defaultActive` on.
+`dsh-mcp-selection` lets each Session use a subset of the configured MCP servers. A configured server is available to every Session; a Session carries the tools and instructions of only the servers it uses. Shipped profiles mount it once as `mcp-selection`. Until a Session selects for itself, it uses every server that is on by default: the server's entry in this plugin's `defaultActive` config, else its [`mcp-client`](../mcp-client/README.md) `defaultActive`, which defaults to on.
 
 ## Table of Contents
 
@@ -30,11 +30,14 @@ Shipped profiles already mount the service; a custom profile adds `@deepseek-ai/
 | `logged(session)` | The selection the Session logged, or undefined while it follows the defaults |
 | `isActive(server, agent)` | Whether the server reaches the agent's model requests; true for a caller with no agent |
 | `select(agent, servers)` | The servers in use after replacing the Session's selection |
+| `defaultOf(server, configured)` | Whether a Session with no selection uses the server: the config override, else `configured` |
 | `hideWhenNone(names)` | The disposer of a rule that hides the named tools from a Session using no server |
 
 `select` takes the complete list, drops duplicates, throws `MCP server "<name>" is not configured` for an unknown name, and logs nothing when the list equals the servers already in use. An empty list uses no server. A selection applies from the Session's next model request.
 
 A selection is one `mcp/servers` Session event holding the complete `active` list. The `mcpServers` projection carries the last logged list to clients, or `active: null` while the Session has logged none. A logged name whose server is no longer configured is ignored, and counts again if the server returns. A server added after a Session selected stays off for that Session until it is selected there.
+
+The volatile `defaultActive` config maps server names to booleans. It is a Settings field, so the Plugins page turns a manager-run server's default on or off without reconnecting it, and the change applies to every Session that has logged no selection from its next request.
 
 A delegated child Session starts with a copy of its parent's logged selection, written by the [subagent](../../subagent/subagent/README.md) package at delegation.
 

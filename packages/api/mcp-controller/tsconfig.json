@@ -12,37 +12,10 @@
       "path": "../../../vendor/cordis"
     },
     {
-      "path": "../../../vendor/loader"
-    },
-    {
-      "path": "../../boot/app-boot"
-    },
-    {
-      "path": "../../boot/hmr"
-    },
-    {
-      "path": "../../boot/plugin-manager"
-    },
-    {
-      "path": "../../host/plugin-inventory"
-    },
-    {
-      "path": "../../mcp/mcp-client"
-    },
-    {
       "path": "../../mcp/mcp-status"
     },
     {
-      "path": "../../subprocess/subprocess"
-    },
-    {
       "path": "../../typert/protocol"
-    },
-    {
-      "path": "../../util/atomic-write"
-    },
-    {
-      "path": "../../util/brand"
     },
     {
       "path": "../../mcp/mcp-selection"

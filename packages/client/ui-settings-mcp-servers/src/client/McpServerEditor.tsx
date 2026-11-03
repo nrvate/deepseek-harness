@@ -1,12 +1,12 @@
 /**
  * The dialogs of the MCP servers page: the add and edit form, the command
- * confirmation a local server needs before it is saved, and the removal
- * confirmation. Each reads its state from the page snapshot and writes only
- * through the controller's actions.
+ * confirmation a new or changed local command needs before it is saved, and
+ * the removal or restoration confirmation. Each reads its state from the page
+ * snapshot and writes only through the controller's actions.
  */
 import type { ReactNode } from 'react'
 import clsx from 'clsx'
-import { Button, Checkbox, Input, Modal, SegmentedControl, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Checkbox, Input, Modal, SegmentedControl, Switch, Tag } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { McpServersCardProps } from './McpServersCard.tsx'
 import type { EditorError, EditorState, McpServersState, ValueDraft, ValueMode } from './mcp-servers-controller.ts'
 import type { McpServersLocaleKey } from './locales.ts'
@@ -14,25 +14,19 @@ import { TOOL_MODE_LABEL, TOOL_MODES } from './tool-modes.ts'
 import type { McpToolMode } from '@deepseek-ai/dsh-api-remotes/client'
 import css from './McpServers.module.css'
 
-const MODES: readonly ValueMode[] = ['env', 'bearer', 'literal', 'kept', 'expression']
-
 const MODE_LABEL: Record<ValueMode, McpServersLocaleKey> = {
-  env: 'kindEnv', bearer: 'kindBearer', literal: 'kindLiteral', kept: 'kindKept', expression: 'kindExpression',
+  literal: 'kindLiteral', credential: 'kindCredential', bearer: 'kindBearer',
 }
 
 const MODE_HINT: Partial<Record<ValueMode, McpServersLocaleKey>> = {
-  env: 'hintEnv', bearer: 'hintBearer', kept: 'hintKept', expression: 'hintExpression',
+  credential: 'hintCredential', bearer: 'hintBearer',
 }
 
 const ERROR_TEXT: Record<EditorError['code'], McpServersLocaleKey> = {
-  'invalid-config': 'errorInvalid',
-  'duplicate-server': 'errorDuplicate',
-  'literal-secret': 'errorSecret',
-  'read-only': 'errorReadOnly',
-  'unknown-server': 'errorUnknown',
-  'unreadable-patch': 'errorPatch',
-  'operation-error': 'errorOperation',
-  'confirmation-required': 'errorOperation',
+  'invalid-name': 'errorInvalid',
+  duplicate: 'errorDuplicate',
+  'credential-ref': 'errorCredentialRef',
+  refused: 'errorOperation',
   timeout: 'errorTimeout',
   transport: 'errorTransport',
 }
@@ -64,14 +58,14 @@ function Field(props: { id: string; label: string; hint?: string; children: Reac
 }
 
 function EditorDialog(props: McpServersCardProps & { editor: EditorState }): ReactNode {
-  const { t, editor, closeEditor, save, editField, setTransport, setFailOnStartup, setDefaultActive, setToolDefault } = props
+  const { t, editor, closeEditor, save, editField, setTransport, setDefaultActive, setToolDefault } = props
   const { draft, saving, error } = editor
   const stdio = draft.transport === 'stdio'
   const complete = draft.serverName.trim() !== '' && (stdio ? draft.command.trim() !== '' : draft.url.trim() !== '')
   return (
     <Modal
       open={editor.confirm === null}
-      title={t(draft.rowId === undefined ? 'addTitle' : 'editTitle')}
+      title={t(draft.editing === undefined ? 'addTitle' : 'editTitle')}
       closeLabel={t('close')}
       onClose={closeEditor}
       className={clsx(css.dialog)}
@@ -96,6 +90,7 @@ function EditorDialog(props: McpServersCardProps & { editor: EditorState }): Rea
           <Input
             id="mcp-server-name"
             data-modal-autofocus
+            disabled={draft.editing !== undefined}
             value={draft.serverName}
             onChange={(event) => { editField('serverName', event.target.value) }}
           />
@@ -104,7 +99,7 @@ function EditorDialog(props: McpServersCardProps & { editor: EditorState }): Rea
           id="mcp-server-transport"
           label={t('transport')}
           value={draft.transport}
-          disabled={draft.rowId !== undefined}
+          disabled={draft.editing !== undefined}
           options={[
             { value: 'stdio', label: t('transportStdio') },
             { value: 'streamable-http', label: t('transportHttp') },
@@ -138,10 +133,6 @@ function EditorDialog(props: McpServersCardProps & { editor: EditorState }): Rea
         <Field id="mcp-server-timeout" label={t('timeout')} hint={t('timeoutHint')}>
           <Input id="mcp-server-timeout" inputMode="numeric" value={draft.timeoutMs} onChange={(event) => { editField('timeoutMs', event.target.value) }} />
         </Field>
-        <div className={css.switchRow}>
-          <span className={css.label}>{t('failOnStartup')}</span>
-          <Switch label={t('failOnStartup')} checked={draft.failOnStartupError} onChange={setFailOnStartup} />
-        </div>
         <Field id="mcp-server-tool-policy" label={t('toolPolicy')} hint={t('toolPolicyHint')}>
           <select
             id="mcp-server-tool-policy"
@@ -170,15 +161,18 @@ function ValueList(props: McpServersCardProps & { editor: EditorState }): ReactN
     <fieldset className={css.values}>
       <legend className={css.label}>{t(editor.draft.transport === 'stdio' ? 'env' : 'headers')}</legend>
       {editor.draft.transport === 'stdio' && <p className={css.hint}>{t('envNote')}</p>}
+      <p className={css.hint}>{t('secretNote')}</p>
       {editor.draft.values.map(entry => <ValueRow key={entry.uid} {...props} entry={entry} />)}
       <Button variant="outline" size="sm" className={css.addValue} onClick={addValue}>{t('addValue')}</Button>
     </fieldset>
   )
 }
 
-function ValueRow(props: McpServersCardProps & { entry: ValueDraft }): ReactNode {
-  const { t, entry, editValue, removeValue } = props
+function ValueRow(props: McpServersCardProps & { editor: EditorState; entry: ValueDraft }): ReactNode {
+  const { t, editor, entry, editValue, removeValue } = props
   const hint = MODE_HINT[entry.mode]
+  const modes: readonly ValueMode[] = editor.draft.transport === 'stdio' ? ['literal', 'credential'] : ['literal', 'credential', 'bearer']
+  const stored = entry.mode === 'literal' ? undefined : editor.credentials[entry.text.trim()]
   return (
     <div className={css.valueRow}>
       <Input
@@ -192,15 +186,29 @@ function ValueRow(props: McpServersCardProps & { entry: ValueDraft }): ReactNode
         value={entry.mode}
         onChange={(event) => { editValue(entry.uid, { mode: event.target.value as ValueMode }) }}
       >
-        {MODES.map(mode => <option key={mode} value={mode}>{t(MODE_LABEL[mode])}</option>)}
+        {modes.map(mode => <option key={mode} value={mode}>{t(MODE_LABEL[mode])}</option>)}
       </select>
       <Input
-        aria-label={t('valueText')}
+        aria-label={t(entry.mode === 'literal' ? 'valueText' : 'valueRef')}
         value={entry.text}
-        disabled={entry.mode === 'kept'}
         onChange={(event) => { editValue(entry.uid, { text: event.target.value }) }}
       />
       <Button variant="ghost" size="sm" onClick={() => { removeValue(entry.uid) }}>{t('removeValue')}</Button>
+      {entry.mode !== 'literal' && (
+        <>
+          <Input
+            type="password"
+            autoComplete="off"
+            aria-label={t('valueSecret')}
+            placeholder={t(stored?.configured === true ? 'secretKeep' : 'secretEnter')}
+            value={entry.secret}
+            onChange={(event) => { editValue(entry.uid, { secret: event.target.value }) }}
+          />
+          {stored !== undefined && (
+            <Tag tone={stored.configured ? 'outline' : 'warning'}>{t(stored.configured ? 'secretStored' : 'secretMissing')}</Tag>
+          )}
+        </>
+      )}
       {hint !== undefined && <span className={css.valueHint}>{t(hint)}</span>}
     </div>
   )
@@ -238,28 +246,29 @@ function ConfirmDialog(props: McpServersCardProps & { editor: EditorState }): Re
 }
 
 /**
- * Render the removal confirmation.
+ * Render the removal confirmation, or for an overridden inherited server the restoration confirmation.
  * @param props - page actions and locale, with the server awaiting removal or null.
  * @returns the dialog, or null while nothing awaits removal.
  */
 export function RemoveDialog(props: McpServersCardProps & { removal: McpServersState['removal'] }): ReactNode {
   const { t, removal, cancelRemove, confirmRemove } = props
+  const restore = removal?.row.source === 'overridden'
   return (
     <Modal
       open={removal !== null}
-      title={t('removeTitle')}
+      title={t(restore ? 'restoreTitle' : 'removeTitle')}
       closeLabel={t('close')}
       onClose={cancelRemove}
       footer={(
         <>
           <Button variant="outline" onClick={cancelRemove}>{t('cancel')}</Button>
-          <Button variant="primary" disabled={removal?.saving === true} onClick={confirmRemove}>{t('removeAction')}</Button>
+          <Button variant="primary" disabled={removal?.saving === true} onClick={confirmRemove}>{t(restore ? 'restoreAction' : 'removeAction')}</Button>
         </>
       )}
     >
       <div className={css.form}>
-        <p className={css.name}>{removal === null ? '' : removal.row.serverName === '' ? removal.row.id : removal.row.serverName}</p>
-        <p className={css.body}>{t('removeBody')}</p>
+        <p className={css.name}>{removal?.row.name}</p>
+        <p className={css.body}>{t(restore ? 'restoreBody' : 'removeBody')}</p>
       </div>
     </Modal>
   )

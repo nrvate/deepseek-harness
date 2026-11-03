@@ -1,5 +1,5 @@
 ---
-description: "mcpServers Remote 无需手工编辑文件，即可在当前 profile 补丁中列出、添加、编辑、启用和删除 MCP 服务器行。"
+description: "mcpServers Remote 报告 MCP 工具列表与用量，设置会话使用的服务器，并允许单个工具免询问运行。"
 kind: "package-reference"
 ---
 
@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`mcpServers` Remote 让 UI 管理当前 profile 的 `cordis.patch.yml` 中的 `@deepseek-ai/dsh-mcp-client` 行。每次写入都会保留注释和未托管的键；profile 支持热重载时通过热重载生效，重载失败则恢复文件。密钥以环境变量引用的形式写入，且不会被返回。
+`mcpServers` Remote 提供浏览器在 [MCP 管理器](../../mcp/mcp-manager/README.zh.md)与[设置](../settings-controller/README.zh.md) Remote 之外所需的 MCP 操作：每个服务器已注册的工具和用量计数、单个会话使用的服务器，以及一键允许单个工具。服务器条目、工具调用策略和默认选择都是设置字段；连接状态、重启和探测是 `mcpManager` 的操作。
 
 ## 目录
 
@@ -22,28 +22,16 @@ kind: "package-reference"
 <a id="use-this-package"></a>
 ## 使用本包
 
-[web bundle](../../bundle/web-app/README.zh.md) 将控制器挂载为 `mcp-servers-controller`；插件页面使用它。自定义 profile 需在 Loader、`app-boot` 的 profile 上下文（以及最好是 HMR）之后挂载 `@deepseek-ai/dsh-api-mcp-controller`。
+[Web 包](../../bundle/web-app/README.zh.md)将控制器挂载为 `mcp-servers-controller`，插件页面使用它。每个方法都以服务器名称为键，即管理器条目的 `servers` 键或静态 `mcp-client` 行的 `serverName`。
 
-| 方法 | 效果 |
+| 方法 | 作用 |
 |---|---|
-| `list()` | 运行中 profile 的所有 MCP 行，包括来自 bundle、家目录补丁和命令行覆盖的行，附带 `owned`、`readOnlyReason`、`enabled`、实时的 `fiberPhase`，以及挂载[状态服务](../../mcp/mcp-status/README.zh.md)时客户端的 `status`（连接状态、最近错误、尝试次数、工具数）|
-| `upsert(spec, { id?, confirmedCommand? })` | 添加 `mcp-<serverName>`，或替换 `id` 所指行中受托管的键 |
-| `setEnabled(id, enabled)` | 在 profile 补丁所拥有的行上写入 `disabled` |
-| `removeServer(id)` | 删除 profile 补丁所拥有的行 |
-| `setToolPolicy(id, policy)` | 替换一个服务器的工具调用策略。挂载 [mcp-policy](../../mcp/mcp-policy/README.zh.md) 时，策略通过配置编辑器写入该存储，生效时不会使服务器重新连接，且适用于每一个列出的行；否则只有可编辑且由补丁拥有的行可以修改，其服务器会重新加载。它不运行任何命令，因此无需确认 |
-| `allowTool(publicName)` | 按面向模型的名称，让一个工具从现在起无需询问即可运行，并保留其服务器策略的其余部分；需要策略存储 |
-| `tools(id)` | 服务器当前提供的工具及其连接状态 |
-| `reconnectServer(id)` | 请服务器的客户端立即连接；返回是否开始了尝试 |
-| `overview(sessionId?)` | 一次调用返回每一行的连接状态和用量计数，以及读取时的 Host 时钟；传入会话 id 时，每一行还以 `sessionStats` 给出该会话的部分 |
-| `setSessionServers(sessionId, active)` | 通过 [`mcp-selection`](../../mcp/mcp-selection/README.zh.md) 替换一个会话使用的服务器；返回正在使用的服务器 |
+| `tools(serverName)` | 该服务器当前已注册的工具及其描述和参数，来自[状态服务](../../mcp/mcp-status/README.zh.md) |
+| `overview(sessionId?)` | 每个运行中客户端的用量计数，以及经 [mcp-selection](../../mcp/mcp-selection/README.zh.md) 覆盖后的默认值，并附读取时的宿主时钟；传入会话 id 时，每项还以 `sessionStats` 附带该会话的份额 |
+| `setSessionServers(sessionId, active)` | 通过 `mcp-selection` 替换单个会话使用的服务器；返回正在使用的服务器 |
+| `allowTool(publicName)` | 按模型可见名称让单个工具此后免询问运行，并保留该服务器在 [mcp-policy](../../mcp/mcp-policy/README.zh.md) 中的其余策略 |
 
-每次写入都返回 `{ changed, application, target, error?, warnings? }`。`application` 为 `applied` 表示 Loader 已协调该变更，`restart-required` 表示 profile 没有热重载，`failed` 则带有 `error.code`：`invalid-config`、`duplicate-server`、`confirmation-required`、`literal-secret`、`unknown-server`、`read-only`、`unreadable-patch` 或 `operation-error`。失败的变更会让补丁文件保持原样。
-
-stdio 服务器会以 Host 的权限运行命令。在 `confirmedCommand` 等于 Host 在 `confirmation-required` 错误中报告的命令行之前，`upsert` 拒绝添加或修改 stdio 服务器，因此调用方必须先把这段完全相同的文本展示给用户。
-
-### 密钥
-
-`env` 或 `headers` 的值可以是字面量、环境变量引用（`{ kind: 'env', name, scheme? }`，写为 `!!js process.env.NAME` 或 `Bearer` 模板）、文件中已有的 `expression`，或 `kept`。环境变量引用必须指向保存变更时 Host 环境中已设置的变量：Loader 会拒绝 `env` 值未定义的配置，`Bearer` 请求头则会发送文本 `undefined`，因此 `upsert` 会以 `invalid-config` 拒绝。形似凭证的键下的字面量会以 `literal-secret` 被拒绝（`env` 为 `KEY`、`PASSWORD`、`SECRET`、`TOKEN`；`headers` 除这些外还有 `authorization`、`cookie`），含用户名、密码或形似凭证的查询参数的 URL，以及为形似凭证的选项携带值的命令行参数（`--token x`、`--api-key=x`）同样被拒绝。当手写文件中已存在此类字面量时，`list` 以 `kept` 代替返回，`upsert` 接受 `kept` 以保持已存储的值不变。`expression` 仅在与同一键下已存储的源码一致时才被接受，因此客户端无法提交代码。URL 或参数内嵌凭证的行会以 `embedded-credentials` 只读列出，显示不含凭证的 URL，命令行中的这些参数值显示为 `***`。每一行都列出生效中的 `toolPolicy`：存储的策略，否则为该行自己的策略，再否则为插件默认值。挂载存储时，`upsert` 把规格中的 `toolPolicy` 写入存储而不是写入该行，`removeServer` 会删除该服务器存储的策略。
+`allowTool` 返回 `{ ok: true, serverName, tool }`，或返回带 `code` 与 `message` 的 `{ ok: false }`：没有运行中的客户端提供该工具时为 `unknown-tool`，profile 未挂载策略存储时为 `no-policy-store`，配置编辑器拒绝写入时为 `write-failed`，例如家目录补丁或覆盖层拥有该存储的条目。写入经配置编辑器进入 profile 补丁，无需重连服务器即可生效。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现
@@ -53,42 +41,37 @@ stdio 服务器会以 Host 的权限运行命令。在 `confirmedCommand` 等于
 
 | 文件 | 职责 |
 |---|---|
-| [`src/index.ts`](src/index.ts) | Remote：由分层补丁组合出各行，将写入与 HMR 和 profile 文件锁串行化，重载失败时回滚 |
-| [`src/patch.ts`](src/patch.ts) | 对 YAML AST 做文本到文本的编辑，保留注释、未托管的键和 `!!js` 标签 |
-| [`src/spec.ts`](src/spec.ts) | 凭证规则、`mcp-client` 的 Config schema 与加载时检查，以及脱敏 |
+| [`src/index.ts`](src/index.ts) | Remote：读取 `mcpStatus`，把选择委托给 `mcpSelection`，并经 `configEditor` 写入策略存储 |
 | [`src/types.ts`](src/types.ts) | 与客户端共享的记录 |
 
-控制器只编辑 profile 补丁所插入的行。来自 bundle、家目录补丁和覆盖文件的行以只读方式列出，因为编辑 profile 补丁并不会改变其生效值。校验在检查写入时才导入 `@deepseek-ai/dsh-mcp-client`，因此没有该包的 profile 会以 `invalid-config` 使写入失败，而不是在加载时失败。写入之后，控制器会发出 `plugin-manager/changed`，使插件页面刷新。
+每次读取都在调用时由状态注册表提供，因此控制器不保存状态。`allowTool` 按模块名查找策略存储的 Loader 条目；对直接注册该类的组合则按插件查找。
 
-不发布运行时 invariant 伴生包：各行由 Loader 读取的同一组补丁文件推导而来，没有需要对账的第二个观测值。
+不发布运行时 invariant 伴生包：控制器自身不保存状态。
 
 </details>
 
 <a id="model-experience"></a>
 ## 模型体验
 
-无，因为控制器只改变 profile 加载哪些 MCP 服务器，模型通过 [MCP 客户端](../../mcp/mcp-client/README.zh.md#model-experience)看到由此产生的工具和说明。
+无直接影响。会话的选择会改变其后续请求携带哪些 MCP 工具与指令，见 [mcp-selection](../../mcp/mcp-selection/README.zh.md#model-experience)；被允许的工具不再询问用户，但不改变请求内容。
 
 #### KV Cache effect
 
-添加、删除或重新连接服务器的变更，会按 MCP 客户端所述改变后续请求的工具定义；控制器本身不增加 token。
+选择变化会改变该会话后续请求的工具定义；控制器本身不增加 Token。
 
 ## 已知限制与延期工作
 
 <a id="known-limitations-and-deferred-work"></a>
 
-- 连接状态依赖状态服务：没有它时，行没有 `status`，首次连接失败的已保存服务器仍以 `fiberPhase: 'active'` 列出。
-- 只有 profile 补丁所插入的行才能被编辑、启用、禁用或删除；`env` 和 `headers` 之外含有 `!!js` 值的行可以删除或切换启用状态，但不能编辑。
-- 表单托管 `transport`、`serverName`、命令或 URL、`args`、`env`、`headers`、`cwd`、`toolCallTimeoutMs`、`failOnStartupError` 和 `defaultActive`。`reconnect` 等其他键保持文件中的原样。
-- 查询字符串中带有令牌的 URL 按输入原样存储，并显示在可编辑的 `spec` 中；列表摘要省略查询部分。
-- 没有 HMR 的 profile 在下次启动时才应用变更；此时 `list` 显示该行但没有实时阶段。
+- 用量与工具列表只覆盖运行中的客户端：已禁用或已失败的服务器在 `overview` 中没有条目，也没有工具。
+- 服务器以名称为键；两个 Agent 作用域复用同一个 `serverName` 时共享一项，由第一个注册作答。
 
 <a id="dev-note"></a>
 ### 开发备注
 
 <details>
-<summary>维护者的工作上下文——点击展开</summary>
+<summary>维护者工作上下文——点击展开</summary>
 
-[插件页面中的 MCP 服务器](../../../.agents/notes/implemented/feature/2026-10-01-mcp-servers-on-the-plugins-page.zh.md)提案记录了设计和被否决的备选方案。
+[插件页面上的 MCP 服务器](../../../.agents/notes/implemented/feature/2026-10-01-mcp-servers-on-the-plugins-page.zh.md) Agent Note 记录了最初的设计；fork 采用上游管理器后，服务器条目改为 MCP 管理器的设置字段。
 
 </details>

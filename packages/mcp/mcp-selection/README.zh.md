@@ -9,7 +9,7 @@ kind: "package-reference"
 
 ## 概述
 
-`dsh-mcp-selection` 让每个会话只使用已配置 MCP 服务器中的一部分。已配置的服务器对所有会话可用；会话只携带它所使用的服务器的工具和指令。随附 profile 将它挂载一次，名为 `mcp-selection`。会话自行选择之前，使用所有在 [`mcp-client`](../mcp-client/README.zh.md) 条目中保持 `defaultActive` 开启的服务器。
+`dsh-mcp-selection` 让每个会话只使用已配置 MCP 服务器中的一部分。已配置的服务器对所有会话可用；会话只携带它所使用的服务器的工具和指令。随附 profile 将它挂载一次，名为 `mcp-selection`。会话自行选择之前，使用所有默认开启的服务器：以本插件 `defaultActive` 配置中该服务器的条目为准，否则取其 [`mcp-client`](../mcp-client/README.zh.md) 的 `defaultActive`，后者默认开启。
 
 ## 目录
 
@@ -30,11 +30,14 @@ kind: "package-reference"
 | `logged(session)` | 会话记录的选择；会话仍遵循默认值时为 undefined |
 | `isActive(server, agent)` | 该服务器是否到达该 agent 的模型请求；没有 agent 的调用方为 true |
 | `select(agent, servers)` | 替换会话的选择之后正在使用的服务器 |
+| `defaultOf(server, configured)` | 未作选择的会话是否使用该服务器：取配置覆盖值，否则取 `configured` |
 | `hideWhenNone(names)` | 一条规则的清理函数，该规则对不使用任何服务器的会话隐藏指定工具 |
 
 `select` 接收完整列表，去除重复项，遇到未知名称时抛出 `MCP server "<name>" is not configured`，列表与当前使用的服务器相同时不写日志。空列表表示不使用任何服务器。选择从会话的下一次模型请求开始生效。
 
 一次选择是一条 `mcp/servers` 会话事件，包含完整的 `active` 列表。`mcpServers` 投影把最近记录的列表传给客户端；会话尚未记录时为 `active: null`。已记录但其服务器不再配置的名称会被忽略，服务器恢复后重新计入。会话选择之后才添加的服务器在该会话中保持关闭，直到在该会话中选择它。
+
+易变配置 `defaultActive` 把服务器名称映射为布尔值。它是设置字段，因此插件页面可以开关受管服务器的默认值而无需重连；变更从下一次请求起作用于所有尚未记录选择的会话。
 
 委派的子会话以父会话已记录选择的副本开始，由 [subagent](../../subagent/subagent/README.zh.md) 包在委派时写入。
 

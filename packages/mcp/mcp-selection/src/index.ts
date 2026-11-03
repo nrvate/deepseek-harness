@@ -1,16 +1,20 @@
 /**
  * Per-Session selection of MCP servers. A Session's model requests carry the
  * tools, instructions, and resource access of the servers that are active for
- * it: the Session's own logged selection, or each server's configured default
- * while it has logged none. The selection is enforced through the tool
+ * it: the Session's own logged selection, or each server's default while it
+ * has logged none. A server's default is the `defaultActive` entry in this
+ * plugin's volatile config, else its client's own `defaultActive`. The selection is enforced through the tool
  * registry's per-agent restriction, so an inactive server's tools are absent
  * from schemas and refused at execution alike.
  *
  * @module @deepseek-ai/dsh-mcp-selection
  */
-import { Service, type Context } from '@deepseek-ai/cordis'
+import { Service, type Context, type Volatile } from '@deepseek-ai/cordis'
+import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-mcp-status'
+// Side-effect type import: declaration-merges the `loader/volatile-update` event.
+import type {} from '@deepseek-ai/cordis-plugin-loader'
 import { createScope, type Scope } from '@deepseek-ai/dsh-scope'
 import type { Session } from '@deepseek-ai/dsh-session'
 import type { ProjectionDefinition, ProjectionHandle } from '@deepseek-ai/dsh-session-projection'
@@ -63,9 +67,23 @@ interface AgentMask {
   lift?: (() => void) | undefined
 }
 
+/** Plugin config. */
+export interface Config {
+  /** Per-server defaults that override each client's `defaultActive`; changes apply without a reload. */
+  defaultActive: Volatile<Record<string, boolean>>
+}
+
 /** Decides and enforces which configured MCP servers each Session uses. */
 export class McpSelection extends Service {
   static inject = ['sessionProjections', 'tools', 'mcpStatus']
+  // Inline schema call: the config catalog walks `static Config` statically.
+  static Config = z.object({
+    defaultActive: z.dict(Boolean).default({}).volatile(),
+  })
+
+  private readonly defaults: Volatile<Record<string, boolean>>
+  /** Service calls rebind `this.ctx` to the caller; restrictions and reads use the service's own injections. */
+  private readonly selfCtx: Context
 
   private readonly masks = new Map<Agent, AgentMask>()
   /** Tool names that serve MCP servers in general; hidden from a Session with no active server. */
@@ -74,9 +92,14 @@ export class McpSelection extends Service {
   private refreshing = false
   private projection!: ProjectionHandle<McpServersProjection>
 
-  /** @param ctx - the context that owns the selection state and its registrations. */
-  constructor(ctx: Context) {
+  /**
+   * @param ctx - the context that owns the selection state and its registrations.
+   * @param config - the per-server default overrides.
+   */
+  constructor(ctx: Context, config: Config) {
     super(ctx, 'mcpSelection')
+    this.defaults = config.defaultActive
+    this.selfCtx = ctx
   }
 
   protected async [Service.init](): Promise<void> {
@@ -95,6 +118,7 @@ export class McpSelection extends Service {
     // A server's tools arrive and leave with its connection, and a restriction names tools one by one.
     ctx.on('tools/change', () => { this.refresh() })
     ctx.on('mcp-status/changed', () => { this.refresh() })
+    ctx.on('loader/volatile-update', () => { this.refresh() })
   }
 
   /**
@@ -114,9 +138,20 @@ export class McpSelection extends Service {
    */
   active(session: Session): string[] {
     const logged = this.logged(session)
-    return this.ctx.mcpStatus.servers()
-      .filter(server => logged === undefined ? server.defaultActive : logged.includes(server.serverName))
+    return this.selfCtx.mcpStatus.servers()
+      .filter(server => logged === undefined ? this.defaultOf(server.serverName, server.defaultActive) : logged.includes(server.serverName))
       .map(server => server.serverName)
+  }
+
+  /**
+   * Resolve whether a Session with no selection of its own uses one server.
+   * @param server - configured server name.
+   * @param configured - the client's own `defaultActive`.
+   * @returns the override in this plugin's config, else `configured`.
+   */
+  defaultOf(server: string, configured: boolean): boolean {
+    const overrides = this.defaults.get()
+    return Object.hasOwn(overrides, server) ? overrides[server] === true : configured
   }
 
   /**
@@ -138,7 +173,7 @@ export class McpSelection extends Service {
    * @throws when a name is not a configured server.
    */
   select(agent: Agent, servers: readonly string[]): string[] {
-    const configured = this.ctx.mcpStatus.servers().map(server => server.serverName)
+    const configured = this.selfCtx.mcpStatus.servers().map(server => server.serverName)
     const unknown = servers.find(name => !configured.includes(name))
     if (unknown !== undefined) throw new Error(`MCP server "${unknown}" is not configured`)
     const next = configured.filter(name => servers.includes(name))
@@ -156,7 +191,7 @@ export class McpSelection extends Service {
    */
   hideWhenNone(names: readonly string[]): () => void {
     // oxlint-disable-next-line typescript/no-misused-promises -- the disposer below is synchronous
-    return this.ctx.effect(() => {
+    return this.selfCtx.effect(() => {
       for (const name of names) this.sharedTools.add(name)
       this.refresh()
       return () => {
@@ -170,9 +205,9 @@ export class McpSelection extends Service {
   private unwanted(agent: Agent): Set<string> {
     const active = this.active(agent.session)
     const names = new Set<string>()
-    for (const { serverName } of this.ctx.mcpStatus.servers()) {
+    for (const { serverName } of this.selfCtx.mcpStatus.servers()) {
       if (active.includes(serverName)) continue
-      for (const tool of this.ctx.mcpStatus.tools(serverName)) names.add(tool.publicName)
+      for (const tool of this.selfCtx.mcpStatus.tools(serverName)) names.add(tool.publicName)
     }
     if (active.length === 0) for (const name of this.sharedTools) names.add(name)
     return names
@@ -189,16 +224,16 @@ export class McpSelection extends Service {
     try {
       for (const [agent, mask] of this.masks) {
         const unwanted = this.unwanted(agent)
-        const visible = this.ctx.tools.schemas(agent).map(tool => tool.name)
+        const visible = this.selfCtx.tools.schemas(agent).map(tool => tool.name)
         const settled = !visible.some(name => unwanted.has(name)) && [...mask.denied].every(name => unwanted.has(name))
         if (settled) continue
         mask.lift?.()
         mask.lift = undefined
         // With the old restriction lifted, the view lists every tool the agent inherits.
-        const deny = this.ctx.tools.schemas(agent).map(tool => tool.name).filter(name => unwanted.has(name))
+        const deny = this.selfCtx.tools.schemas(agent).map(tool => tool.name).filter(name => unwanted.has(name))
         mask.denied = new Set(deny)
         if (deny.length === 0) continue
-        mask.scope ??= createScope(this.ctx, agent)
+        mask.scope ??= createScope(this.selfCtx, agent)
         mask.lift = mask.scope.ctx.tools.restrict({ deny })
       }
     } finally {

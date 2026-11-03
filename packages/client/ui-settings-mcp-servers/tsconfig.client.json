@@ -50,6 +50,9 @@
     },
     {
       "path": "../ui-approval"
+    },
+    {
+      "path": "../../util/values"
     }
   ],
   "exclude": [

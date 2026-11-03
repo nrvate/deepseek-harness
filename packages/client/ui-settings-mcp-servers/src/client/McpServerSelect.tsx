@@ -15,7 +15,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 // Type-only: the `mcpServers` projection key.
 import type {} from '@deepseek-ai/dsh-mcp-selection/client'
 import type { McpTrayFace } from './mcp-tray-controller.ts'
-import { connectionView } from './server-state.ts'
+import { connectionView, useNow } from './server-state.ts'
 import { useSessionServers } from './session-servers.ts'
 import css from './McpServerSelect.module.css'
 
@@ -40,6 +40,7 @@ export function McpServerSelect(props: McpServerSelectProps): ReactNode {
   const problem = props.useMcpTray(state => state.problem)
   const selection = props.useProjection('mcpServers')
   const [open, setOpen] = useState(false)
+  const now = useNow(open)
   useEffect(() => { load(sessionId) }, [load, sessionId])
   const { options, active, toggle } = useSessionServers(
     servers, selection?.active ?? null, names => selectServers(sessionId, names))
@@ -51,7 +52,7 @@ export function McpServerSelect(props: McpServerSelectProps): ReactNode {
     ...options.map((server): MenuEntry => {
       // A server that is not connected says so beside its name; it can still be selected for when it returns.
       const trouble = server.status === undefined || server.status.state === 'connected'
-        ? undefined : connectionView(server.status, t).text
+        ? undefined : connectionView(server.status, t, now).text
       return {
         id: `${SERVER_ROW}${server.serverName}`,
         label: trouble === undefined

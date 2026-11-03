@@ -57,7 +57,7 @@ export function buildChildEnv(extra: Record<string, string>): Record<string, str
  * Create an MCP transport from the resolved plugin config.
  *
  * @param config - Resolved plugin config discriminated on `transport`.
- * @returns A connected-ready MCP Transport (stdio or Streamable HTTP).
+ * @returns an unstarted MCP transport (stdio or Streamable HTTP).
  */
 export function createTransport(config: Config): Transport {
   switch (config.transport) {

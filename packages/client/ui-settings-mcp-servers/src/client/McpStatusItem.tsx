@@ -12,7 +12,7 @@ import {
   Button, StateDot, Switch, Tooltip, useAnchoredPosition, useDismissOnOutsidePointer,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { McpServerOverview, McpServerStats } from '@deepseek-ai/dsh-api-remotes/client'
+import type { McpServerStats } from '@deepseek-ai/dsh-api-remotes/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: the composer's SlotMap merge (the 'conversation.composer.dock' entry).
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -20,8 +20,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-mcp-selection/client'
 import { useSessionServers, type SessionServers } from './session-servers.ts'
 import { formatCount, formatLatency, formatSpan } from './format.ts'
-import type { McpTrayFace } from './mcp-tray-controller.ts'
-import { connectionView, type Translate } from './server-state.ts'
+import type { McpTrayFace, McpTrayServer } from './mcp-tray-controller.ts'
+import { connectionView, problemOf, useNow, type Translate } from './server-state.ts'
 import css from './McpStatusItem.module.css'
 
 /** Props the renderer binds for the status item. */
@@ -33,10 +33,20 @@ export type McpStatusItemProps =
 /** How many tools the per-server breakdown lists. */
 const TOP_TOOLS = 5
 
+/** Whether a server is meant to run: a managed one the person has not switched off, or a client running outside the manager. */
+function enabledServer(server: McpTrayServer): boolean {
+  return server.status === undefined ? server.usage !== undefined : server.status.state !== 'disabled'
+}
+
+/** Whether a server is connected; a client the manager does not run counts as connected while it runs. */
+function connectedServer(server: McpTrayServer): boolean {
+  return server.status === undefined ? server.usage !== undefined : server.status.state === 'connected'
+}
+
 /** The count the trigger shows and the tone of its dot. */
-function summarize(servers: readonly McpServerOverview[]): { connected: number; total: number; dot: StateDotState } {
-  const enabled = servers.filter(server => server.enabled)
-  const connected = enabled.filter(server => server.status?.state === 'connected').length
+function summarize(servers: readonly McpTrayServer[]): { connected: number; total: number; dot: StateDotState } {
+  const enabled = servers.filter(enabledServer)
+  const connected = enabled.filter(connectedServer).length
   if (enabled.length === 0) return { connected, total: 0, dot: 'idle' }
   if (enabled.some(server => server.status?.state === 'failed')) return { connected, total: enabled.length, dot: 'error' }
   return { connected, total: enabled.length, dot: connected === enabled.length ? 'done' : 'warning' }
@@ -152,7 +162,7 @@ function Counters(props: { t: Translate; total: Totals; session?: Totals | undef
 
 /** What the panel adds to the item's props. */
 interface PanelProps {
-  servers: readonly McpServerOverview[]
+  servers: readonly McpTrayServer[]
   readAt: number
   summary: { connected: number; total: number }
   problem: string | undefined
@@ -166,7 +176,8 @@ function Panel(props: McpStatusItemProps & PanelProps): ReactNode {
   const { t, servers, summary, openManager, perSession, choice, problem } = props
   // A Session that selects its servers carries only the definitions of the ones it uses.
   const carried = servers.filter(server => choice === undefined || choice.active.includes(server.serverName))
-  const schemaTokens = carried.reduce((tokens, server) => tokens + (server.stats?.schemaTokens ?? 0), 0)
+  const schemaTokens = carried.reduce((tokens, server) => tokens + (server.usage?.stats.schemaTokens ?? 0), 0)
+  const now = useNow(servers.some(server => server.status?.state === 'reconnecting'))
   return (
     <>
       <div className={css.header}>
@@ -176,11 +187,11 @@ function Panel(props: McpStatusItemProps & PanelProps): ReactNode {
       {perSession && (
         <>
           <p className={css.caption}>{t('trayThisSession')}</p>
-          <Counters t={t} total={sum(servers.map(server => server.sessionStats))} />
+          <Counters t={t} total={sum(servers.map(server => server.usage?.sessionStats))} />
           <p className={css.caption}>{t('trayAllSessions')}</p>
         </>
       )}
-      <Counters t={t} total={sum(servers.map(server => server.stats))} />
+      <Counters t={t} total={sum(servers.map(server => server.usage?.stats))} />
       <p className={css.definitions}>
         {t('statDefinitions')}
         {': '}
@@ -188,7 +199,7 @@ function Panel(props: McpStatusItemProps & PanelProps): ReactNode {
       </p>
       {problem !== undefined && <p className={css.problem} role="alert">{t('selectFailed', { detail: problem })}</p>}
       <ul className={css.servers}>
-        {servers.map(server => <Server key={server.id} {...props} server={server} />)}
+        {servers.map(server => <Server key={server.serverName} {...props} server={server} now={now} />)}
       </ul>
       <p className={css.note}>{perSession ? `${t('traySplitNote')} ${t('trayNote')}` : t('trayNote')}</p>
       <div className={css.footer}>
@@ -199,17 +210,18 @@ function Panel(props: McpStatusItemProps & PanelProps): ReactNode {
 }
 
 /** The dot and label of one server in the panel. */
-function viewOf(server: McpServerOverview, t: Translate): { dot: StateDotState; text: string } {
-  if (!server.enabled) return { dot: 'idle', text: t('phaseOff') }
-  if (server.status === undefined) return { dot: 'ongoing', text: t('phaseLoading') }
-  return connectionView(server.status, t)
+function viewOf(server: McpTrayServer, t: Translate, now: number): { dot: StateDotState; text: string } {
+  if (server.status !== undefined) return connectionView(server.status, t, now)
+  return { dot: 'done', text: t('phaseLoaded') }
 }
 
-function Server(props: McpStatusItemProps & PanelProps & { server: McpServerOverview }): ReactNode {
-  const { t, server, readAt, perSession, choice } = props
-  const { status, stats } = server
-  const view = viewOf(server, t)
-  const name = server.serverName === '' ? server.id : server.serverName
+function Server(props: McpStatusItemProps & PanelProps & { server: McpTrayServer; now: number }): ReactNode {
+  const { t, server, readAt, perSession, choice, now } = props
+  const { status } = server
+  const stats = server.usage?.stats
+  const view = viewOf(server, t, now)
+  const name = server.serverName
+  const problem = status === undefined ? undefined : problemOf(status)
   const selectable = choice?.options.includes(server) === true
   const used = choice?.active.includes(server.serverName) === true
   return (
@@ -227,12 +239,10 @@ function Server(props: McpStatusItemProps & PanelProps & { server: McpServerOver
           />
         )}
       </div>
-      {server.enabled && status?.error !== undefined && status.state !== 'connected' && (
-        <p className={css.problem}>{status.error}</p>
-      )}
+      {problem !== undefined && <p className={css.problem}>{problem}</p>}
       {stats !== undefined && (
         <>
-          <Counters t={t} total={stats} session={perSession ? server.sessionStats : undefined} />
+          <Counters t={t} total={stats} session={perSession ? server.usage?.sessionStats : undefined} />
           <details className={css.details}>
             <summary className={css.detailsSummary}>{t('trayDetails')}</summary>
             <dl className={css.facts}>
@@ -241,11 +251,11 @@ function Server(props: McpStatusItemProps & PanelProps & { server: McpServerOver
               )}
               {stats.protocolVersion !== undefined && <Figure label={t('statProtocol')} value={stats.protocolVersion} />}
               <Figure label={t('transport')} value={t(stats.transport === 'stdio' ? 'transportStdio' : 'transportHttp')} />
-              {status?.connectedAt !== undefined && (
+              {status?.state === 'connected' && (
                 <Figure label={t('statUptime')} value={formatSpan(readAt - status.connectedAt, t)} />
               )}
               <Figure label={t('statConnections')} value={String(stats.connections)} />
-              <Figure label={t('statTools')} value={String(status?.toolCount ?? 0)} />
+              {status?.state === 'connected' && <Figure label={t('statTools')} value={String(status.toolCount)} />}
               <Figure label={t('statDefinitions')} value={t('statPerRequest', { value: formatCount(stats.schemaTokens, t) })} />
               {stats.calls > 0 && <Figure label={t('statAverage')} value={formatLatency(stats.totalMs / stats.calls, t)} />}
               {stats.calls > 0 && <Figure label={t('statSlowest')} value={formatLatency(stats.maxMs, t)} />}

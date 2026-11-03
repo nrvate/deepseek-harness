@@ -1,30 +1,22 @@
-/** The registry exposes each registered server and relays its changes as one event. */
+/** The registry exposes each registered server's tools and usage and relays its changes as one event. */
 import { Context } from '@deepseek-ai/cordis'
 import { expect, it, vi } from 'vitest'
-import McpStatusRuntime, { type McpServerHandle, type McpServerStatus } from '../src/index.ts'
-
-function status(serverName: string, rest: Partial<McpServerStatus> = {}): McpServerStatus {
-  return { serverName, state: 'connected', attempt: 0, maxAttempts: 10, toolCount: 1, ...rest }
-}
+import McpStatusRuntime, { type McpServerHandle, type McpToolInfo } from '../src/index.ts'
 
 function handle(serverName: string) {
-  const reconnect = vi.fn(() => Promise.resolve(true))
   const listeners = new Set<() => void>()
-  let current = status(serverName)
+  let tools: McpToolInfo[] = [{ name: 'echo', publicName: `mcp__${serverName}__echo`, description: 'Echo', parameters: [] }]
   const served: McpServerHandle = {
     defaultActive: serverName !== 'b',
-    status: () => current,
-    tools: () => [{ name: 'echo', publicName: `mcp__${serverName}__echo`, description: 'Echo', parameters: [] }],
-    reconnect,
+    tools: () => tools,
     stats: session => ({ calls: session === undefined ? 3 : 1, errors: 1, inputTokens: 10, outputTokens: 20, totalMs: 30, maxMs: 15, connections: 1, schemaTokens: 5, transport: 'stdio', tools: [] }),
     subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
   }
   return {
     served,
-    reconnect,
     listeners,
-    change(next: Partial<McpServerStatus>) {
-      current = { ...current, ...next }
+    setTools(next: McpToolInfo[]) {
+      tools = next
       for (const listener of listeners) listener()
     },
   }
@@ -40,38 +32,33 @@ async function mount() {
 
 it('lists registered servers and answers per server', async () => {
   const { ctx } = await mount()
-  const a = handle('a')
-  const b = handle('b')
-  ctx.mcpStatus.register('a', a.served)
-  ctx.mcpStatus.register('b', b.served)
-  b.change({ state: 'failed', error: 'down' })
+  ctx.mcpStatus.register('a', handle('a').served)
+  ctx.mcpStatus.register('b', handle('b').served)
 
-  expect(ctx.mcpStatus.list().map(item => item.serverName)).toEqual(['a', 'b'])
-  expect(ctx.mcpStatus.get('b')).toMatchObject({ state: 'failed', error: 'down' })
-  expect(ctx.mcpStatus.get('missing')).toBeUndefined()
+  expect(ctx.mcpStatus.servers()).toEqual([{ serverName: 'a', defaultActive: true }, { serverName: 'b', defaultActive: false }])
   expect(ctx.mcpStatus.tools('a')).toHaveLength(1)
   expect(ctx.mcpStatus.tools('missing')).toEqual([])
   expect(ctx.mcpStatus.stats('a')).toMatchObject({ calls: 3, errors: 1 })
   expect(ctx.mcpStatus.stats('a', 'session-1')).toMatchObject({ calls: 1 })
-  expect(ctx.mcpStatus.servers()).toEqual([{ serverName: 'a', defaultActive: true }, { serverName: 'b', defaultActive: false }])
   expect(ctx.mcpStatus.stats('missing')).toBeUndefined()
 })
 
-it('relays registrations, changes, and removals as one event naming the server', async () => {
+it('relays registrations, tool changes, and removals as one event naming the server', async () => {
   const { ctx, changed } = await mount()
   const a = handle('a')
   const dispose = ctx.mcpStatus.register('a', a.served)
   expect(changed).toHaveBeenCalledWith('a')
   changed.mockClear()
 
-  a.change({ toolCount: 2 })
+  a.setTools([])
   expect(changed).toHaveBeenCalledTimes(1)
+  expect(ctx.mcpStatus.tools('a')).toEqual([])
   changed.mockClear()
 
   dispose()
   expect(changed).toHaveBeenCalledWith('a')
   expect(a.listeners.size).toBe(0)
-  expect(ctx.mcpStatus.list()).toEqual([])
+  expect(ctx.mcpStatus.servers()).toEqual([])
 })
 
 it('stops serving a server when the registering fiber is disposed', async () => {
@@ -79,16 +66,16 @@ it('stops serving a server when the registering fiber is disposed', async () => 
   const a = handle('a')
   const fiber = ctx.plugin({ inject: ['mcpStatus'], apply: (inner: Context) => { inner.mcpStatus.register('a', a.served) } })
   await fiber.await()
-  expect(ctx.mcpStatus.get('a')).toBeDefined()
+  expect(ctx.mcpStatus.stats('a')).toBeDefined()
   await fiber.dispose()
-  expect(ctx.mcpStatus.get('a')).toBeUndefined()
+  expect(ctx.mcpStatus.stats('a')).toBeUndefined()
 })
 
-it('asks the named client to reconnect and reports an unknown server as unchanged', async () => {
+it('keeps a server in its first place when it registers again, as a restart does', async () => {
   const { ctx } = await mount()
-  const a = handle('a')
-  ctx.mcpStatus.register('a', a.served)
-  expect(await ctx.mcpStatus.reconnect('a')).toBe(true)
-  expect(a.reconnect).toHaveBeenCalledOnce()
-  expect(await ctx.mcpStatus.reconnect('missing')).toBe(false)
+  const dispose = ctx.mcpStatus.register('a', handle('a').served)
+  ctx.mcpStatus.register('b', handle('b').served)
+  dispose()
+  ctx.mcpStatus.register('a', handle('a').served)
+  expect(ctx.mcpStatus.servers().map(server => server.serverName)).toEqual(['a', 'b'])
 })

@@ -4,12 +4,12 @@
  * shows its result at once and sends the new selection to the Host.
  */
 import { useEffect, useRef, useState } from 'react'
-import type { McpServerOverview } from '@deepseek-ai/dsh-api-remotes/client'
+import type { McpTrayServer } from './mcp-tray-controller.ts'
 
 /** What a selection control renders and calls. */
 export interface SessionServers {
-  /** Servers a Session can use: the enabled rows that name a server. */
-  readonly options: readonly McpServerOverview[]
+  /** Servers a Session can use: those whose client runs. */
+  readonly options: readonly McpTrayServer[]
   /** Names of the servers the Session uses, in the order of `options`. */
   readonly active: readonly string[]
   /** Switch one server on or off for the Session. */
@@ -22,9 +22,9 @@ export interface SessionServers {
  * @param logged - the Session's logged selection; null while it follows each server's default.
  * @returns the names in use, in the order of `options`.
  */
-export function activeServers(options: readonly McpServerOverview[], logged: readonly string[] | null): string[] {
+export function activeServers(options: readonly McpTrayServer[], logged: readonly string[] | null): string[] {
   return options
-    .filter(server => logged === null ? server.defaultActive : logged.includes(server.serverName))
+    .filter(server => logged === null ? server.usage?.defaultActive !== false : logged.includes(server.serverName))
     .map(server => server.serverName)
 }
 
@@ -33,13 +33,13 @@ export function activeServers(options: readonly McpServerOverview[], logged: rea
  * the Host confirms it. What the control assumed gives way to the Session's
  * next logged selection once no request is in flight, and to the logged
  * selection at once when the Host refuses the latest request.
- * @param servers - every configured server row.
+ * @param servers - every listed server.
  * @param logged - the Session's logged selection; null while it follows each server's default.
  * @param select - sends a complete selection; resolves to whether the Host applied it.
  * @returns the servers on offer, the ones in use, and the toggle.
  */
 export function useSessionServers(
-  servers: readonly McpServerOverview[],
+  servers: readonly McpTrayServer[],
   logged: readonly string[] | null,
   select: (servers: readonly string[]) => Promise<boolean>,
 ): SessionServers {
@@ -49,7 +49,7 @@ export function useSessionServers(
   const loggedKey = logged === null ? null : logged.join('\n')
   // While a request is in flight the log may still show the selection before it.
   useEffect(() => { if (inFlight.current === 0) setAssumed(null) }, [loggedKey])
-  const options = servers.filter(server => server.enabled && server.serverName !== '')
+  const options = servers.filter(server => server.usage !== undefined)
   const active = assumed === null
     ? activeServers(options, logged)
     : options.map(server => server.serverName).filter(name => assumed.includes(name))

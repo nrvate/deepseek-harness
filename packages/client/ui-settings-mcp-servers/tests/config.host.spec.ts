@@ -9,9 +9,9 @@ describe('ui-settings-mcp-servers host', () => {
   it('registers, validates, and updates the status-item preference', async () => {
     const ctx = new Context()
     const configuration = await liveConfig(ctx, { Config, apply })
-    expect(plainConfig(configuration.fiber.config)).toEqual({ statusItem: DEFAULT_STATUS_ITEM })
+    expect(plainConfig(configuration.fiber.effectiveConfig)).toEqual({ statusItem: DEFAULT_STATUS_ITEM })
     await configuration.update({ statusItem: false })
-    expect(plainConfig(configuration.fiber.config)).toEqual({ statusItem: false })
+    expect(plainConfig(configuration.fiber.effectiveConfig)).toEqual({ statusItem: false })
     await expect(configuration.update({ statusItem: 'sometimes' })).rejects.toThrow()
     await configuration.fiber.dispose()
   })

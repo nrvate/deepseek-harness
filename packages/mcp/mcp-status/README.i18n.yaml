@@ -3,32 +3,32 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/mcp/mcp-status/README.md
 /:
-  en: 16bf7ff3fe9d0a71
-  zh: 02005a4a02c01c24
+  en: 6fdcc5391b85dc9e
+  zh: 6cbde06663054b67
 /deepseek-ai-dsh-mcp-status:
   en: 17d4971ceb78253d
   zh: 97d1d6608fed612f
 /deepseek-ai-dsh-mcp-status/summary:
-  en: 0c2629bf0eed0dff
-  zh: ac6a411ed7d7697e
+  en: 00bf1beb1fbd2074
+  zh: bededa78a89af058
 /deepseek-ai-dsh-mcp-status/table-of-contents:
   en: 122f0d41696980b1
   zh: 528864635b577290
 /deepseek-ai-dsh-mcp-status/use-this-package:
-  en: efb1fad682475f28
-  zh: 2ea7033ed2da585a
+  en: 81716eb3a4832937
+  zh: f877af671d53626c
 /deepseek-ai-dsh-mcp-status/understand-the-implementation:
-  en: 150ab80d316ff570
-  zh: b2ccb0b7372ff55f
+  en: d31a87ad8a1c47d0
+  zh: 0c2f17c23bfcabd1
 /deepseek-ai-dsh-mcp-status/model-experience:
-  en: 252732e5a1e9f1ca
-  zh: b6f9a2e760f26902
+  en: 9eb7d27d84d302da
+  zh: f87400e21d03898f
 /deepseek-ai-dsh-mcp-status/model-experience/kv-cache-effect:
   en: ca75c51c89c2c9b0
   zh: 6c9e01d76d7ff3c7
 /deepseek-ai-dsh-mcp-status/known-limitations-and-deferred-work:
-  en: 46fb404a7fc6437f
-  zh: 043c31a37417e1aa
+  en: 66dd06e0143e1eba
+  zh: 31deeffd3a304862
 /deepseek-ai-dsh-mcp-status/known-limitations-and-deferred-work/dev-note:
   en: e67f633dc6fe7773
   zh: e88aeb617ffb74ea

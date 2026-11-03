@@ -55,6 +55,12 @@
     },
     {
       "path": "../mcp-policy"
+    },
+    {
+      "path": "../../credentials/credentials"
+    },
+    {
+      "path": "../../util/values"
     }
   ]
 }

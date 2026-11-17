@@ -201,13 +201,17 @@ export class McpSelection extends Service {
     }, 'mcpSelection.hideWhenNone')
   }
 
-  /** The tool names an agent's Session must not see: every tool of an inactive server, and the shared tools when none is active. */
+  /**
+   * The tool names an agent's Session must not see: every tool of an inactive server and of its client,
+   * and the shared tools when none is active.
+   */
   private unwanted(agent: Agent): Set<string> {
     const active = this.active(agent.session)
     const names = new Set<string>()
     for (const { serverName } of this.selfCtx.mcpStatus.servers()) {
       if (active.includes(serverName)) continue
       for (const tool of this.selfCtx.mcpStatus.tools(serverName)) names.add(tool.publicName)
+      for (const name of this.selfCtx.mcpStatus.clientTools(serverName)) names.add(name)
     }
     if (active.length === 0) for (const name of this.sharedTools) names.add(name)
     return names

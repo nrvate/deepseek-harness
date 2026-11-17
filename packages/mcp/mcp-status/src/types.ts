@@ -99,6 +99,8 @@ export interface McpServerHandle {
   readonly defaultActive: boolean
   /** @returns the tools registered from the server right now. */
   tools(): readonly McpToolInfo[]
+  /** @returns the public names of the tools the client registers to serve this server, such as an on-demand server's loader. */
+  clientTools(): readonly string[]
   /**
    * Read usage counters and connection facts since the client loaded.
    * @param session - a Session id; when given, the counters cover only that Session's calls.

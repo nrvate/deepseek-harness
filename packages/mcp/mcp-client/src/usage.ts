@@ -66,9 +66,10 @@ export class McpUsageRecorder {
   /**
    * @param transport - the configured transport, reported with the stats.
    * @param defaultActive - whether a Session with no selection of its own uses this server.
+   * @param clientTools - public names of the tools the client registers to serve the server, such as its on-demand loader.
    */
-  constructor(private readonly transport: 'stdio' | 'streamable-http', defaultActive: boolean) {
-    this.handle = this.createHandle(defaultActive)
+  constructor(private readonly transport: 'stdio' | 'streamable-http', defaultActive: boolean, clientTools: readonly string[]) {
+    this.handle = this.createHandle(defaultActive, clientTools)
   }
 
   /**
@@ -111,10 +112,11 @@ export class McpUsageRecorder {
   /** The read side the registry holds. */
   readonly handle: McpServerHandle
 
-  private createHandle(defaultActive: boolean): McpServerHandle {
+  private createHandle(defaultActive: boolean, clientTools: readonly string[]): McpServerHandle {
     return {
       defaultActive,
       tools: () => this.registered,
+      clientTools: () => clientTools,
       stats: (session?: string): McpServerStats => {
         const totals = session === undefined ? this.overall : this.bySession.get(session) ?? emptyUsage()
         const reported = this.peer?.getServerVersion()

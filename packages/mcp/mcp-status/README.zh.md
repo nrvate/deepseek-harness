@@ -27,6 +27,7 @@ kind: "package-reference"
 | 成员 | 返回 |
 |---|---|
 | `tools(server)` | 当前已从该服务器注册的工具 |
+| `clientTools(server)` | 客户端为服务该服务器而注册的工具的公开名称，例如按需服务器的加载器 |
 | `servers()` | 每个已注册服务器的名称，以及新会话是否默认使用它 |
 | `stats(server, session?)` | 该服务器的 `McpServerStats`：用量计数和连接信息，或 undefined；传入会话 id 时只统计该会话的调用 |
 

@@ -28,6 +28,7 @@ async function setup() {
 
 const idleHandle: McpServerHandle = {
   tools: () => [],
+  clientTools: () => [],
   stats: () => ({ calls: 0, errors: 0, inputTokens: 0, outputTokens: 0, totalMs: 0, maxMs: 0, connections: 1, schemaTokens: 0, transport: 'stdio', tools: [] }),
   subscribe: () => () => {},
   defaultActive: true,

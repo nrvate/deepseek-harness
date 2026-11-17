@@ -70,7 +70,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-未使用的服务器不留下任何内容：它的工具不出现在工具 schema 和 PTC 绑定中，它的指令不出现在系统提示中，它的名称不出现在 `MCP resource servers` 小节中。调用它的工具会返回注册表的 `UNKNOWN_TOOL` 错误，指名它的资源请求会返回 `MCP resource server "<name>" is not active in this session`。不使用任何服务器的会话也看不到三个共享资源工具。本包自身不增加任何文本。
+未使用的服务器不留下任何内容：它的工具和按需加载器不出现在工具 schema 和 PTC 绑定中，因此它的按需工具列表也不出现在系统提示中，它的指令不出现在系统提示中，它的名称不出现在 `MCP resource servers` 小节中。调用它的工具会返回注册表的 `UNKNOWN_TOOL` 错误，指名它的资源请求会返回 `MCP resource server "<name>" is not active in this session`。不使用任何服务器的会话也看不到三个共享资源工具。本包自身不增加任何文本。
 
 #### Token 影响
 

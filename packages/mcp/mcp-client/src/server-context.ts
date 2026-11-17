@@ -59,7 +59,7 @@ export function registerServerContext(ctx: Context, server: string, connection: 
         name: `mcp:${server}:tools`,
         order: inner.systemPrompt.getSectionOrder('MCP_SERVERS'),
         interpolate: false,
-        text: ({ scope, agent }) => inner.get('mcpSelection')?.isActive(server, agent) === false ? '' : catalog(scope),
+        text: ({ scope }) => catalog(scope),
       })
     }
   })

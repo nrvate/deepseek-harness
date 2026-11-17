@@ -70,7 +70,7 @@ No runtime invariant companion is published: the selection is one fold of the Se
 
 #### What the model sees
 
-Nothing from an unused server: its tools are absent from the tool schemas and PTC bindings, its instructions are absent from the system prompt, and its name is absent from the `MCP resource servers` section. A call to one of its tools returns the registry's `UNKNOWN_TOOL` error, and a resource request naming it returns `MCP resource server "<name>" is not active in this session`. A Session using no server also loses the three shared resource tools. The package adds no text of its own.
+Nothing from an unused server: its tools and its on-demand loader are absent from the tool schemas and PTC bindings, so its on-demand tool list is absent from the system prompt too, its instructions are absent from the system prompt, and its name is absent from the `MCP resource servers` section. A call to one of its tools returns the registry's `UNKNOWN_TOOL` error, and a resource request naming it returns `MCP resource server "<name>" is not active in this session`. A Session using no server also loses the three shared resource tools. The package adds no text of its own.
 
 #### Token effect
 

@@ -272,7 +272,7 @@ Append-only; newly visible content follows the reusable request prefix and does 
 
 #### What the model sees
 
-An on-demand server contributes one tool, `mcp__<serverName>__load_tools`, and a system prompt section titled `On-demand tools from MCP server <serverName>` that lists each tool's raw name and summary. The section appears only for an agent that sees the loader. A load returns the public names it added or found already loaded; the next request carries their definitions, and the session log records the tool addition.
+An on-demand server contributes one tool, `mcp__<serverName>__load_tools`, and a system prompt section titled `On-demand tools from MCP server <serverName>` that lists each tool's raw name and summary. The section appears only for an agent that sees the loader; a Session that does not use the server sees neither. A load returns the public names it added or found already loaded; the next request carries their definitions, and the session log records the tool addition.
 
 #### Token effect
 

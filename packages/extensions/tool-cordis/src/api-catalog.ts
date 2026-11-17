@@ -2619,6 +2619,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         returns: 'the tools registered from it, empty when no client registered it.',
       },
       {
+        signature: 'clientTools(server: string): readonly string[]',
+        description: 'Name the tools one server\'s client registers to serve it, which are not the server\'s own.',
+        parameters: [{ name: 'server', description: 'configured server name.' }],
+        returns: 'their public names, empty when no client registered the server.',
+      },
+      {
         signature: 'stats(server: string, session?: string): McpServerStats | undefined',
         description: 'Read one server\'s usage counters and connection facts.',
         parameters: [{ name: 'server', description: 'configured server name.' }, { name: 'session', description: 'a Session id; when given, the counters cover only that Session\'s calls.' }],
@@ -8442,7 +8448,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'McpServerHandle',
-    declaration: 'export interface McpServerHandle {\n    readonly defaultActive: boolean;\n    tools(): readonly McpToolInfo[];\n    stats(session?: string): McpServerStats;\n    subscribe(listener: () => void): () => void;\n}',
+    declaration: 'export interface McpServerHandle {\n    readonly defaultActive: boolean;\n    tools(): readonly McpToolInfo[];\n    clientTools(): readonly string[];\n    stats(session?: string): McpServerStats;\n    subscribe(listener: () => void): () => void;\n}',
   },
   {
     name: 'McpServerInstance',

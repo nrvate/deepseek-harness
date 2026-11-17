@@ -20,6 +20,7 @@ function handle(serverName: string, defaultActive = true): McpServerHandle {
   return {
     defaultActive,
     tools: () => [{ name: 'echo', publicName: `mcp__${serverName}__echo`, description: 'Echo it', parameters: [] }],
+    clientTools: () => [],
     stats: session => ({ calls: session === undefined ? 4 : 1, errors: 1, inputTokens: 12, outputTokens: 34, totalMs: 50, maxMs: 20, connections: 1, schemaTokens: 9, transport: 'stdio', tools: [] }),
     subscribe: () => () => {},
   }

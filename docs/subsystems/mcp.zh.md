@@ -442,6 +442,13 @@ servers(): McpConfiguredServer[]
 tools(server: string): readonly McpToolInfo[]
 
 /**
+ * Name the tools one server's client registers to serve it, which are not the server's own.
+ * @param server - configured server name.
+ * @returns their public names, empty when no client registered the server.
+ */
+clientTools(server: string): readonly string[]
+
+/**
  * Read one server's usage counters and connection facts.
  * @param server - configured server name.
  * @param session - a Session id; when given, the counters cover only that Session's calls.

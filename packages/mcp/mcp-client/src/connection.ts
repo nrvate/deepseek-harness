@@ -139,11 +139,11 @@ export function startConnection(
   const binding = new McpTemplateBinding(ctx, config)
   const diagnostic = (error: unknown, operation: string): string => binding.diagnostic(error, operation)
   const lifetime = new AbortController()
-  const usage = new McpUsageRecorder(config.transport, config.defaultActive ?? true)
   const readiness = Promise.withResolvers<ConnectionOutcome>()
   const loader = config.toolLoading === 'on-demand'
     ? new McpToolLoader(ctx, config.serverName, config.catalogDescriptionMaxLength)
     : undefined
+  const usage = new McpUsageRecorder(config.transport, config.defaultActive ?? true, loader === undefined ? [] : [loader.name])
   type Generation = { wire: McpGeneration; connectedAt?: number }
   let current: Generation | undefined
   let bindingValue: { config?: Config; grantId?: string } | undefined

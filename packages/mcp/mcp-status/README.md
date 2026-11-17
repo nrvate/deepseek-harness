@@ -27,6 +27,7 @@ Shipped profiles already mount the service as `mcp-status`; a custom profile add
 | Member | Returns |
 |---|---|
 | `tools(server)` | The tools registered from the server right now |
+| `clientTools(server)` | The public names of the tools the client registers to serve the server, such as an on-demand server's loader |
 | `servers()` | Every registered server's name and whether new Sessions use it by default |
 | `stats(server, session?)` | The server's `McpServerStats`: usage counters and connection facts, or undefined; with a Session id, only that Session's calls |
 

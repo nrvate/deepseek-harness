@@ -155,6 +155,7 @@ describe('published tools and usage', () => {
     const { handle, status } = start()
     await handle.ready
     expect(status()).toMatchObject({ state: 'connected', toolCount: 2 })
+    expect(handle.handle.clientTools()).toEqual([])
     expect(handle.handle.tools()).toEqual([
       {
         name: 'search', publicName: 'mcp__srv__search', description: 'Search things',

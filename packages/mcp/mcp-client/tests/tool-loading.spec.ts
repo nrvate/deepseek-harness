@@ -3,6 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import { createScope, type Scope } from '@deepseek-ai/dsh-scope'
+import McpStatus from '@deepseek-ai/dsh-mcp-status'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
@@ -242,6 +243,7 @@ it('fails the generation when another registration holds the loader name', async
 
 it('loads and calls an on-demand server\'s tool through the plugin and withdraws it on unload', async () => {
   const ctx = await host()
+  await ctx.plugin(McpStatus)
   const { agent } = await createAgent(ctx)
   const fixture = await startHttpMcpFixture()
   onTestFinished(fixture.close)
@@ -252,6 +254,9 @@ it('loads and calls an on-demand server\'s tool through the plugin and withdraws
   }))
 
   expect(connectionStatusIn(fiber)!.current()).toMatchObject({ state: 'connected', toolCount: 1 })
+  // The loader is reported apart from the server's own tools, so a Session that drops the server loses it too.
+  expect(ctx.mcpStatus.clientTools('demo')).toEqual(['mcp__demo__load_tools'])
+  expect(ctx.mcpStatus.tools('demo').map(tool => tool.publicName)).toEqual(['mcp__demo__ping'])
   expect(ctx.tools.get('mcp__demo__ping', agent)).toBeUndefined()
   const prompt = await ctx.systemPrompt.assemble({ scope: agent })
   expect(prompt.sections.map(section => section.text)).toContain([

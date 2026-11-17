@@ -18,17 +18,22 @@ import McpStatus, { type McpServerHandle } from '@deepseek-ai/dsh-mcp-status'
 import McpSelection, { mcpServersProjectionDefinition } from '../src/index.ts'
 import { MockAdapter, textResponse, toolCallResponse } from '../../../core/agent-loop/tests/mock-adapter.ts'
 
-/** A stand-in MCP client: tools on the registry and a handle in the status service, as the real client registers them. */
-function connect(ctx: Context, server: string, tools: string[], defaultActive = true): () => void {
+/**
+ * A stand-in MCP client: tools on the registry and a handle in the status service, as the real client registers them.
+ * `clientTools` are raw names of tools the client registers for the server besides the server's own.
+ */
+function connect(ctx: Context, server: string, tools: string[], defaultActive = true, clientTools: string[] = []): () => void {
   const names = tools.map(tool => `mcp__${server}__${tool}`)
+  const clientNames = clientTools.map(tool => `mcp__${server}__${tool}`)
   const handle: McpServerHandle = {
     defaultActive,
     tools: () => names.map((publicName, index) => ({ name: tools[index] ?? '', publicName, description: '', parameters: [] })),
+    clientTools: () => clientNames,
     stats: () => ({ calls: 0, errors: 0, inputTokens: 0, outputTokens: 0, totalMs: 0, maxMs: 0, connections: 1, schemaTokens: 0, transport: 'stdio', tools: [] }),
     subscribe: () => () => {},
   }
   const disposers = [
-    ...names.map(name => ctx.tools.register(defineContentToolFixture({
+    ...[...names, ...clientNames].map(name => ctx.tools.register(defineContentToolFixture({
       name, description: `tool of ${server}`, parameters: {}, execute: () => Promise.resolve([{ type: 'text', text: `ran ${name}` }]),
     }))),
     ctx.mcpStatus.register(server, handle),
@@ -254,6 +259,21 @@ describe('enforcement', () => {
     const result = events(agent, 'tool/result').at(-1)
     expect(result?.data.message.isError).toBe(false)
     expect(JSON.stringify(result?.data.message.content)).toContain('ran mcp__alpha__search')
+  })
+
+  it('hides the tools an inactive server\'s client registers, such as an on-demand loader, and returns them with the server', async () => {
+    const adapter = new MockAdapter([textResponse('ok'), textResponse('ok')])
+    const ctx = await harness(adapter)
+    connect(ctx, 'gamma', ['search'], true, ['load_tools'])
+    const agent = await create(ctx, 'loader')
+    ctx.mcpSelection.select(agent, [])
+    await turn(ctx, agent)
+    expect(lastRequestTools(adapter)).toEqual(['read'])
+    expect(ctx.tools.get('mcp__gamma__load_tools', agent)).toBeUndefined()
+
+    ctx.mcpSelection.select(agent, ['gamma'])
+    await turn(ctx, agent)
+    expect(lastRequestTools(adapter)).toEqual(['mcp__gamma__load_tools', 'mcp__gamma__search', 'read'])
   })
 
   it('hides a tool an inactive server adds after the Session started', async () => {

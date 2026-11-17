@@ -43,7 +43,15 @@
   flex-direction: column;
   gap: 10px;
   width: min(380px, calc(100vw - 24px));
-  max-height: min(70vh, 560px);
+  max-height: min(70vh, 560px, calc(100vh - 12px - max(12px, var(--dsh-frame-overlay-top, 12px))));
+  /* CSS Anchor Positioning keeps the panel above the trigger while the page zooms; only the layout viewport constrains its size. */
+  position-area: top span-right;
+  position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline, --dsh-mcp-tray-window, --dsh-mcp-tray-viewport;
+  align-self: end;
+  justify-self: start;
+  height: fit-content;
+  min-height: 0;
+  margin: 8px 0;
   padding: 12px;
   overflow: auto;
   border: 0;
@@ -210,4 +218,23 @@
 .footer {
   display: flex;
   justify-content: flex-end;
+}
+
+@position-try --dsh-mcp-tray-window {
+  position-area: none;
+  top: max(12px, var(--dsh-frame-overlay-top, 12px));
+  bottom: max(12px, calc(anchor(top) + 8px));
+  left: 12px;
+  right: 12px;
+  margin: 0;
+  align-self: safe end;
+  justify-self: safe start;
+}
+
+@position-try --dsh-mcp-tray-viewport {
+  position-area: none;
+  inset: max(12px, var(--dsh-frame-overlay-top, 12px)) 12px 12px;
+  margin: 0;
+  align-self: safe start;
+  justify-self: safe start;
 }

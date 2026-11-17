@@ -5,11 +5,11 @@
  * Session uses it. Renders nothing while the preference is off or no server is
  * configured.
  */
-import { useEffect, useRef } from 'react'
+import { useEffect, useId, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  Button, StateDot, Switch, Tooltip, useAnchoredPosition, useDismissOnOutsidePointer,
+  Button, StateDot, Switch, Tooltip, useDismissOnOutsidePointer,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { McpServerStats } from '@deepseek-ai/dsh-api-remotes/client'
@@ -66,7 +66,7 @@ export function McpStatusItem(props: McpStatusItemProps): ReactNode {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const shown = state.visible && state.servers.length > 0
   const open = state.open && shown
-  const position = useAnchoredPosition({ open, anchorRef: rootRef, panelRef, side: 'top', gap: 8, margin: 12 })
+  const anchorName = `--dsh-mcp-tray-${useId().replaceAll(':', '')}`
   useDismissOnOutsidePointer(rootRef, open, setOpen, panelRef)
   useEffect(() => { load(sessionId) }, [load, sessionId])
   useEffect(() => {
@@ -82,7 +82,7 @@ export function McpStatusItem(props: McpStatusItemProps): ReactNode {
   const summary = summarize(state.servers)
   const label = t('trayLabel', { connected: summary.connected, total: summary.total })
   return (
-    <span ref={rootRef} className={css.root}>
+    <span ref={rootRef} style={{ anchorName }} className={css.root}>
       <Tooltip label={label} side="top" delayMs={200} disabled={open}>
         <button
           type="button"
@@ -102,7 +102,7 @@ export function McpStatusItem(props: McpStatusItemProps): ReactNode {
           aria-label={t('trayTitle')}
           ref={panelRef}
           className={css.panel}
-          style={position ?? { visibility: 'hidden', left: 0, top: 0 }}
+          style={{ positionAnchor: anchorName }}
         >
           <Panel
             {...props}

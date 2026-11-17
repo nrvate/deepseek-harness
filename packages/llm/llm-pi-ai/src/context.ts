@@ -28,20 +28,42 @@ function flattenText(message: RequestMessage): string {
 }
 
 
+function wrapToolResultJson(text: string, isError: boolean): string {
+  const wellFormed = text.toWellFormed()
+  return JSON.stringify(isError ? { error: wellFormed } : { output: wellFormed })
+}
+
 /** Recover the pi-ai toolResult message for one harness tool-role message. */
 function toolResultOf(
   message: Extract<Message, { role: 'tool' }>,
   toolNames: Map<ToolCallId, string>,
   content: string | (TextContent | ImageContent)[],
+  wrapJsonObject: boolean,
 ): PiMessage {
+  const isError = message.isError ?? false
+  let piContent: (TextContent | ImageContent)[]
+  if (!wrapJsonObject) {
+    piContent = typeof content === 'string'
+      ? [{ type: 'text', text: content || '(no output)' }]
+      : content
+  } else if (typeof content === 'string') {
+    piContent = [{ type: 'text', text: wrapToolResultJson(content || '(no output)', isError) }]
+  } else {
+    const text = content
+      .filter((block): block is TextContent => block.type === 'text')
+      .map(block => block.text)
+      .join('\n')
+    piContent = [
+      { type: 'text', text: wrapToolResultJson(text, isError) },
+      ...content.filter((block): block is ImageContent => block.type === 'image'),
+    ]
+  }
   return {
     role: 'toolResult',
     toolCallId: message.toolCallId,
     toolName: toolNames.get(message.toolCallId) ?? 'unknown',
-    content: typeof content === 'string'
-      ? [{ type: 'text', text: content || '(no output)' }]
-      : content,
-    isError: message.isError ?? false,
+    content: piContent,
+    isError,
     timestamp: 0,
   }
 }
@@ -248,6 +270,7 @@ function appendSharedHistory(
 function textOnlyContext(
   options: GenerateOptions,
   supportsMidConvoSystemMessages: boolean,
+  wrapToolResultJsonObject: boolean,
   onReplayDegrade?: (reason: string) => void,
 ): PiContext {
   assertSupportedHistory(options.messages)
@@ -260,7 +283,7 @@ function textOnlyContext(
     }
     if (appendSharedHistory(message, options, messages, toolNames, supportsMidConvoSystemMessages, onReplayDegrade)) continue
     if (message.role === 'tool') {
-      messages.push(toolResultOf(message, toolNames, flattenText(message)))
+      messages.push(toolResultOf(message, toolNames, flattenText(message), wrapToolResultJsonObject))
       continue
     }
     messages.push({ role: 'user', content: flattenText(message), timestamp: 0 })
@@ -309,6 +332,7 @@ export function requestImageTarget(ref: ImageAttachmentRef, budget: PiImageReque
  * @param images - absent; selects the synchronous conversion.
  * @param onReplayDegrade - forwarded to {@link toPiAssistant} for each assistant message.
  * @param supportsMidConvoSystemMessages - native model capability; otherwise later system text becomes a user-role system-reminder.
+ * @param wrapToolResultJsonObject - wrap tool-result text in `{ output }` / `{ error }` JSON for Chat Completions gateways fronting Gemini.
  * @returns the pi-ai context; `tools` is omitted when the request declares none.
  * @throws {LlmError} `UNSUPPORTED_CONTENT` for images in any history role, including a leading system message.
  */
@@ -317,6 +341,7 @@ export function toPiContext(
   images?: undefined,
   onReplayDegrade?: (reason: string) => void,
   supportsMidConvoSystemMessages?: boolean,
+  wrapToolResultJsonObject?: boolean,
 ): PiContext
 /**
  * Convert harness history to a pi-ai Context while resolving durable images.
@@ -330,6 +355,7 @@ export function toPiContext(
  * @param images - attachment provider, current path resolver, and request limits.
  * @param onReplayDegrade - forwarded to {@link toPiAssistant} for each assistant message.
  * @param supportsMidConvoSystemMessages - native model capability; otherwise later system text becomes a user-role system-reminder.
+ * @param wrapToolResultJsonObject - wrap tool-result text in `{ output }` / `{ error }` JSON for Chat Completions gateways fronting Gemini.
  * @returns the asynchronously resolved pi-ai context.
  */
 export function toPiContext(
@@ -337,22 +363,25 @@ export function toPiContext(
   images: PiImageRequestContext,
   onReplayDegrade?: (reason: string) => void,
   supportsMidConvoSystemMessages?: boolean,
+  wrapToolResultJsonObject?: boolean,
 ): Promise<PiContext>
 export function toPiContext(
   options: GenerateOptions,
   images?: PiImageRequestContext,
   onReplayDegrade?: (reason: string) => void,
   supportsMidConvoSystemMessages = false,
+  wrapToolResultJsonObject = false,
 ): PiContext | Promise<PiContext> {
   return images === undefined
-    ? textOnlyContext(options, supportsMidConvoSystemMessages, onReplayDegrade)
-    : toPiContextWithImages(options, images, supportsMidConvoSystemMessages, onReplayDegrade)
+    ? textOnlyContext(options, supportsMidConvoSystemMessages, wrapToolResultJsonObject, onReplayDegrade)
+    : toPiContextWithImages(options, images, supportsMidConvoSystemMessages, wrapToolResultJsonObject, onReplayDegrade)
 }
 
 async function toPiContextWithImages(
   options: GenerateOptions,
   images: PiImageRequestContext,
   supportsMidConvoSystemMessages: boolean,
+  wrapToolResultJsonObject: boolean,
   onReplayDegrade?: (reason: string) => void,
 ): Promise<PiContext> {
   const { attachments, resolveImageAccess, maxRequestImageBytes, maxRequestImages, imageOffloadCountQuantum } = images
@@ -390,7 +419,8 @@ async function toPiContextWithImages(
   for (const message of exactMessages) {
     if (appendSharedHistory(message, options, messages, toolNames, supportsMidConvoSystemMessages, onReplayDegrade)) continue
     if (message.role === 'tool') {
-      messages.push(toolResultOf(message, toolNames, userContent(message.content, requestImages, resolveImageAccess)))
+      const content = userContent(message.content, requestImages, resolveImageAccess)
+      messages.push(toolResultOf(message, toolNames, content, wrapToolResultJsonObject))
       continue
     }
     const content = userContent(message.content, requestImages, resolveImageAccess)

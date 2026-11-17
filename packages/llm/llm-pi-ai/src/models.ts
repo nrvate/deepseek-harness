@@ -90,3 +90,26 @@ export function conversationUpdates(model: Model<Api>): Pick<LlmResolvedModelInf
   }
   return updates
 }
+
+/**
+ * Whether Chat Completions tool results must travel wrapped in a `{ output }` /
+ * `{ error }` JSON object string.
+ *
+ * Gemini's native `FunctionResponse.response` is a `google.protobuf.Struct` and
+ * rejects bare strings. Direct `google-generative-ai` and `google-vertex` routes
+ * wrap tool text in `{ output }` / `{ error }` inside pi-ai, whereas
+ * `openai-completions` gateways fronting Gemini (such as OpenRouter) coerce plain
+ * `role: "tool"` strings with lenient JSON repair/extraction — silently dropping
+ * surrounding YAML, Markdown, or source code whenever `{...}` appears inside
+ * non-JSON tool output. Sending the same `{ output }` / `{ error }` JSON object
+ * envelope satisfies strict top-level JSON parsing without invoking repair.
+ * @param model - Materialized pi-ai model descriptor.
+ * @returns `true` when `model` speaks `openai-completions` to a Google/Gemini target.
+ */
+export function wrapsToolResultAsJsonObject(
+  model: Pick<Model<Api>, 'api' | 'id' | 'baseUrl'>,
+): boolean {
+  if (model.api !== 'openai-completions') return false
+  if (model.baseUrl.toLowerCase().includes('generativelanguage.googleapis.com')) return true
+  return /^(?:~?google\/|(?:[\w.~-]+\/)*gemini(?:-|$))/i.test(model.id)
+}

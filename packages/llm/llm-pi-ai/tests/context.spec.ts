@@ -701,4 +701,84 @@ describe('pi-ai system prompt source', () => {
     await expect(toPiContext(options, imageContext(projectionStore(read)))).rejects.toThrow(error)
     expect(read).not.toHaveBeenCalled()
   })
+
+  it('wraps tool-result text in a JSON object envelope on both paths when requested', async () => {
+    const okCall = ToolCallId('call-ok')
+    const emptyCall = ToolCallId('call-empty')
+    const errCall = ToolCallId('call-err')
+    const yamlWithFlowDicts = 'chart_info: {latitude: 30.2672, longitude: -97.7431}\npositions:\n  rows:\n  - [Sun, 228.63]\nsuffix\uD800'
+    const textMessages: Message[] = [
+      history('assistant', [
+        { type: 'tool-call', id: okCall, name: 'get_chart_positions', arguments: '{}' },
+        { type: 'tool-call', id: emptyCall, name: 'noop', arguments: '{}' },
+        { type: 'tool-call', id: errCall, name: 'fail', arguments: '{}' },
+      ]),
+      createToolResultMessage({ callId: okCall, content: [{ type: 'text', text: yamlWithFlowDicts }], isError: false }),
+      createToolResultMessage({ callId: emptyCall, content: [{ type: 'text', text: '' }], isError: false }),
+      createToolResultMessage({ callId: errCall, content: [{ type: 'text', text: 'bad input: {"id": "lon"}' }], isError: true }),
+    ]
+    const expectedTextMessages = [
+      expect.objectContaining({ role: 'assistant' }),
+      {
+        role: 'toolResult',
+        toolCallId: 'call-ok',
+        toolName: 'get_chart_positions',
+        content: [{ type: 'text', text: JSON.stringify({ output: yamlWithFlowDicts.toWellFormed() }) }],
+        isError: false,
+        timestamp: 0,
+      },
+      {
+        role: 'toolResult',
+        toolCallId: 'call-empty',
+        toolName: 'noop',
+        content: [{ type: 'text', text: JSON.stringify({ output: '(no output)' }) }],
+        isError: false,
+        timestamp: 0,
+      },
+      {
+        role: 'toolResult',
+        toolCallId: 'call-err',
+        toolName: 'fail',
+        content: [{ type: 'text', text: JSON.stringify({ error: 'bad input: {"id": "lon"}' }) }],
+        isError: true,
+        timestamp: 0,
+      },
+    ]
+
+    expect(toPiContext(request(textMessages), undefined, undefined, false, true).messages).toEqual(expectedTextMessages)
+    await expect(toPiContext(request(textMessages), imageContext(attachments), undefined, false, true)).resolves.toMatchObject({
+      messages: expectedTextMessages,
+    })
+
+    const imgCall = ToolCallId('call-img')
+    const multimodal = await toPiContext(request([
+      history('assistant', [{ type: 'tool-call', id: imgCall, name: 'graphic_ephemeris', arguments: '{}' }]),
+      createToolResultMessage({
+        callId: imgCall,
+        content: [
+          { type: 'image', attachment: ref },
+          { type: 'text', text: 'saved: {path: "/tmp/plot.png"}' },
+        ],
+        isError: false,
+      }),
+    ]), imageContext(attachments), undefined, false, true)
+
+    const toolMsg = multimodal.messages[1]
+    expect(toolMsg).toMatchObject({
+      role: 'toolResult',
+      toolCallId: 'call-img',
+      toolName: 'graphic_ephemeris',
+      isError: false,
+    })
+    if (toolMsg?.role === 'toolResult') {
+      expect(toolMsg.content).toHaveLength(2)
+      expect(toolMsg.content[0]?.type).toBe('text')
+      if (toolMsg.content[0]?.type === 'text') {
+        const parsed = JSON.parse(toolMsg.content[0].text) as { output: string }
+        expect(parsed.output).toContain(`Image ${ref.attachmentId}`)
+        expect(parsed.output).toContain('\nsaved: {path: "/tmp/plot.png"}')
+      }
+      expect(toolMsg.content[1]).toEqual({ type: 'image', data: 'AQ==', mimeType: 'image/png' })
+    }
+  })
 })

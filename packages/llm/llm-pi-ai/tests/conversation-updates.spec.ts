@@ -1,13 +1,13 @@
 /** Capability-driven transcript updates through the real pi-ai serializers and shared runtime. */
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import LlmRuntime, { createAssistantMessage, createDeveloperMessage, createMessage, createUserMessage, ReasoningEffortId } from '@deepseek-ai/dsh-llm'
+import LlmRuntime, { createAssistantMessage, createDeveloperMessage, createMessage, createToolResultMessage, createUserMessage, ReasoningEffortId, ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, ToolSchema, ToolUpdate } from '@deepseek-ai/dsh-llm'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import type { Api, Model } from '@earendil-works/pi-ai'
 import { resolveProfiles } from '../src/config.ts'
 import { memoryAuth } from './auth-double.ts'
-import { conversationUpdates } from '../src/models.ts'
+import { conversationUpdates, wrapsToolResultAsJsonObject } from '../src/models.ts'
 import { assemble } from './assemble.ts'
 import { closeMockServers, mockServer } from './mock-server.ts'
 
@@ -47,6 +47,24 @@ describe('conversation capability mapping', () => {
     { supportsMidConvoToolChanges: true }, { supportsAdditionalTools: true },
   ])('does not enable updates without system support: %j', (compat) => {
     expect(conversationUpdates(model('openai-completions', compat))).toEqual({})
+  })
+
+  it.each<{ api: Api; id: string; baseUrl?: string; expected: boolean }>([
+    { api: 'openai-completions', id: 'google/gemini-4-carbon', baseUrl: 'https://openrouter.ai/api/v1', expected: true },
+    { api: 'openai-completions', id: '~google/gemini-flash-latest', baseUrl: 'https://openrouter.ai/api/v1', expected: true },
+    { api: 'openai-completions', id: 'google/gemma-4-31b-it', baseUrl: 'https://openrouter.ai/api/v1', expected: true },
+    { api: 'openai-completions', id: 'gemini-2.5-pro', baseUrl: 'https://proxy.example.invalid/v1', expected: true },
+    { api: 'openai-completions', id: 'vertex_ai/gemini-2.5-pro', baseUrl: 'https://proxy.example.invalid/v1', expected: true },
+    { api: 'openai-completions', id: 'custom-alias', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', expected: true },
+    { api: 'google-generative-ai', id: 'gemini-2.5-pro', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', expected: false },
+    { api: 'google-vertex', id: 'gemini-2.5-pro', baseUrl: 'https://us-central1-aiplatform.googleapis.com', expected: false },
+    { api: 'anthropic-messages', id: 'google/gemini-4-carbon', baseUrl: 'https://openrouter.ai/api/v1', expected: false },
+    { api: 'openai-responses', id: 'google/gemini-4-carbon', baseUrl: 'https://openrouter.ai/api/v1', expected: false },
+    { api: 'openai-completions', id: 'gpt-4.1', baseUrl: 'https://api.openai.com/v1', expected: false },
+    { api: 'openai-completions', id: 'anthropic/claude-sonnet-4-5', baseUrl: 'https://openrouter.ai/api/v1', expected: false },
+    { api: 'openai-completions', id: 'deepseek/deepseek-chat', baseUrl: 'https://openrouter.ai/api/v1', expected: false },
+  ])('selects JSON-object tool-result wrapping for $api / $id ($expected)', ({ api, id, baseUrl = 'https://example.invalid', expected }) => {
+    expect(wrapsToolResultAsJsonObject({ api, id, baseUrl })).toBe(expected)
   })
 })
 
@@ -318,5 +336,38 @@ describe('historical tool availability on the wire', () => {
     expect(requests[0]).toHaveProperty('tools', expect.arrayContaining([expect.objectContaining({ name: 'search' })]))
     expect(JSON.stringify(requests[0])).not.toContain('tool_addition')
     expect(JSON.stringify(requests[0])).not.toContain('Read a file')
+  })
+
+  it('wraps tool results as JSON objects on the wire only for Gemini over Chat Completions', async () => {
+    const callId = ToolCallId('call_astro')
+    const yaml = 'chart_info: {latitude: 30.2672, longitude: -97.7431}\npositions:\n  rows:\n  - [Sun, 228.63]'
+    const messages = [
+      user('Cast Austin chart'),
+      createAssistantMessage({
+        source: { provider: 'openrouter', model: 'google/gemini-4-argon' },
+        content: [{ type: 'tool-call', id: callId, name: 'read', arguments: '{}' }],
+      }),
+      createToolResultMessage({ callId, content: [{ type: 'text', text: yaml }], isError: false }),
+    ]
+
+    const gemini = await send('openrouter', 'google/gemini-4-argon', { messages, tools: [baseline] })
+    expect(gemini.paths).toEqual(['/chat/completions'])
+    expect(gemini.requests[0]).toMatchObject({
+      messages: [
+        { role: 'user', content: 'Cast Austin chart' },
+        { role: 'assistant', tool_calls: [expect.objectContaining({ id: 'call_astro' })] },
+        { role: 'tool', tool_call_id: 'call_astro', content: JSON.stringify({ output: yaml }) },
+      ],
+    })
+
+    const deepseek = await send('openrouter', 'deepseek/deepseek-chat', { messages, tools: [baseline] })
+    expect(deepseek.paths).toEqual(['/chat/completions'])
+    expect(deepseek.requests[0]).toMatchObject({
+      messages: [
+        { role: 'user', content: 'Cast Austin chart' },
+        { role: 'assistant', tool_calls: [expect.objectContaining({ id: 'call_astro' })] },
+        { role: 'tool', tool_call_id: 'call_astro', content: yaml },
+      ],
+    })
   })
 })

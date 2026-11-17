@@ -89,7 +89,8 @@ beforeEach(async ({ onTestFinished }) => {
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(NativeToolExecutor)
   await ctx.plugin(SessionProjectionRegistry)
-  await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: deploymentRoot })
+  // No protected paths: the assertions below name the whole policy a write carries.
+  await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: deploymentRoot, protectedPaths: [] })
   await ctx.plugin(SandboxedFileSystem, { cwd: deploymentRoot })
   await ctx.plugin(FsObservationPolicy)
   await ctx.plugin(ToolFs)

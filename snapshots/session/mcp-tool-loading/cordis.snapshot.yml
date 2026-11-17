@@ -55,3 +55,6 @@
         failOnStartupError: true
         reconnect:
           enabled: false
+        # The recorded run called the tool without a person present to approve.
+        toolPolicy:
+          default: allow

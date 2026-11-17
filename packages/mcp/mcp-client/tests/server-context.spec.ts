@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { Context, Service } from '@deepseek-ai/cordis'
 import SystemPrompt, { renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
-import { ToolCallId } from '@deepseek-ai/dsh-llm'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import type { ToolCallId } from '@deepseek-ai/dsh-llm/types'
 import McpResources from '@deepseek-ai/dsh-mcp-resources'
 import McpStatus, { type McpServerHandle } from '@deepseek-ai/dsh-mcp-status'
 import { createScope } from '@deepseek-ai/dsh-scope'
@@ -52,7 +53,7 @@ describe('MCP server context', () => {
     expect(renderPrompt(await ctx.systemPrompt.assemble())).not.toContain('MCP server: docs')
     const result = await executeToolFixture(ctx, {
       name: 'list_mcp_resources', arguments: { server: 'docs' },
-      callId: ToolCallId('disposed-resource'), signal: new AbortController().signal,
+      callId: brandString<ToolCallId>('disposed-resource'), signal: new AbortController().signal,
     })
     expect(result.isError).toBe(true)
   })

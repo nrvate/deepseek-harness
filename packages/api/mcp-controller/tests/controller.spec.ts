@@ -51,10 +51,12 @@ async function fixture(store = true, overlays: PatchOptions[] = [], status = tru
   writeFileSync(join(dir, 'cordis.yml'), '[]\n')
   const patchPath = join(dir, 'cordis.patch.yml')
   writeFileSync(patchPath, '[]\n')
+  const overlayPaths = overlays.length === 0 ? [] : [join(home, 'overlay.yml')]
+  for (const path of overlayPaths) writeFileSync(path, JSON.stringify(overlays))
   const profile: ProfileContext = {
     name: 'test',
     startedBundles: loadProfileDirectory('test', dir, anchor).layers.map(layer => layer.packageName),
-    dir, patchPath, installAnchor: anchor, cwd: home, home, overlays, telemetryDisabledEnv: undefined,
+    dir, patchPath, installAnchor: anchor, cwd: home, home, overlayPaths, telemetryDisabledEnv: undefined,
   }
   const ctx = await boot('test', join(dir, 'cordis.yml'), readProfilePatches('test', profile), (root) => {
     owner = root

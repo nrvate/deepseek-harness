@@ -1,7 +1,7 @@
 {
   "name": "@deepseek-ai/dsh-mcp-selection",
   "description": "Per-Session choice of which configured MCP servers reach the model, logged and enforced through the tool registry",
-  "version": "0.2.1-rc.3",
+  "version": "0.2.2-rc.4",
   "publishConfig": {
     "access": "public"
   },
@@ -34,7 +34,10 @@
     "locale/*.json",
     "lib/index.js",
     "lib/types/**/*.js",
-    "lib/types/**/*.d.ts"
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.d.ts.map",
+    "lib/**/*.js.map",
+    "src"
   ],
   "license": "MIT",
   "dependencies": {

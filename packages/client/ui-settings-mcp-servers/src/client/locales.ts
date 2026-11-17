@@ -36,7 +36,7 @@ export type McpServersLocaleKey =
   | 'noticeSaved' | 'noticeRemoved' | 'noticeEnabled' | 'noticeDisabled'
   | 'noticeFailed' | 'noticeRefreshFailed'
   | 'managerMissing' | 'sourceInherited' | 'sourceOverridden' | 'sourcePlugin' | 'sourceRemoved'
-  | 'stateWaitingCredentials' | 'stateClosed' | 'stateCleanup'
+  | 'stateWaitingCredentials' | 'stateWaitingAuthorization' | 'stateClosed' | 'stateCleanup'
   | 'probe' | 'probeTitle' | 'probeRunning' | 'probeRefused' | 'probeOk' | 'probeOkServer' | 'probeTools' | 'probeTruncated'
   | 'probeFailedConnect' | 'probeFailedList' | 'probeCleanup'
   | 'kindCredential' | 'hintCredential' | 'valueRef' | 'valueSecret' | 'secretKeep' | 'secretEnter' | 'secretStored' | 'secretMissing'
@@ -195,6 +195,7 @@ export const en: Record<McpServersLocaleKey, string> = {
   restoreBody: 'Your changes to this server are dropped and it runs with the settings the profile gives it.',
   restoreAction: 'Restore default',
   stateWaitingCredentials: 'Waiting for credentials',
+  stateWaitingAuthorization: 'Waiting for authorization',
   stateClosed: 'Stopped',
   stateCleanup: 'Cleanup incomplete',
   probe: 'Test',
@@ -376,6 +377,7 @@ export const zh: Record<McpServersLocaleKey, string> = {
   restoreBody: '你对此服务器的更改会被丢弃，它将按 profile 提供的设置运行。',
   restoreAction: '恢复默认',
   stateWaitingCredentials: '等待凭据',
+  stateWaitingAuthorization: '等待授权',
   stateClosed: '已停止',
   stateCleanup: '清理未完成',
   probe: '测试',
@@ -557,6 +559,7 @@ export const ja = {
   restoreBody: 'このサーバーへの変更は破棄され、プロファイルの設定で実行されます。',
   restoreAction: 'デフォルトに戻す',
   stateWaitingCredentials: '認証情報を待機中',
+  stateWaitingAuthorization: '認可を待機中',
   stateClosed: '停止',
   stateCleanup: 'クリーンアップ未完了',
   probe: 'テスト',
@@ -738,6 +741,7 @@ export const es = {
   restoreBody: 'Se descartan tus cambios en este servidor y se ejecuta con la configuración que le da el perfil.',
   restoreAction: 'Restaurar valores',
   stateWaitingCredentials: 'Esperando credenciales',
+  stateWaitingAuthorization: 'Esperando autorización',
   stateClosed: 'Detenido',
   stateCleanup: 'Limpieza incompleta',
   probe: 'Probar',
@@ -919,6 +923,7 @@ export const fr = {
   restoreBody: 'Vos modifications de ce serveur sont abandonnées et il fonctionne avec les paramètres que le profil lui donne.',
   restoreAction: 'Rétablir',
   stateWaitingCredentials: 'En attente d\'identifiants',
+  stateWaitingAuthorization: 'En attente d\'autorisation',
   stateClosed: 'Arrêté',
   stateCleanup: 'Nettoyage incomplet',
   probe: 'Tester',
@@ -1100,6 +1105,7 @@ export const de = {
   restoreBody: 'Deine Änderungen an diesem Server werden verworfen, und er läuft mit den Einstellungen des Profils.',
   restoreAction: 'Standard wiederherstellen',
   stateWaitingCredentials: 'Wartet auf Zugangsdaten',
+  stateWaitingAuthorization: 'Wartet auf Autorisierung',
   stateClosed: 'Gestoppt',
   stateCleanup: 'Bereinigung unvollständig',
   probe: 'Testen',
@@ -1281,6 +1287,7 @@ export const ru = {
   restoreBody: 'Ваши изменения этого сервера отменяются, и он работает с настройками из профиля.',
   restoreAction: 'Вернуть по умолчанию',
   stateWaitingCredentials: 'Ожидает учётных данных',
+  stateWaitingAuthorization: 'Ожидает авторизации',
   stateClosed: 'Остановлен',
   stateCleanup: 'Очистка не завершена',
   probe: 'Проверить',
@@ -1462,6 +1469,7 @@ export const pt = {
   restoreBody: 'Suas alterações neste servidor são descartadas e ele roda com as configurações que o perfil fornece.',
   restoreAction: 'Restaurar padrão',
   stateWaitingCredentials: 'Aguardando credenciais',
+  stateWaitingAuthorization: 'Aguardando autorização',
   stateClosed: 'Parado',
   stateCleanup: 'Limpeza incompleta',
   probe: 'Testar',

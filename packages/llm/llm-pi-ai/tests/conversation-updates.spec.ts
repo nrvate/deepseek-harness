@@ -1,7 +1,8 @@
 /** Capability-driven transcript updates through the real pi-ai serializers and shared runtime. */
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
-import LlmRuntime, { createAssistantMessage, createDeveloperMessage, createMessage, createToolResultMessage, createUserMessage, ReasoningEffortId, ToolCallId } from '@deepseek-ai/dsh-llm'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import LlmRuntime, { createAssistantMessage, createDeveloperMessage, createMessage, createToolResultMessage, createUserMessage, type ReasoningEffortId, type ToolCallId } from '@deepseek-ai/dsh-llm'
 import type { GenerateOptions, ToolSchema, ToolUpdate } from '@deepseek-ai/dsh-llm'
 import * as LlmPiAi from '@deepseek-ai/dsh-llm-pi-ai'
 import type { Api, Model } from '@earendil-works/pi-ai'
@@ -118,12 +119,12 @@ describe('serialized conversation updates', () => {
       })
       ctx.effect(() => ctx.llm.registerAdapter(['openai'], adapter))
       const first = await assemble(ctx, {
-        provider: 'openai', model: 'gpt-6-sol', reasoningEffort: ReasoningEffortId('low'), messages: [user('first')],
+        provider: 'openai', model: 'gpt-6-sol', reasoningEffort: brandString<ReasoningEffortId>('low'), messages: [user('first')],
       })
       expect(first.finish).toEqual({ kind: 'stop' })
       expect(first.message.source).toMatchObject({ replayState: { response: { providerThinkingLevel: 'low' } } })
       const second = await assemble(ctx, {
-        provider: 'openai', model: 'gpt-6-sol', reasoningEffort: ReasoningEffortId('high'),
+        provider: 'openai', model: 'gpt-6-sol', reasoningEffort: brandString<ReasoningEffortId>('high'),
         messages: [user('first'), first.message, user('next')],
       })
       expect(second.finish).toEqual({ kind: 'stop' })
@@ -339,7 +340,7 @@ describe('historical tool availability on the wire', () => {
   })
 
   it('wraps tool results as JSON objects on the wire only for Gemini over Chat Completions', async () => {
-    const callId = ToolCallId('call_astro')
+    const callId = brandString<ToolCallId>('call_astro')
     const yaml = 'chart_info: {latitude: 30.2672, longitude: -97.7431}\npositions:\n  rows:\n  - [Sun, 228.63]'
     const messages = [
       user('Cast Austin chart'),

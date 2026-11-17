@@ -1,5 +1,6 @@
 /**
- * Publish connection-owned MCP resources and literal server instructions.
+ * Publish connection-owned MCP resources, literal server instructions, and an
+ * on-demand server's tool catalog.
  *
  * @module @deepseek-ai/dsh-mcp-client
  */
@@ -9,6 +10,7 @@ import type { McpResourceProvider } from '@deepseek-ai/dsh-mcp-resources'
 import type {} from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-mcp-selection'
 import type { McpServerHandle } from '@deepseek-ai/dsh-mcp-status'
+import type { ScopeKey } from '@deepseek-ai/dsh-scope'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 
 /** Connection-owned values used by the resource and prompt consumers. */
@@ -22,13 +24,19 @@ export interface ServerContext {
    * @returns literal prompt text, or an empty string when no server instructions are active.
    */
   instructions(): string
+  /**
+   * Render an on-demand server's tool catalog for one prompt assembly.
+   * @param scope - the assembling agent, or undefined for the global view.
+   * @returns literal prompt text, or an empty string when the scope has nothing to load.
+   */
+  catalog?: (scope: ScopeKey | undefined) => string
 }
 
 /**
  * Contribute server context to the services enabled by this composition.
  * @param ctx - server plugin's registration scope and effect owner.
  * @param server - configured server identity.
- * @param connection - live resource operations and successful instruction snapshot.
+ * @param connection - live resource operations, successful instruction snapshot, and an on-demand server's tool catalog.
  */
 export function registerServerContext(ctx: Context, server: string, connection: ServerContext): void {
   ctx.inject(['mcpResources'], (inner) => {
@@ -45,5 +53,14 @@ export function registerServerContext(ctx: Context, server: string, connection: 
       // A Session that does not use this server gets none of its instructions.
       text: context => inner.get('mcpSelection')?.isActive(server, context.agent) === false ? '' : connection.instructions(),
     })
+    const { catalog } = connection
+    if (catalog !== undefined) {
+      inner.systemPrompt.section({
+        name: `mcp:${server}:tools`,
+        order: inner.systemPrompt.getSectionOrder('MCP_SERVERS'),
+        interpolate: false,
+        text: ({ scope, agent }) => inner.get('mcpSelection')?.isActive(server, agent) === false ? '' : catalog(scope),
+      })
+    }
   })
 }

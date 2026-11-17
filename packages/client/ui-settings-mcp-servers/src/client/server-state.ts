@@ -24,6 +24,7 @@ export function connectionView(status: McpManagedServerStatus, t: Translate, now
       text: t('stateReconnecting', { attempt: status.attempt, max: status.maxAttempts, wait: formatSpan(status.nextRetryAtMs - now, t) }),
     }
     case 'waiting-credentials': return { dot: 'warning', text: t('stateWaitingCredentials') }
+    case 'waiting-authorization': return { dot: 'warning', text: t('stateWaitingAuthorization') }
     case 'disabled': return { dot: 'idle', text: t('phaseOff') }
     case 'closed': return { dot: 'idle', text: t('stateClosed') }
     case 'failed':
@@ -45,7 +46,8 @@ export function connectionView(status: McpManagedServerStatus, t: Translate, now
 export function problemOf(status: McpManagedServerStatus): string | undefined {
   switch (status.state) {
     case 'reconnecting':
-    case 'waiting-credentials': return status.lastError
+    case 'waiting-credentials':
+    case 'waiting-authorization': return status.lastError
     case 'failed': return status.reason === 'cleanup' ? status.result.cleanupError : status.lastError
     case 'closed': return status.result.cleanupError
     case 'connected':

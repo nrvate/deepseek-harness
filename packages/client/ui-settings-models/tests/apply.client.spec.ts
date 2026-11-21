@@ -74,8 +74,8 @@ function automaticSource(slots: SlotRegistry): ObservableSnapshot<boolean> {
 
 describe('ui-settings-models apply', () => {
   it('declares a live credential-onboarding switch without Host behavior', () => {
-    expect(hostPlugin.Config({}).credentialOnboarding.get()).toBe(true)
-    expect(hostPlugin.Config({ credentialOnboarding: false }).credentialOnboarding.get()).toBe(false)
+    expect(hostPlugin.Config({}).credentialOnboarding.get()).toBe(false)
+    expect(hostPlugin.Config({ credentialOnboarding: true }).credentialOnboarding.get()).toBe(true)
     expect(hostPlugin.Config['~standard'].validate({ credentialOnboarding: 'false' })).toHaveProperty('issues')
     hostPlugin.apply(new Context(), hostPlugin.Config({}))
   })
@@ -105,12 +105,12 @@ describe('ui-settings-models apply', () => {
       const ref = { get: read, getSnapshot: read, subscribe: (fn: () => void) => value.subscribe(fn) }
       await ctx.plugin({ inject: [...inject], apply }, { credentialOnboarding: ref }).await()
       const source = automaticSource(slots)
-      expect(source.getSnapshot()).toBe(true)
+      expect(source.getSnapshot()).toBe(false)
       const listener = vi.fn()
       const unsubscribe = source.subscribe(listener)
-      value.set(false)
+      value.set(true)
       expect(listener).toHaveBeenCalledTimes(1)
-      expect(source.getSnapshot()).toBe(false)
+      expect(source.getSnapshot()).toBe(true)
       unsubscribe()
     } finally {
       await ctx.fiber.dispose()

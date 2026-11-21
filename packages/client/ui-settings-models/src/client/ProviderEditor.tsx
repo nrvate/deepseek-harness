@@ -7,7 +7,7 @@
  * a key is entered; a blank key materializes a reference-free profile for
  * provider-native authentication);
  * the collapsed 自定义设置 area carries the per-family extras (`baseURL` and
- * `retryPolicy` for both families, DeepSeek's id/name/context-window model
+ * `retryPolicy` for both families, the request `headers` of a pi-ai route, DeepSeek's id/name/context-window model
  * catalog, and the display name and wire protocol of a pi-ai route the
  * adapter does not ship — the two fields the create card asked that route
  * for, editable here for the same reason).
@@ -42,6 +42,8 @@ import type { ModelsOperations } from './operations.ts'
 import type { SettingsSchemaOperations } from './schema-operations.ts'
 import type { en } from './locales.ts'
 import { ApiKeyInput } from './ApiKeyInput.tsx'
+import { HeadersEditor, headerRows, headersFailure, headersOf } from './HeadersEditor.tsx'
+import type { HeaderRow } from './HeadersEditor.tsx'
 import { RetryPolicyEditor, retryPolicyDefaults, retryPolicyFailure } from './RetryPolicyEditor.tsx'
 import styles from './ModelsSection.module.css'
 
@@ -279,6 +281,13 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
   const retryFailure = retryNode === undefined || retryDefaults === undefined || props.credentialOnly === true
     ? undefined
     : retryPolicyFailure(schema, retryNode, schema.getPath(draft, ['retryPolicy']), retryDefaults, t)
+  // Only a profile whose schema declares `headers` edits them; the rows keep refused text the dict cannot hold.
+  const editsHeaders = useMemo(
+    () => layout !== 'unknown' && schema.nodeAtPath(root, [...settingsPath, 'headers']) !== undefined,
+    [layout, root, schema, settingsPath],
+  )
+  const [headerDrafts, setHeaderDrafts] = useState<HeaderRow[]>(() => headerRows(draft['headers']))
+  const headerFailure = !editsHeaders || props.credentialOnly === true ? undefined : headersFailure(headerDrafts, t)
   const keyFailure = apiKeyFailure(keyText)
   // What a probe or a write must carry: the typed key with paste whitespace
   // removed. A blank field yields an empty string, which both call sites read
@@ -611,6 +620,25 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
                   }}
                 />
               )}
+            {editsHeaders
+              ? (
+                <HeadersEditor
+                  rows={headerDrafts}
+                  failure={headerFailure}
+                  failureId={`${props.provider}-headers-failure`}
+                  showFailure={customizedOpen}
+                  t={t}
+                  disabled={disabled}
+                  onChange={(next) => {
+                    setHeaderDrafts(next)
+                    const headers = headersOf(next)
+                    setDraft(current => headers === undefined
+                      ? schema.deletePath(current, ['headers'])
+                      : schema.setPath(current, ['headers'], headers))
+                  }}
+                />
+              )
+              : null}
             {/* Both families edit the same rows through the same contract; only
                 the extras differ — DeepSeek's inherited capacities, pi-ai's
                 endpoint interrogation. */}
@@ -670,12 +698,16 @@ export function ProviderEditor(props: ProviderEditorProps): ReactNode {
       {retryFailure === undefined || customizedOpen
         ? null
         : <p id={`${props.provider}-retry-failure`} className={styles['error']}>{retryFailure.message}</p>}
+      {headerFailure === undefined || customizedOpen
+        ? null
+        : <p id={`${props.provider}-headers-failure`} className={styles['error']}>{headerFailure.message}</p>}
       <EditorFooter
         t={t}
         busy={busy}
         submitDisabled={disabled || layout === 'unknown'
           || (props.credentialOnly !== true && modelFailure !== undefined)
           || retryFailure !== undefined
+          || headerFailure !== undefined
           || shownKeyFailure !== undefined
           || (props.credentialRequired === true && keyValue.length === 0)}
         submitLabelKey={props.submitLabelKey ?? 'apply'}

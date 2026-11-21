@@ -702,6 +702,14 @@
   margin-top: 8px;
 }
 
+/* A header's name and value side by side, the value wider, with the delete action at the row's end. */
+.headerRow {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) 28px;
+  align-items: center;
+  gap: 8px;
+}
+
 /* One backoff column wide, so the count lines up with the delay fields below. */
 .retryCount {
   width: max(112px, calc((100% - 16px) / 3));

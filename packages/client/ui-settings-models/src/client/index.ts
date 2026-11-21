@@ -47,7 +47,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 const NS = 'settings.models'
 
 /** Credential-onboarding choice while the Host sends none; the Host schema default. */
-const ABSENT_CREDENTIAL_ONBOARDING = true
+const ABSENT_CREDENTIAL_ONBOARDING = false
 
 export type {
   ModelsSettingsState, ProviderDirectoryEntry, ProviderRow,

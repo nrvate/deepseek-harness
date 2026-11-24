@@ -2176,7 +2176,7 @@ export interface Config extends ProtocolConfig, ModelListingConfig {
 
 - `inject`: `llm`
 - `refs`: `Api` (`@earendil-works/pi-ai`) · `CacheRetention` (`@earendil-works/pi-ai`) · `Model` (`@earendil-works/pi-ai`) · `ModelThinkingLevel` (`@earendil-works/pi-ai`) · `OpenAICompletionsCompat` (`@earendil-works/pi-ai`) · [`RetryPolicyConfig`](../packages/llm/llm/src/index.ts) · `ThinkingBudgets` (`@earendil-works/pi-ai`) · `Transport` (`@earendil-works/pi-ai`) · `Volatile` (`@deepseek-ai/cordis`)
-- `source`: [`packages/llm/llm-pi-ai/src/config.ts:251`](../packages/llm/llm-pi-ai/src/config.ts)
+- `source`: [`packages/llm/llm-pi-ai/src/config.ts:256`](../packages/llm/llm-pi-ai/src/config.ts)
 
 ```ts config-catalog
 /** Plugin configuration: the provider routes this instance owns. */
@@ -2251,7 +2251,7 @@ export interface PiAiProviderProfile {
   defaultInput?: PiAiModality[]
   /** Provider request headers, validated against Fetch when the profile resolves; Harness attribution wins reserved names. */
   headers?: Record<string, string>
-  /** Provider-neutral pi-ai reasoning level. */
+  /** Provider-neutral pi-ai reasoning level; a model entry's `defaultReasoningEffort` wins over it for that model. */
   reasoning?: ModelThinkingLevel
   /** Token budgets used by reasoning providers that support them. */
   thinkingBudgets?: ThinkingBudgets
@@ -2324,12 +2324,22 @@ export interface PiAiModelProfile {
   input?: PiAiModality[]
   /**
    * Selectable reasoning efforts. Absent inherits the installed catalog
-   * entry's capability (a hand-declared model has none and does not reason);
-   * `false` declares a non-reasoning model, which is how a profile strips
-   * reasoning from a catalog model its gateway cannot serve; a non-empty dict
-   * declares the offered levels and their wire spellings.
+   * entry's capability, and gives a model the catalog does not describe every
+   * level, each thinking level under its own name; `false` declares a non-reasoning model, which is
+   * how a profile strips reasoning from a catalog model its gateway cannot
+   * serve; a non-empty dict declares the offered levels and their wire
+   * spellings.
    */
   reasoningEfforts?: false | PiAiReasoningEfforts
+  /**
+   * Reasoning level materialized into requests for this model when a caller
+   * names none, winning over the route's `reasoning` for this model alone.
+   * Omission inherits the route's level, which is what every profile written
+   * before this field existed relies on. The level must be one this model
+   * actually offers: resolution refuses a level the model cannot take, because
+   * a default no request can use is a route that will not behave as written.
+   */
+  defaultReasoningEffort?: ModelThinkingLevel
   /** pi-ai wire-compatibility switches for this model, winning over the route's per field; one its protocol does not declare is refused. */
   compat?: PiAiCompatProfile
 }

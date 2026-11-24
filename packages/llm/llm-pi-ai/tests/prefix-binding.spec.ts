@@ -43,14 +43,20 @@ function response(signature: string, blocks: Record<string, unknown>[], toolUse 
   ]
 }
 
-async function setup(api: 'anthropic-messages' | 'openai-completions', script: Parameters<typeof mockServer>[0], adaptive = true, manual = false) {
+async function setup(
+  api: 'anthropic-messages' | 'openai-completions',
+  script: Parameters<typeof mockServer>[0],
+  adaptive = true,
+  manual = false,
+  model: Record<string, unknown> = {},
+) {
   vi.stubEnv('PREFIX_BINDING_KEY', 'test-key')
   const server = await mockServer(script)
   const ctx = new Context()
   contexts.push(ctx)
   await ctx.plugin(LlmRuntime)
   await ctx.plugin(LlmPiAi, { providers: {
-    route: { api, baseURL: server.url, apiKeyEnv: 'PREFIX_BINDING_KEY', cacheRetention: 'none', models: [{ id: 'model', ...manual ? { reasoningEfforts: { high: 'high' } } : {} }],
+    route: { api, baseURL: server.url, apiKeyEnv: 'PREFIX_BINDING_KEY', cacheRetention: 'none', models: [{ id: 'model', ...manual ? { reasoningEfforts: { high: 'high' } } : {}, ...model }],
       ...manual ? { reasoning: 'high' as const } : {},
       ...api === 'anthropic-messages' ? { compat: { forceAdaptiveThinking: adaptive } } : {} },
   } })
@@ -175,7 +181,9 @@ describe('Anthropic thinking prefix binding', () => {
   })
 
   it('omits stale thinking of the open tool round when the request disables thinking', async () => {
-    const { server, run } = await setup('anthropic-messages', [{ events: frames('first', true) }, { events: frames('second', false) }], false)
+    // A hand-declared model reasons by default now, so "this request disables
+    // thinking" has to be declared: without the level it would keep thinking.
+    const { server, run } = await setup('anthropic-messages', [{ events: frames('first', true) }, { events: frames('second', false) }], false, false, { reasoningEfforts: false })
     const first = await run([user('Look up the value.')])
     await run([user('<compacted-summary>'), first, result(callId(first), 'value')])
     expect(wire(server.requests[1])).not.toContain('"signature":"first"')

@@ -14,6 +14,7 @@
 
 import { builtinProviders, getAllBuiltinModels, getBuiltinModels } from '@earendil-works/pi-ai/providers/all'
 import type { BuiltinProvider } from '@earendil-works/pi-ai/providers/all'
+import { getSupportedThinkingLevels } from '@earendil-works/pi-ai'
 import type {
   AnthropicMessagesCompat,
   Api,
@@ -84,6 +85,21 @@ const THINKING_LEVEL_GATE: Record<ModelThinkingLevel, true> = {
 
 /** Every pi-ai thinking level a profile may declare, in escalation order. */
 export const THINKING_LEVELS = Object.keys(THINKING_LEVEL_GATE) as readonly ModelThinkingLevel[]
+
+/**
+ * The wire spellings a hand-declared model gets when it declares no
+ * `reasoningEfforts`: each thinking level sent under its own name.
+ *
+ * The thinking levels are spelled explicitly rather than left absent, because
+ * pi-ai withholds `xhigh` and `max` from a model whose map names no mapping
+ * for them — an empty map would silently offer four levels where the default
+ * promises six. `off` stays absent, as a declared `off` with no value does:
+ * pi-ai then offers it and dispatches not thinking in the protocol's own way,
+ * where a spelled `off` would send that word as an effort value.
+ */
+const DEFAULT_THINKING_LEVEL_MAP: ThinkingLevelMap = Object.fromEntries(
+  THINKING_LEVELS.filter(level => level !== 'off').map(level => [level, level]),
+)
 
 /** One reasoning-dispatch wire format a profile may name. */
 export type PiAiThinkingFormat = NonNullable<OpenAICompletionsCompat['thinkingFormat']>
@@ -629,12 +645,22 @@ export interface PiAiModelProfile {
   input?: PiAiModality[]
   /**
    * Selectable reasoning efforts. Absent inherits the installed catalog
-   * entry's capability (a hand-declared model has none and does not reason);
-   * `false` declares a non-reasoning model, which is how a profile strips
-   * reasoning from a catalog model its gateway cannot serve; a non-empty dict
-   * declares the offered levels and their wire spellings.
+   * entry's capability, and gives a model the catalog does not describe every
+   * level, each thinking level under its own name; `false` declares a non-reasoning model, which is
+   * how a profile strips reasoning from a catalog model its gateway cannot
+   * serve; a non-empty dict declares the offered levels and their wire
+   * spellings.
    */
   reasoningEfforts?: false | PiAiReasoningEfforts
+  /**
+   * Reasoning level materialized into requests for this model when a caller
+   * names none, winning over the route's `reasoning` for this model alone.
+   * Omission inherits the route's level, which is what every profile written
+   * before this field existed relies on. The level must be one this model
+   * actually offers: resolution refuses a level the model cannot take, because
+   * a default no request can use is a route that will not behave as written.
+   */
+  defaultReasoningEffort?: ModelThinkingLevel
   /** pi-ai wire-compatibility switches for this model, winning over the route's per field; one its protocol does not declare is refused. */
   compat?: PiAiCompatProfile
 }
@@ -724,12 +750,18 @@ function resolveModelReasoning(
 ): ModelReasoning {
   const efforts = entry.reasoningEfforts
   if (efforts === undefined) {
-    // Reasoning rides the installed entry or is absent: a bare capability flag
-    // would make pi-ai advertise effort levels with no `thinkingLevelMap` to
-    // spell them, and no listing endpoint reports a model's reasoning
-    // protocol. The entry's map (when any) arrives through the `...base`
-    // spread in the model literal.
-    return { reasoning: base?.reasoning ?? false }
+    // A catalog model inherits the installed entry's capability; a bare flag
+    // would make pi-ai advertise levels with no `thinkingLevelMap` to spell
+    // them. Its map (when any) arrives through the `...base` spread.
+    //
+    // A hand-declared model has nothing to inherit, and a route that says
+    // nothing else about reasoning most likely means it. Assume the full set
+    // instead of silence: a model that cannot take a level is corrected by
+    // declaring the levels it does offer, which is a smaller edit than
+    // spelling out the six a gateway accepts anyway.
+    return base === undefined
+      ? { reasoning: true, thinkingLevelMap: { ...DEFAULT_THINKING_LEVEL_MAP } }
+      : { reasoning: base.reasoning }
   }
   // The installed entry's map may ride along through `...base`; pi-ai never
   // reads it on a non-reasoning model, so stripping it is not worth a field
@@ -844,6 +876,17 @@ export interface RouteCatalog {
    * picked, so only an explicit configuration lands here.
    */
   configuredMaxTokens: ReadonlyMap<string, number>
+  /**
+   * Reasoning levels each model's entry named as its own default, by model id.
+   *
+   * Separate from the model descriptor for the same reason as
+   * {@link configuredMaxTokens}: this is a level the deployment chose to send
+   * when a caller names none, whereas pi-ai's `thinkingLevelMap` describes only
+   * what the endpoint accepts. The route-level `reasoning` is not recorded
+   * here — it is the fallback every model without an entry shares, and the
+   * adapter still applies it.
+   */
+  configuredReasoning: ReadonlyMap<string, ModelThinkingLevel>
 }
 
 /**
@@ -909,6 +952,7 @@ export function resolveRouteModels(
   assertOfferedCompatFields(provider, 'route', request.compat)
   const seen = new Set<string>()
   const configuredMaxTokens = new Map<string, number>()
+  const configuredReasoning = new Map<string, ModelThinkingLevel>()
   const resolveEntry = (entry: PiAiModelProfile): Model<Api> => {
     assertOfferedCompatFields(provider, `model "${entry.id}"`, entry.compat)
     if (entry.id.length === 0) invalid(provider, 'has a model with an empty id')
@@ -939,7 +983,8 @@ export function resolveRouteModels(
     // Only a value the profile named is a deployment choice; the catalog's is
     // the model's capability and stays out of request defaults.
     if (entry.maxTokens !== undefined) configuredMaxTokens.set(entry.id, entry.maxTokens)
-    return {
+    const reasoning = resolveModelReasoning(provider, entry, base)
+    const model: Model<Api> = {
       // The installed entry lays the floor, and the fields below override it.
       // Enumerating instead would silently drop every `Model` field this
       // package does not model — reasoning-level spellings, compatibility
@@ -955,9 +1000,41 @@ export function resolveRouteModels(
       cost: base?.cost ?? NO_COST,
       contextWindow,
       maxTokens,
-      ...resolveModelReasoning(provider, entry, base),
+      ...reasoning,
       ...resolveModelCompat(provider, entry, request.compat, base, api),
     }
+    if (entry.defaultReasoningEffort !== undefined) {
+      // The schema union passes a valueless `defaultReasoningEffort:` through
+      // as null before any member schema runs, the same quirk the compat and
+      // reasoningEfforts fields refuse by hand. A default nobody wrote a level
+      // for is not a level: name the field, not a value.
+      if (!THINKING_LEVELS.includes(entry.defaultReasoningEffort)) {
+        invalid(provider, `model "${entry.id}" sets defaultReasoningEffort with no value; give it a level, or`
+          + ' remove the key to inherit the route\'s reasoning')
+      }
+      // A non-reasoning model offers only `off`, which pi-ai reads as "send
+      // nothing" — the same request as naming no default at all, so accepting
+      // it would record a configuration that produces no behaviour. Refuse it
+      // here rather than let a no-op look applied.
+      if (!model.reasoning) {
+        invalid(provider, `model "${entry.id}" declares no reasoning, so it has no default effort to name;`
+          + ' remove defaultReasoningEffort, or declare the levels it offers')
+      }
+      // Checked against the materialized model, which is what dispatch
+      // consults: an entry that declares no efforts inherits the installed
+      // catalog's capability, and pi-ai withholds `xhigh` and `max` from a
+      // model whose entry names no mapping for them. Reading the entry's own
+      // declaration instead would let exactly those levels through on the
+      // inherited path and fail the first request that took the default.
+      const offered = getSupportedThinkingLevels(model)
+      if (!offered.includes(entry.defaultReasoningEffort)) {
+        invalid(provider, `model "${entry.id}" defaultReasoningEffort "${entry.defaultReasoningEffort}" is not`
+          + ` a level this model offers (${offered.join(', ')}); declare it in reasoningEfforts, pick one that`
+          + ' is already offered, or remove the field to inherit the route\'s reasoning')
+      }
+      configuredReasoning.set(entry.id, entry.defaultReasoningEffort)
+    }
+    return model
   }
   const models: Model<Api>[] = []
   for (const entry of entries) {
@@ -983,5 +1060,5 @@ export function resolveRouteModels(
     invalid(provider, `sets compat "${field}", but no model on the route speaks a protocol that takes it;`
       + ` it exists on ${takers.join(', ')}`)
   }
-  return { models: serviceableModels, configuredMaxTokens, modelErrors }
+  return { models: serviceableModels, configuredMaxTokens, configuredReasoning, modelErrors }
 }

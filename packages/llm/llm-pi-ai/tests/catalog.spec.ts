@@ -109,24 +109,24 @@ describe('hand-declared providers', () => {
     })
   })
 
-  it('offers no reasoning control it could not honour', async () => {
+  it('offers every level and high by default to a hand-declared model that says nothing about reasoning', async () => {
     const server = await mockServer([])
     const ctx = await harness(gateway(`${server.url}/v1`))
 
-    // pi-ai reports a model with no reasoning metadata as supporting the single
-    // level `off`, but `off` is translated to *omitting* the reasoning option —
-    // byte-for-byte the same request as naming no effort — so a provider whose
-    // own default is to think would keep thinking with `off` selected. The
-    // capability is reported unavailable instead of offering that control.
-    expect((await ctx.llm.resolveModelInfo('acme-gateway', 'acme-large')).reasoning).toBeUndefined()
+    // A hand-declared model has no installed entry to inherit, and a route
+    // that says nothing else most likely means to reason, so the full set is
+    // offered.
+    const described = await ctx.llm.resolveModelInfo('acme-gateway', 'acme-large')
+    expect(described.reasoning?.efforts.map(e => e.id))
+      .toEqual(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+    expect(described.reasoning?.defaultEffort).toBe('high')
 
-    // A catalog route is unaffected: its models carry the metadata that makes
-    // `off` actually disable thinking.
+    // A catalog route keeps the installed entry's own capability and levels.
     const withCatalog = await harness({ providers: { deepseek: { baseURL: server.url } } })
     const [catalogModel] = getBuiltinModels('deepseek')
     if (catalogModel === undefined) throw new Error('the installed catalog ships no deepseek model')
-    expect((await withCatalog.llm.resolveModelInfo('deepseek', catalogModel.id)).reasoning?.efforts.map(e => e.id))
-      .toContain('off')
+    const catalog = await withCatalog.llm.resolveModelInfo('deepseek', catalogModel.id)
+    expect(catalog.reasoning?.efforts.map(e => e.id)).toEqual(getSupportedThinkingLevels(catalogModel as Model<Api>))
   })
 
   it('joins the configurable-provider directory so a settings surface can reach it', async () => {
@@ -684,6 +684,24 @@ describe('per-model reasoning efforts', () => {
     return model
   }
 
+  it('gives a hand-declared model every level by default, each thinking level under its own name', () => {
+    const model = modelOf(declared([{ id: 'bare' }]))
+    expect(model.reasoning).toBe(true)
+    expect(getSupportedThinkingLevels(model)).toEqual(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
+    expect(model.thinkingLevelMap?.minimal).toBe('minimal')
+    expect(model.thinkingLevelMap?.max).toBe('max')
+    // Off is offered without a spelling, as a declared `off` with no value is:
+    // the word is not an effort value an endpoint accepts.
+    expect(model.thinkingLevelMap).not.toHaveProperty('off')
+  })
+
+  it('leaves a catalog model on the installed entry\'s own capability', () => {
+    const [catalogModel] = getBuiltinModels('deepseek')
+    if (catalogModel === undefined) throw new Error('the installed catalog ships no deepseek model')
+    const model = modelOf({ deepseek: { models: [{ id: catalogModel.id }] } }, 'deepseek')
+    expect(getSupportedThinkingLevels(model)).toEqual(getSupportedThinkingLevels(catalogModel as Model<Api>))
+  })
+
   it('declares selectable levels with their wire spellings on a hand-declared model', () => {
     const model = modelOf(declared([{
       id: 'acme-think',
@@ -766,6 +784,91 @@ describe('per-model reasoning efforts', () => {
     expect(declare({ off: 'none' })).toThrow(/offers no level beyond "off"/)
     expect(declare({ high: null })).toThrow(/only "off" may leave it empty/)
     expect(declare({ high: '' })).toThrow(/must not be an empty string/)
+  })
+
+  it('records a model’s own default and lets it win over the route level', () => {
+    const resolved = resolveProfiles({
+      deepseek: {
+        reasoning: 'high',
+        models: [{ id: 'm', reasoningEfforts: { off: null, low: 'low', high: 'high' }, defaultReasoningEffort: 'low' }],
+      },
+    })
+    expect(resolved.get('deepseek')?.configuredReasoning.get('m')).toBe('low')
+  })
+
+  it('records no default for a model that inherits the route level', () => {
+    const resolved = resolveProfiles({
+      deepseek: { reasoning: 'high', models: [{ id: 'm', reasoningEfforts: { off: null, high: 'high' } }] },
+    })
+    // The route value is the fallback every such model shares; recording it per
+    // model would claim an entry chose something nobody wrote for it.
+    expect(resolved.get('deepseek')?.configuredReasoning.has('m')).toBe(false)
+    expect(resolved.get('deepseek')?.reasoning).toBe('high')
+  })
+
+  it('rejects a default level the model does not offer', () => {
+    const declare = (defaultReasoningEffort: string): (() => unknown) => () => resolveProfiles(declared([{
+      id: 'm',
+      reasoningEfforts: { off: null, low: 'low', high: 'high' },
+      defaultReasoningEffort: defaultReasoningEffort as never,
+    }]))
+    // Declared levels only: `max` is pinned null, so a default on it would
+    // reach dispatch and be refused mid-turn instead of failing at load.
+    expect(declare('max')).toThrow(/defaultReasoningEffort "max" is not a level this model offers/)
+    expect(declare('medium')).toThrow(/defaultReasoningEffort "medium" is not a level this model offers/)
+    expect(declare('low')).not.toThrow()
+  })
+
+  it('validates an inherited-catalog default against the level the catalog model offers', () => {
+    // No reasoningEfforts: the entry inherits the installed model's capability,
+    // which pi-ai computes from that model's own thinkingLevelMap. Reading the
+    // entry's declaration instead would accept a level the model omits.
+    const models = getBuiltinModels('deepseek')
+    const narrow = models.find(model => !getSupportedThinkingLevels(model as Model<Api>).includes('low'))
+    if (narrow === undefined) throw new Error('no deepseek catalog model omits the low level')
+    expect(models.length).toBeGreaterThan(1)
+
+    const declare = (level: string): (() => unknown) => () => resolveProfiles({
+      deepseek: { models: [{ id: narrow.id, defaultReasoningEffort: level as never }] },
+    }, 'strict')
+    expect(declare('low')).toThrow(/defaultReasoningEffort "low" is not a level this model offers/)
+    expect(declare('high')).not.toThrow()
+  })
+
+  it('validates a modelOverrides default against the installed model\'s levels', () => {
+    const narrow = getBuiltinModels('deepseek')
+      .find(model => !getSupportedThinkingLevels(model as Model<Api>).includes('low'))
+    if (narrow === undefined) throw new Error('no deepseek catalog model omits the low level')
+    const declare = (level: string): (() => unknown) => () => resolveProfiles({
+      deepseek: { modelOverrides: { [narrow.id]: { defaultReasoningEffort: level as never } } },
+    }, 'strict')
+    expect(declare('low')).toThrow(/defaultReasoningEffort "low" is not a level this model offers/)
+    expect(declare('high')).not.toThrow()
+  })
+
+  it('rejects a default on a model declared not to reason', () => {
+    const declare = (level: string): (() => unknown) => () => resolveProfiles(declared([{
+      id: 'm', reasoningEfforts: false, defaultReasoningEffort: level as never,
+    }]))
+    expect(declare('high')).toThrow(/declares no reasoning, so it has no default effort to name/)
+    // Even Off: pi-ai reads it as "send nothing", which is the same request as
+    // naming no default, so recording it would look applied while doing nothing.
+    expect(declare('off')).toThrow(/declares no reasoning, so it has no default effort to name/)
+  })
+
+  it('accepts Off as a model default that pins this model to not thinking', () => {
+    const resolved = resolveProfiles(declared([{
+      id: 'm', reasoningEfforts: { off: null, high: 'high' }, defaultReasoningEffort: 'off',
+    }]))
+    expect(resolved.get('acme-gateway')?.configuredReasoning.get('m')).toBe('off')
+  })
+
+  it('refuses a valueless default key by name rather than reading it as a level', () => {
+    // A YAML `defaultReasoningEffort:` left without a value arrives as null,
+    // which the schema union passes through before any member schema runs.
+    expect(() => resolveProfiles(declared([{
+      id: 'm', reasoningEfforts: { off: null, high: 'high' }, defaultReasoningEffort: null as never,
+    }]))).toThrow(/sets defaultReasoningEffort with no value/)
   })
 })
 

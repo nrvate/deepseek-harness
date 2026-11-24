@@ -188,6 +188,44 @@ function describableReasoningLevel(
     : undefined
 }
 
+/** The level a model's requests default to when neither its entry nor its route names one. */
+const BALANCED_REASONING_LEVEL: ModelThinkingLevel = 'high'
+
+/**
+ * The level this model's configuration names before any caller does: its own
+ * entry's `defaultReasoningEffort`, otherwise the route's shared `reasoning`.
+ *
+ * The entry wins here rather than at catalog materialization so
+ * `configuredReasoning` stays the record of what an entry chose, never a copy
+ * of a route value nobody wrote per model.
+ * @param profile - the resolved route profile.
+ * @param modelId - the model whose entry is consulted.
+ * @returns the configured level, not yet checked against the model; undefined when neither names one.
+ */
+function selectedReasoningLevel(
+  profile: ResolvedPiAiProviderProfile,
+  modelId: string,
+): ModelThinkingLevel | undefined {
+  return profile.configuredReasoning.get(modelId) ?? profile.reasoning
+}
+
+/**
+ * The effort a request for this model defaults to, for DESCRIBING it: the
+ * configured level, or {@link BALANCED_REASONING_LEVEL} when none is
+ * configured. Either yields none when the model does not offer it; a
+ * configured level is never replaced by the balanced one, because the request
+ * path refuses it and the description must not promise a different default.
+ * @param profile - the resolved route profile.
+ * @param model - the resolved model descriptor, whose supported levels decide describability.
+ * @returns the level when this model supports it, otherwise undefined.
+ */
+function requestReasoningLevel(
+  profile: ResolvedPiAiProviderProfile,
+  model: Model<Api>,
+): ModelThinkingLevel | undefined {
+  return describableReasoningLevel(model, selectedReasoningLevel(profile, model.id) ?? BALANCED_REASONING_LEVEL)
+}
+
 /** Validate an explicit Harness/profile effort without invoking pi-ai's clamp. */
 function resolveReasoningLevel(
   model: Model<Api>,
@@ -376,7 +414,7 @@ export class PiAiAdapter extends LlmAdapter {
   private modelInfo(snapshot: PiAiSnapshot, provider: string, model: string): LlmResolvedModelInfo {
     const profile = this.profileOf(snapshot, provider)
     const resolvedModel = this.modelOf(snapshot, provider, model)
-    const defaultLevel = describableReasoningLevel(resolvedModel, profile.reasoning)
+    const defaultLevel = requestReasoningLevel(profile, resolvedModel)
     // Only a cap the deployment configured is a request default; the
     // catalog's `maxTokens` sizes the model and stops there.
     const configuredMaxTokens = profile.configuredMaxTokens.get(model)
@@ -428,9 +466,14 @@ export class PiAiAdapter extends LlmAdapter {
     const request = needsPlaceholder
       ? { ...options, tools: [ANTHROPIC_TOOL_UPDATE_PLACEHOLDER, ...tools] }
       : options
+    // A configured level this model cannot take is refused here. The balanced
+    // level applies only when nothing is configured, and only to a model that
+    // offers it.
     const reasoning = resolveReasoningLevel(
       model,
-      options.reasoningEffort ?? profile.reasoning,
+      options.reasoningEffort
+        ?? selectedReasoningLevel(profile, model.id)
+        ?? describableReasoningLevel(model, BALANCED_REASONING_LEVEL),
     )
     const apiKey = await this.config.resolveApiKey(options.provider, profile)
 

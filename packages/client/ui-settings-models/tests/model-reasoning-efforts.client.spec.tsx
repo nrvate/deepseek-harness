@@ -13,7 +13,10 @@ import { en } from '../src/client/locales.ts'
 afterEach(cleanup)
 
 const t = (key: keyof typeof en): string => en[key]
-const DEFAULTS = { off: null, low: 'low', medium: 'medium', high: 'high' }
+/** Every level the schema lists, each sending its own name — what switching reasoning on declares. */
+const DEFAULTS = {
+  off: null, minimal: 'minimal', low: 'low', medium: 'medium', high: 'high', xhigh: 'xhigh', max: 'max',
+}
 /** The levels llm-pi-ai's schema lists today. */
 const LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 
@@ -35,12 +38,96 @@ function renderGroup(initial: DeepSeekModelDraft, options: { disabled?: boolean;
 }
 
 const toggle = () => screen.getByRole('switch', { name: `${en.modelReasoning} 1` })
-const levels = () => screen.queryAllByRole<HTMLSelectElement>('combobox').map(select => select.value)
+// Level rows only: the default-effort selector is a combobox in the same
+// group, so it would otherwise be read as a level.
+const levels = () => screen.queryAllByRole<HTMLSelectElement>('combobox')
+  .filter(select => select.getAttribute('aria-label') !== en.modelDefaultEffort)
+  .map(select => select.value)
 const select = (row: number) => screen.getByRole<HTMLSelectElement>('combobox', { name: `${en.modelReasoningLevel} ${String(row)}` })
 const value = (level: string) => screen.getByRole<HTMLInputElement>('textbox', { name: `${level} ${en.modelReasoningValue}` })
 const remove = (level: string) => screen.getByRole<HTMLButtonElement>('button', { name: `${en.modelReasoningRemove} ${level}` })
 const add = () => screen.getByRole<HTMLButtonElement>('button', { name: en.modelReasoningAdd })
 const entriesOf = (efforts: unknown) => Object.entries(efforts as object)
+
+const defaultSelect = () => screen.getByRole<HTMLSelectElement>('combobox', { name: en.modelDefaultEffort })
+
+describe('ModelReasoningEfforts default effort', () => {
+  it('offers every declared level plus inheriting the route default', () => {
+    renderGroup({ id: 'gateway', reasoningEfforts: { off: null, low: 'low', high: 'high' } })
+    // Off is a real choice: it pins this model to not thinking while the route
+    // keeps its own level for the others.
+    expect([...defaultSelect().options].map(option => option.value)).toEqual(['', 'off', 'low', 'high'])
+    expect(defaultSelect().value).toBe('')
+  })
+
+  it('renders a stored off default faithfully and can choose it', () => {
+    const { writes } = renderGroup({ id: 'gateway', reasoningEfforts: { off: null, high: 'high' }, defaultReasoningEffort: 'off' })
+    expect(defaultSelect().value).toBe('off')
+    fireEvent.change(defaultSelect(), { target: { value: 'high' } })
+    expect(writes.at(-1)).toMatchObject({ defaultReasoningEffort: 'high' })
+  })
+
+  it('makes the default follow a renamed level instead of dropping it', () => {
+    const { writes } = renderGroup({ id: 'gateway', reasoningEfforts: { off: null, high: 'high' }, defaultReasoningEffort: 'high' })
+    fireEvent.change(select(2), { target: { value: 'medium' } })
+    expect(writes.at(-1)).toEqual({ id: 'gateway', reasoningEfforts: { off: null, medium: 'medium' }, defaultReasoningEffort: 'medium' })
+  })
+
+  it('keeps the default when a different row is renamed', () => {
+    const { writes } = renderGroup({ id: 'gateway', reasoningEfforts: { off: null, low: 'low', high: 'high' }, defaultReasoningEffort: 'high' })
+    fireEvent.change(select(2), { target: { value: 'medium' } })
+    expect(writes.at(-1)).toEqual({ id: 'gateway', reasoningEfforts: { off: null, medium: 'medium', high: 'high' }, defaultReasoningEffort: 'high' })
+  })
+
+  it('shows a stored default and writes the picked one', () => {
+    const { writes } = renderGroup({ id: 'gateway', reasoningEfforts: { off: null, low: 'low', high: 'high' }, defaultReasoningEffort: 'high' })
+    expect(defaultSelect().value).toBe('high')
+    fireEvent.change(defaultSelect(), { target: { value: 'low' } })
+    expect(writes.at(-1)).toEqual({ id: 'gateway', reasoningEfforts: { off: null, low: 'low', high: 'high' }, defaultReasoningEffort: 'low' })
+  })
+
+  it('drops the default when the field is set back to inherit', () => {
+    const { writes } = renderGroup({ id: 'gateway', reasoningEfforts: { off: null, low: 'low', high: 'high' }, defaultReasoningEffort: 'high' })
+    fireEvent.change(defaultSelect(), { target: { value: '' } })
+    expect(writes.at(-1)).toEqual({ id: 'gateway', reasoningEfforts: { off: null, low: 'low', high: 'high' } })
+    expect('defaultReasoningEffort' in writes.at(-1)!).toBe(false)
+  })
+
+  it('drops a default whose level was removed, since the adapter would refuse it', () => {
+    const { writes } = renderGroup({ id: 'gateway', reasoningEfforts: { off: null, low: 'low', high: 'high' }, defaultReasoningEffort: 'high' })
+    fireEvent.click(remove('high'))
+    expect(writes.at(-1)).toEqual({ id: 'gateway', reasoningEfforts: { off: null, low: 'low' } })
+  })
+
+  it('keeps a default whose level survives another level\'s removal', () => {
+    const { writes } = renderGroup({ id: 'gateway', reasoningEfforts: { off: null, low: 'low', high: 'high' }, defaultReasoningEffort: 'high' })
+    fireEvent.click(remove('low'))
+    expect(writes.at(-1)).toEqual({ id: 'gateway', reasoningEfforts: { off: null, high: 'high' }, defaultReasoningEffort: 'high' })
+  })
+
+  it('drops the default when reasoning is switched off', () => {
+    const { writes } = renderGroup({ id: 'gateway', reasoningEfforts: { off: null, high: 'high' }, defaultReasoningEffort: 'high' })
+    fireEvent.click(toggle())
+    expect(writes.at(-1)).toEqual({ id: 'gateway' })
+  })
+
+  it('hides the selector when the row declares no levels at all', () => {
+    renderGroup({ id: 'gateway', reasoningEfforts: { off: null } })
+    // Off alone is still a declared level, so Off stays choosable as the default.
+    expect(defaultSelect().value).toBe('')
+    expect([...defaultSelect().options].map(option => option.value)).toEqual(['', 'off'])
+  })
+
+  it('shows no selector for a model declared not to reason', () => {
+    renderGroup({ id: 'gateway', reasoningEfforts: false })
+    expect(screen.queryByRole('combobox', { name: en.modelDefaultEffort })).toBeNull()
+  })
+
+  it('disables the selector with the rest of the card', () => {
+    renderGroup({ id: 'gateway', reasoningEfforts: { off: null, high: 'high' } }, { disabled: true })
+    expect(defaultSelect().disabled).toBe(true)
+  })
+})
 
 describe('ModelReasoningEfforts', () => {
   it.each([
@@ -68,13 +155,13 @@ describe('ModelReasoningEfforts', () => {
     expect(screen.queryByText(en.modelReasoningValueRequired)).toBeNull()
   })
 
-  it('turns on with off, low, medium, and high while keeping other fields', () => {
+  it('turns on with every level while keeping other fields', () => {
     const { writes } = renderGroup({ id: 'chat', contextWindow: 131072, compat: { supportsDeveloperRole: false } })
     fireEvent.click(toggle())
     expect(writes.at(-1)).toEqual({
       id: 'chat', contextWindow: 131072, compat: { supportsDeveloperRole: false }, reasoningEfforts: DEFAULTS,
     })
-    expect(levels()).toEqual(['off', 'low', 'medium', 'high'])
+    expect(levels()).toEqual(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'])
   })
 
   it('removes the field when switched off and starts from the defaults when switched back on', () => {
@@ -174,11 +261,11 @@ describe('ModelReasoningEfforts', () => {
     expect(efforts()).toEqual({})
   })
 
-  it('offers the levels it is given, seeding only the defaults the list names', () => {
+  it('offers every level it is given, seeding all of them but any custom spelling', () => {
     const { efforts } = renderGroup({ id: 'gateway' }, { levels: ['off', 'low', 'high', 'ultra'] })
     fireEvent.click(toggle())
+    // `ultra` is not a level the schema names, so it is available to add but not seeded.
     expect(entriesOf(efforts())).toEqual([['off', null], ['low', 'low'], ['high', 'high']])
-    expect([...select(3).options].map(option => option.value)).toEqual(['high', 'ultra'])
     fireEvent.click(add())
     expect(levels()).toEqual(['off', 'low', 'high', 'ultra'])
     expect(add().disabled).toBe(true)
@@ -212,8 +299,9 @@ describe('levels a protocol fixes', () => {
   it('starts without off, offers only its levels, and fixes each value to the level name', () => {
     const { efforts } = renderGroup({ id: 'gemini' }, { levels: GEMINI, levelsOnly: true })
     fireEvent.click(toggle())
-    expect(efforts()).toEqual({ low: 'low', medium: 'medium', high: 'high' })
-    expect([...select(1).options].map(option => option.value)).toEqual(['minimal', 'low'])
+    // Every level the protocol accepts, each fixed to its own name.
+    expect(efforts()).toEqual({ minimal: 'minimal', low: 'low', medium: 'medium', high: 'high' })
+    expect(add().disabled).toBe(true)
     expect(value('low').disabled).toBe(true)
     expect(screen.queryByText(en.modelReasoningLevelsOnly)).toBeNull()
   })

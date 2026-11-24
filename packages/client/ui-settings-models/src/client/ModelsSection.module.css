@@ -796,6 +796,19 @@
   font-size: 13px;
 }
 
+/* The model's own request default, below the level rows it must name one of. */
+.modelDefaultEffort {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--dsw-alias-border-l3);
+}
+
+.modelDefaultEffort .selectInput {
+  max-width: none;
+}
+
 .modelEmpty {
   padding: 12px;
   border: 1px dashed var(--dsw-alias-border-l3);

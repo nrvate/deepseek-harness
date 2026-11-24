@@ -654,7 +654,8 @@ describe('provider profile lifecycle', () => {
     // than failing: resolveModelInfo builds the model catalog, and a catalog
     // that throws takes its whole provider out of every picker — one mis-set
     // field would hide every model on the route, including the ones that do
-    // support the level. The request path below is where it is refused.
+    // support the level. The request path below is where it is refused, and
+    // the balanced level is only what an unconfigured route falls back to.
     const unsupported = new Context()
     await unsupported.plugin(LlmRuntime)
     await unsupported.plugin(LlmPiAi, {
@@ -755,8 +756,93 @@ describe('provider profile lifecycle', () => {
     expect(server.requests).toHaveLength(1)
   })
 
-  it('dispatches the compat-switched dialect on a declared route', async () => {
+  it('defaults an unconfigured hand-declared model to the balanced level on the wire', async () => {
     vi.stubEnv('PI_TEST_KEY', 'test-key')
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: {
+        'acme-gateway': {
+          apiKeyEnv: 'PI_TEST_KEY',
+          api: 'openai-completions',
+          baseURL: `${server.url}/v1`,
+          models: [{ id: 'bare', contextWindow: 65_536, maxTokens: 4096 }],
+        },
+      },
+    })
+    // Neither the entry nor the route names a level: the balanced one applies
+    // rather than whatever the endpoint would pick for itself.
+    await expect(ctx.llm.resolveModelInfo('acme-gateway', 'bare')).resolves.toMatchObject({
+      reasoning: { defaultEffort: brandString<ReasoningEffortId>('high') },
+    })
+    await assemble(ctx, { provider: 'acme-gateway', model: 'bare', messages: [] })
+    expect(server.requests[0]).toMatchObject({ reasoning_effort: 'high' })
+  })
+
+  it('lets a caller name an effort over the balanced default', async () => {
+    vi.stubEnv('PI_TEST_KEY', 'test-key')
+    const server = await mockServer([{ events: textEvents }, { events: textEvents }])
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: {
+        'acme-gateway': {
+          apiKeyEnv: 'PI_TEST_KEY',
+          api: 'openai-completions',
+          baseURL: `${server.url}/v1`,
+          models: [{ id: 'bare', contextWindow: 65_536, maxTokens: 4096 }],
+        },
+      },
+    })
+    await assemble(ctx, {
+      provider: 'acme-gateway', model: 'bare', reasoningEffort: brandString<ReasoningEffortId>('low'), messages: [],
+    })
+    expect(server.requests[0]).toMatchObject({ reasoning_effort: 'low' })
+    // Off sends no effort rather than the word, which no endpoint takes as one.
+    await assemble(ctx, {
+      provider: 'acme-gateway', model: 'bare', reasoningEffort: brandString<ReasoningEffortId>('off'), messages: [],
+    })
+    expect(server.requests[1]).not.toHaveProperty('reasoning_effort')
+  })
+
+  it('sends a model’s own default level, which wins over the route level', async () => {
+    vi.stubEnv('PI_TEST_KEY', 'test-key')
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = new Context()
+    await ctx.plugin(LlmRuntime)
+    await ctx.plugin(LlmPiAi, {
+      providers: {
+        'acme-gateway': {
+          apiKeyEnv: 'PI_TEST_KEY',
+          api: 'openai-completions',
+          baseURL: `${server.url}/v1`,
+          // The route default applies to every model without an entry...
+          reasoning: 'high',
+          models: [
+            // ...while this one names its own, and the entry wins.
+            { id: 'acme-deep', contextWindow: 65_536, maxTokens: 4096, reasoningEfforts: { off: null, low: 'low', high: 'ultra' }, defaultReasoningEffort: 'low' },
+            { id: 'acme-quick', contextWindow: 65_536, maxTokens: 4096, reasoningEfforts: { off: null, low: 'quick', high: 'thorough' } },
+          ],
+        },
+      },
+    })
+
+    // `low`, not the route's `high`: the entry's value differs from the route's
+    // on purpose, so a build that ignored the entry could not pass this.
+    await expect(ctx.llm.resolveModelInfo('acme-gateway', 'acme-deep')).resolves.toMatchObject({
+      reasoning: { defaultEffort: brandString<ReasoningEffortId>('low') },
+    })
+    // A caller naming no effort gets the entry's level, spelled as declared.
+    await assemble(ctx, { provider: 'acme-gateway', model: 'acme-deep', messages: [] })
+    expect(server.requests[0]).toMatchObject({ reasoning_effort: 'low' })
+
+    // The sibling declares no default, so it keeps the route level.
+    await assemble(ctx, { provider: 'acme-gateway', model: 'acme-quick', messages: [] })
+    expect(server.requests[1]).toMatchObject({ reasoning_effort: 'thorough' })
+  })
+
+  it('dispatches the compat-switched dialect on a declared route', async () => {
     const server = await mockServer([{ events: textEvents }, { events: textEvents }])
     const ctx = new Context()
     await ctx.plugin(LlmRuntime)

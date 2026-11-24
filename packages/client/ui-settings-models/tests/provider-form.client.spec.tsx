@@ -1700,10 +1700,14 @@ describe('hand-declared providers', () => {
     fireEvent.click(screen.getByRole('button', { name: `${en.modelAdvanced} 1` }))
     fireEvent.click(screen.getByRole('switch', { name: `${en.modelReasoning} 1` }))
 
-    const level = screen.getByRole<HTMLSelectElement>('combobox', { name: `${en.modelReasoningLevel} 1` })
-    expect(level.value).toBe('low')
-    expect([...level.options].map(option => option.value)).toEqual(['minimal', 'low'])
-    expect(screen.getByRole<HTMLInputElement>('textbox', { name: `low ${en.modelReasoningValue}` }).disabled).toBe(true)
+    // Every level the protocol accepts is declared on switching on, minimal
+    // first; each row then offers its own level plus the ones no other row uses.
+    const declared = ['1', '2', '3', '4'].map(row => screen.getByRole<HTMLSelectElement>(
+      'combobox', { name: `${en.modelReasoningLevel} ${row}` }).value)
+    expect(declared).toEqual(['minimal', 'low', 'medium', 'high'])
+    const first = screen.getByRole<HTMLSelectElement>('combobox', { name: `${en.modelReasoningLevel} 1` })
+    expect([...first.options].map(option => option.value)).toEqual(['minimal'])
+    expect(screen.getByRole<HTMLInputElement>('textbox', { name: `minimal ${en.modelReasoningValue}` }).disabled).toBe(true)
   })
 
   it('refuses an unusable key on the field and blocks creation', () => {

@@ -163,7 +163,7 @@ export interface PiAiProviderProfile {
   defaultInput?: PiAiModality[]
   /** Provider request headers, validated against Fetch when the profile resolves; Harness attribution wins reserved names. */
   headers?: Record<string, string>
-  /** Provider-neutral pi-ai reasoning level. */
+  /** Provider-neutral pi-ai reasoning level; a model entry's `defaultReasoningEffort` wins over it for that model. */
   reasoning?: ModelThinkingLevel
   /** Token budgets used by reasoning providers that support them. */
   thinkingBudgets?: ThinkingBudgets
@@ -245,6 +245,11 @@ export interface ResolvedPiAiProviderProfile
    * own, so a catalog capability must not appear here.
    */
   configuredMaxTokens: ReadonlyMap<string, number>
+  /**
+   * Reasoning levels each model's entry named as its own default, by model id.
+   * A model absent here inherits {@link PiAiProviderProfile.reasoning}.
+   */
+  configuredReasoning: ReadonlyMap<string, ModelThinkingLevel>
 }
 
 /** Plugin configuration: the provider routes this instance owns. */
@@ -341,6 +346,7 @@ const modelFields = {
   // `{}`, and absent must stay distinguishable — it means "inherit the
   // installed catalog's capability", while `false` disables reasoning.
   reasoningEfforts: z.union([z.const(false), reasoningEfforts]),
+  defaultReasoningEffort: z.union(THINKING_LEVELS),
   compat: compatProfile,
 }
 
@@ -542,6 +548,7 @@ export function resolveProfiles(
       ...rest.headers === undefined ? {} : { headers: { ...rest.headers } },
       ...rest.thinkingBudgets === undefined ? {} : { thinkingBudgets: { ...rest.thinkingBudgets } },
       configuredMaxTokens: catalog?.configuredMaxTokens ?? new Map(),
+      configuredReasoning: catalog?.configuredReasoning ?? new Map(),
       modelErrors: catalog?.modelErrors ?? new Map(),
       ...piProvider === undefined ? {} : { piProvider },
       ...catalogError === undefined ? {} : { catalogError },

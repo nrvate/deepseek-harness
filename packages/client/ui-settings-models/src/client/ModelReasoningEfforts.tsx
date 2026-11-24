@@ -11,8 +11,12 @@ import styles from './ModelsSection.module.css'
 /** Declared levels in stored order, each with the value stored for it, whatever a hand edit left there. */
 type Entries = readonly (readonly [string, unknown])[]
 
-/** Levels a model offers when the switch is turned on, where the schema lists them: Off plus the common OpenAI-compatible trio. */
-const INITIAL_LEVELS: readonly string[] = ['off', 'low', 'medium', 'high']
+/**
+ * Levels a model starts with when the switch is turned on: every level the
+ * schema names, which is what a model declaring no `reasoningEfforts`
+ * resolves to. A protocol accepting only some of them narrows this.
+ */
+const INITIAL_LEVELS: readonly string[] = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 
 /** The wire value a level sends unless its row says otherwise; `null` is the Off entry that sends nothing. */
 function defaultValue(level: string): string | null {
@@ -58,6 +62,36 @@ function withEfforts(model: DeepSeekModelDraft, entries: Entries | undefined): D
   }
   next['reasoningEfforts'] = Object.fromEntries(entries)
   return next
+}
+
+/**
+ * Replace a row's own default level, preserving every other field.
+ *
+ * Used by the default selector only, and it also guards the reverse direction:
+ * levels removed from `reasoningEfforts` must not leave a default behind, since
+ * the adapter refuses a default naming a level the model no longer offers.
+ * @param model - model row as drafted.
+ * @param level - the level requests should default to, or `undefined` to inherit the route's.
+ * @returns the replacement row.
+ */
+function withDefaultEffort(model: DeepSeekModelDraft, level: string | undefined): DeepSeekModelDraft {
+  const next = { ...model }
+  if (level === undefined) {
+    Reflect.deleteProperty(next, 'defaultReasoningEffort')
+  } else {
+    next['defaultReasoningEffort'] = level
+  }
+  return next
+}
+
+/**
+ * The row's own default level, whatever a hand edit left there.
+ * @param model - model row as drafted.
+ * @returns the stored level, or `undefined` when the row inherits the route's.
+ */
+function readDefaultEffort(model: DeepSeekModelDraft): string | undefined {
+  const value = model['defaultReasoningEffort']
+  return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
 /** A reasoning-level failure the Models cards name by row. */
@@ -136,8 +170,29 @@ export function ModelReasoningEfforts(props: ModelReasoningEffortsProps): ReactN
   const [typing, setTyping] = useState<{ level: string; text: string } | undefined>(undefined)
   const label = `${t('modelReasoning')} ${String(position)}`
   const used = entries?.map(([level]) => level) ?? []
+  const defaultEffort = readDefaultEffort(model)
 
-  const write = (next: Entries | undefined): void => { onChange(withEfforts(model, next)) }
+  /**
+   * Write new levels together with the default they have to stay consistent
+   * with: a default naming a level the row no longer declares is refused at
+   * load, so it is dropped rather than written beside a declaration that
+   * cannot carry it.
+   * @param next - the levels to store in row order.
+   * @param renamedTo - the level a renamed default row now declares, when this
+   *   write renames the row the default names.
+   */
+  const write = (next: Entries | undefined, renamedTo?: string): void => {
+    const kept = next ?? []
+    const selected = readDefaultEffort(model)
+    const follows = renamedTo !== undefined && selected !== undefined
+    const survives = selected !== undefined && kept.some(([level]) => level === selected)
+    const withLevels = withEfforts(model, next)
+    if (follows) {
+      onChange(withDefaultEffort(withLevels, renamedTo))
+      return
+    }
+    onChange(selected !== undefined && !survives ? withDefaultEffort(withLevels, undefined) : withLevels)
+  }
   const replaceAt = (current: Entries, index: number, entry: readonly [string, unknown]): Entries =>
     current.map((existing, at) => at === index ? entry : existing)
 
@@ -146,7 +201,10 @@ export function ModelReasoningEfforts(props: ModelReasoningEffortsProps): ReactN
     // still spelled as its old level, or one crossing to or from Off, resets.
     // A protocol accepting only its offered levels sends each under its own name, so nothing carries.
     const carried = !levelsOnly && typeof wire === 'string' && wire.length > 0 && wire !== from && from !== 'off' && to !== 'off'
-    write(replaceAt(current, index, [to, carried ? wire : defaultValue(to)]))
+    // Renaming the row that holds the default renames the default with it: the
+    // user moved a level, not removed one, and keeping the old name would both
+    // drop their choice and leave the route's level to apply instead.
+    write(replaceAt(current, index, [to, carried ? wire : defaultValue(to)]), defaultEffort === from ? to : undefined)
   }
 
   const addLevel = (current: Entries): void => {
@@ -175,7 +233,11 @@ export function ModelReasoningEfforts(props: ModelReasoningEffortsProps): ReactN
     ...levels.includes(level) ? [] : [level],
     ...levels.filter(choice => choice === level || !used.includes(choice)),
   ]
-  const initialEntries = INITIAL_LEVELS.filter(level => levels.includes(level)).map(level => [level, defaultValue(level)] as const)
+  // Seeded from the levels the schema names, so a protocol's own accepted set
+  // narrows it while a hand-written spelling stays available to add by hand.
+  const initialEntries = levels
+    .filter(level => INITIAL_LEVELS.includes(level))
+    .map(level => [level, defaultValue(level)] as const)
 
   const refused = entries?.some(([level, wire]) => !acceptedValue(level, wire)) === true
   const missingLevel = entries !== undefined && !used.some(level => level !== 'off')
@@ -265,6 +327,36 @@ export function ModelReasoningEfforts(props: ModelReasoningEffortsProps): ReactN
               <IconPlusOutlineRegular size={14} />
               {t('modelReasoningAdd')}
             </button>
+            {entries.length > 0
+              ? (
+                // Not a `label`: it would label the help button, its first control, instead of the select.
+                <div className={styles['modelDefaultEffort']}>
+                  <span className={`${styles['modelFieldLabel']} ${styles['modelReasoningLabel']}`}>
+                    {t('modelDefaultEffort')}
+                    <Tooltip label={t('modelDefaultEffortHelpText')} side="right" delayMs={0} focusDelayMs={0} portal openOnClick>
+                      <button type="button" className={styles['helpButton']} aria-label={t('modelDefaultEffortHelp')}>?</button>
+                    </Tooltip>
+                  </span>
+                  <select
+                    className={`${styles['input']} ${styles['selectInput']}`}
+                    value={defaultEffort === undefined ? '' : defaultEffort}
+                    aria-label={t('modelDefaultEffort')}
+                    disabled={disabled}
+                    onChange={(event) => { onChange(withDefaultEffort(model, event.target.value === '' ? undefined : event.target.value)) }}
+                  >
+                    <option value="">{t('modelDefaultEffortInherit')}</option>
+                    {/* Every declared level, Off included: only levels this
+                        model offers, because the adapter refuses a default it
+                        cannot take at load. Off is a real choice here — it pins
+                        this model to not thinking while the route keeps its own
+                        level for the others. */}
+                    {entries.map(([level]) => (
+                      <option key={level} value={level}>{level}</option>
+                    ))}
+                  </select>
+                </div>
+              )
+              : null}
           </>
         )}
     </div>

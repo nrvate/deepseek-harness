@@ -359,6 +359,8 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
             inputLoading={catalogProvider !== undefined && catalog === undefined}
             reasoningLevels={props.reasoningLevels}
             reasoningLevelsOnly={props.reasoningLevelsOnly}
+            // Until the installed catalog answers, a catalog route's row is read as described, so the switch stores nothing.
+            reasoningInherits={catalogProvider !== undefined && (catalog === undefined || inputDefaults.has(textOf(model, 'id')))}
             expanded={expanded}
             disabled={disabled}
             t={t}

@@ -33,6 +33,8 @@ interface ModelRowProps {
   reasoningLevels?: readonly string[] | undefined
   /** Whether the route's protocol accepts only {@link reasoningLevels}, each sent under its own name. */
   reasoningLevelsOnly?: boolean | undefined
+  /** Whether the installed catalog describes the model, so an absent `reasoningEfforts` keeps the catalog's levels. */
+  reasoningInherits?: boolean | undefined
   expanded: boolean
   disabled: boolean
   t: (key: ModelsKey) => string
@@ -177,6 +179,7 @@ export function ModelRow(props: ModelRowProps): ReactNode {
                 ? (
                   <ModelReasoningEfforts
                     model={model} levels={props.reasoningLevels} levelsOnly={props.reasoningLevelsOnly === true}
+                    inherits={props.reasoningInherits === true}
                     position={position} disabled={disabled} t={t} onChange={props.onChange}
                   />
                 )

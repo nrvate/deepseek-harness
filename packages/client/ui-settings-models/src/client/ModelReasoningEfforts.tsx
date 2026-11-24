@@ -50,17 +50,17 @@ function readEfforts(model: DeepSeekModelDraft): Entries | undefined {
 /**
  * Replace a row's declared levels, preserving every other field.
  * @param model - model row as drafted.
- * @param entries - the levels to write in row order, or `undefined` to remove the field.
+ * @param entries - the levels to write in row order, `undefined` to remove the field, or `false` to declare a non-reasoning model.
  * @returns the replacement row.
  */
-function withEfforts(model: DeepSeekModelDraft, entries: Entries | undefined): DeepSeekModelDraft {
+function withEfforts(model: DeepSeekModelDraft, entries: Entries | false | undefined): DeepSeekModelDraft {
   const next = { ...model }
   if (entries === undefined) {
     // Absent keeps the installed catalog's levels; a model the catalog does not describe then offers every level.
     Reflect.deleteProperty(next, 'reasoningEfforts')
     return next
   }
-  next['reasoningEfforts'] = Object.fromEntries(entries)
+  next['reasoningEfforts'] = entries === false ? false : Object.fromEntries(entries)
   return next
 }
 
@@ -143,6 +143,13 @@ interface ModelReasoningEffortsProps {
   levels: readonly string[]
   /** Whether the route's protocol accepts only {@link levels}, each sent under its own name. */
   levelsOnly: boolean
+  /**
+   * Whether the installed catalog describes this model, so an absent
+   * `reasoningEfforts` keeps the catalog's levels. A model it does not
+   * describe reasons at every level while the field is absent, and only
+   * `false` declares it non-reasoning.
+   */
+  inherits: boolean
   /** One-based row position for accessible names. */
   position: number
   /** Prevent changes while read-only or saving. */
@@ -161,8 +168,16 @@ interface ModelReasoningEffortsProps {
  * @returns the reasoning-level group.
  */
 export function ModelReasoningEfforts(props: ModelReasoningEffortsProps): ReactNode {
-  const { model, levels, levelsOnly, position, disabled, t, onChange } = props
-  const entries = readEfforts(model)
+  const { model, levels, levelsOnly, inherits, position, disabled, t, onChange } = props
+  // Seeded from the levels the schema names, so a protocol's own accepted set
+  // narrows it while a hand-written spelling stays available to add by hand.
+  const initialEntries: Entries = levels
+    .filter(level => INITIAL_LEVELS.includes(level))
+    .map(level => [level, defaultValue(level)] as const)
+  // A model the catalog does not describe reasons while the field is absent,
+  // so the switch reads on and shows the rows it would be seeded with; they
+  // are stored once a row is edited.
+  const entries = readEfforts(model) ?? (!inherits && model['reasoningEfforts'] === undefined ? initialEntries : undefined)
   // Only the focused field keeps its own text, so a field cleared while typing
   // stays empty although its level's name is stored. Leaving the field drops
   // it, and deleting a model, resetting the list, or folding these options all
@@ -181,8 +196,8 @@ export function ModelReasoningEfforts(props: ModelReasoningEffortsProps): ReactN
    * @param renamedTo - the level a renamed default row now declares, when this
    *   write renames the row the default names.
    */
-  const write = (next: Entries | undefined, renamedTo?: string): void => {
-    const kept = next ?? []
+  const write = (next: Entries | false | undefined, renamedTo?: string): void => {
+    const kept = next === undefined || next === false ? [] : next
     const selected = readDefaultEffort(model)
     const follows = renamedTo !== undefined && selected !== undefined
     const survives = selected !== undefined && kept.some(([level]) => level === selected)
@@ -233,12 +248,6 @@ export function ModelReasoningEfforts(props: ModelReasoningEffortsProps): ReactN
     ...levels.includes(level) ? [] : [level],
     ...levels.filter(choice => choice === level || !used.includes(choice)),
   ]
-  // Seeded from the levels the schema names, so a protocol's own accepted set
-  // narrows it while a hand-written spelling stays available to add by hand.
-  const initialEntries = levels
-    .filter(level => INITIAL_LEVELS.includes(level))
-    .map(level => [level, defaultValue(level)] as const)
-
   const refused = entries?.some(([level, wire]) => !acceptedValue(level, wire)) === true
   const missingLevel = entries !== undefined && !used.some(level => level !== 'off')
   const outside = levelsOnly && entries?.some(([level, wire]) => outsideLevels(levels, level, wire)) === true
@@ -256,7 +265,8 @@ export function ModelReasoningEfforts(props: ModelReasoningEffortsProps): ReactN
           checked={entries !== undefined}
           label={label}
           disabled={disabled}
-          onChange={(on) => { write(on ? initialEntries : undefined) }}
+          // Switching off removes the field where that keeps the catalog's levels; elsewhere only `false` stops reasoning.
+          onChange={(on) => { write(on ? initialEntries : inherits ? undefined : false) }}
         />
       </div>
       {entries === undefined

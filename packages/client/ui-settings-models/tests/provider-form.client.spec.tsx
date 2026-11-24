@@ -1719,10 +1719,11 @@ describe('hand-declared providers', () => {
     fireEvent.change(screen.getByLabelText(en.customApi), { target: { value: 'google-generative-ai' } })
     fireEvent.click(screen.getByRole('button', { name: en.addModel }))
     fireEvent.click(screen.getByRole('button', { name: `${en.modelAdvanced} 1` }))
-    fireEvent.click(screen.getByRole('switch', { name: `${en.modelReasoning} 1` }))
 
-    // Every level the protocol accepts is declared on switching on, minimal
-    // first; each row then offers its own level plus the ones no other row uses.
+    // A hand-declared model reasons until declared otherwise, so the switch is
+    // already on with every level the protocol accepts, minimal first; each
+    // row then offers its own level plus the ones no other row uses.
+    expect(screen.getByRole('switch', { name: `${en.modelReasoning} 1` }).getAttribute('aria-checked')).toBe('true')
     const declared = ['1', '2', '3', '4'].map(row => screen.getByRole<HTMLSelectElement>(
       'combobox', { name: `${en.modelReasoningLevel} ${row}` }).value)
     expect(declared).toEqual(['minimal', 'low', 'medium', 'high'])

@@ -21,13 +21,17 @@ const DEFAULTS = {
 const LEVELS = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']
 
 /** Render the controlled group over local state, reporting every write. */
-function renderGroup(initial: DeepSeekModelDraft, options: { disabled?: boolean; levels?: readonly string[]; levelsOnly?: boolean } = {}) {
+function renderGroup(
+  initial: DeepSeekModelDraft,
+  options: { disabled?: boolean; levels?: readonly string[]; levelsOnly?: boolean; inherits?: boolean } = {},
+) {
   const writes: DeepSeekModelDraft[] = []
   function Harness() {
     const [model, setModel] = useState(initial)
     return (
       <ModelReasoningEfforts
         model={model} levels={options.levels ?? LEVELS} levelsOnly={options.levelsOnly ?? false}
+        inherits={options.inherits ?? true}
         position={1} disabled={options.disabled ?? false} t={t}
         onChange={(next) => { writes.push(next); setModel(next) }}
       />
@@ -50,6 +54,51 @@ const add = () => screen.getByRole<HTMLButtonElement>('button', { name: en.model
 const entriesOf = (efforts: unknown) => Object.entries(efforts as object)
 
 const defaultSelect = () => screen.getByRole<HTMLSelectElement>('combobox', { name: en.modelDefaultEffort })
+
+describe('ModelReasoningEfforts on a model the installed catalog does not describe', () => {
+  const undescribed = { inherits: false }
+
+  it('reads an absent field as on, showing the levels the model reasons at without storing them', () => {
+    const { writes } = renderGroup({ id: 'gateway' }, undescribed)
+    expect(toggle().getAttribute('aria-checked')).toBe('true')
+    expect(levels()).toEqual(LEVELS)
+    expect(writes).toEqual([])
+  })
+
+  it('declares the model non-reasoning when switched off, dropping its default', () => {
+    const { writes } = renderGroup({ id: 'gateway', name: 'Gateway', defaultReasoningEffort: 'low' }, undescribed)
+    fireEvent.click(toggle())
+    expect(writes.at(-1)).toEqual({ id: 'gateway', name: 'Gateway', reasoningEfforts: false })
+    expect(toggle().getAttribute('aria-checked')).toBe('false')
+    expect(levels()).toEqual([])
+  })
+
+  it('switches off stored levels the same way, and back on with every level', () => {
+    const { writes, efforts } = renderGroup({ id: 'gateway', reasoningEfforts: { off: null, high: 'high' } }, undescribed)
+    fireEvent.click(toggle())
+    expect(efforts()).toBe(false)
+    fireEvent.click(toggle())
+    expect(writes.at(-1)).toEqual({ id: 'gateway', reasoningEfforts: DEFAULTS })
+  })
+
+  it('stores the shown levels once one is removed', () => {
+    const { efforts } = renderGroup({ id: 'gateway' }, undescribed)
+    fireEvent.click(remove('max'))
+    expect(entriesOf(efforts()).map(([level]) => level)).toEqual(LEVELS.filter(level => level !== 'max'))
+  })
+
+  it('picks a default effort without storing the shown levels', () => {
+    const { writes } = renderGroup({ id: 'gateway' }, undescribed)
+    fireEvent.change(defaultSelect(), { target: { value: 'low' } })
+    expect(writes.at(-1)).toEqual({ id: 'gateway', defaultReasoningEffort: 'low' })
+  })
+
+  it('removes the field on a model the catalog describes, which keeps the catalog levels', () => {
+    const { writes } = renderGroup({ id: 'gpt-5', reasoningEfforts: { off: null, high: 'high' } })
+    fireEvent.click(toggle())
+    expect(writes.at(-1)).toEqual({ id: 'gpt-5' })
+  })
+})
 
 describe('ModelReasoningEfforts default effort', () => {
   it('offers every declared level plus inheriting the route default', () => {
@@ -392,6 +441,10 @@ describe('reasoning levels in the model list', () => {
   it('edits a hand-declared route row', () => {
     const { writes } = renderList([{ id: 'my-reasoner' }])
     fireEvent.click(screen.getByRole('button', { name: `${en.modelAdvanced} 1` }))
+    // No installed catalog describes the model, so it reasons until declared otherwise.
+    expect(toggle().getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(toggle())
+    expect(writes.at(-1)).toEqual([{ id: 'my-reasoner', reasoningEfforts: false }])
     fireEvent.click(toggle())
     expect(writes.at(-1)).toEqual([{ id: 'my-reasoner', reasoningEfforts: DEFAULTS }])
   })
@@ -402,15 +455,15 @@ describe('reasoning levels in the model list', () => {
     fireEvent.click(screen.getByRole('button', { name: `${en.modelAdvanced} 1` }))
     fireEvent.click(screen.getByRole('button', { name: `${en.modelAdvanced} 2` }))
     const first = within(screen.getByRole('group', { name: `${en.modelReasoning} 1` }))
-    fireEvent.click(first.getByRole('switch'))
     fireEvent.click(first.getByRole('button', { name: `${en.modelReasoningRemove} medium` }))
     fireEvent.change(first.getByRole('textbox', { name: `high ${en.modelReasoningValue}` }), { target: { value: 'deep' } })
-    fireEvent.click(first.getByRole('switch'))
     fireEvent.click(screen.getByRole('button', { name: `${en.removeModel} 1` }))
     expect(writes.at(-1)).toEqual([{ id: 'b' }])
 
-    fireEvent.click(within(screen.getByRole('group', { name: `${en.modelReasoning} 1` })).getByRole('switch'))
-    expect(writes.at(-1)).toEqual([{ id: 'b', reasoningEfforts: DEFAULTS }])
+    const survivor = within(screen.getByRole('group', { name: `${en.modelReasoning} 1` }))
+    fireEvent.click(survivor.getByRole('button', { name: `${en.modelReasoningRemove} max` }))
+    const { max: _max, ...withoutMax } = DEFAULTS
+    expect(writes.at(-1)).toEqual([{ id: 'b', reasoningEfforts: withoutMax }])
   })
 
   it('edits a catalog route row', () => {

@@ -187,8 +187,8 @@ describe('SandboxPolicyService', () => {
 
   it('disposes the service and context contribution from a child fiber (HMR safety)', async () => {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
     await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SystemPrompt)
     const fiber = await ctx.plugin(SandboxPolicyService, { protectedPaths: [] })
     expect(ctx.sandboxPolicy).toBeDefined()
     expect(await policyContext(ctx, session('sess-hmr'))).toContain('read-only')
@@ -279,8 +279,8 @@ describe('session writable-root registrations', () => {
 describe('sandbox:policy request context', () => {
   async function promptMounted(config: { mode?: 'read-only' | 'workspace-write' | 'danger-full-access'; workspaceRoot?: string; additionalWritableRoots?: string[] } = {}): Promise<Context> {
     const ctx = new Context()
-    await ctx.plugin(SystemPrompt)
     await ctx.plugin(SessionProjectionRegistry)
+    await ctx.plugin(SystemPrompt)
     await ctx.plugin(SandboxPolicyService, { protectedPaths: [], ...config })
     return ctx
   }

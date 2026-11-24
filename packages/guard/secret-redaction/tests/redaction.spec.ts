@@ -2,6 +2,7 @@
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineTool, type PostToolDecision } from '@deepseek-ai/dsh-tools'
 import { createUserMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
@@ -82,6 +83,7 @@ describe('redactBlocks', () => {
 async function bench(config: Partial<Redaction.Config> = {}, provider?: object) {
   const ctx = new Context()
   roots.push(ctx)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   if (provider !== undefined) ctx.provide('credentials', provider as never)

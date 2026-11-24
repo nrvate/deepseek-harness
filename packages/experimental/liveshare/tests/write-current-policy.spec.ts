@@ -85,10 +85,10 @@ beforeEach(async ({ onTestFinished }) => {
   mkdirSync(deploymentRoot)
   writeFileSync(join(root, 'file.txt'), 'original\n')
   provideWorkingDirectoryFixture(ctx, root)
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(NativeToolExecutor)
-  await ctx.plugin(SessionProjectionRegistry)
   // No protected paths: the assertions below name the whole policy a write carries.
   await ctx.plugin(SandboxPolicyService, { mode: 'workspace-write', workspaceRoot: deploymentRoot, protectedPaths: [] })
   await ctx.plugin(SandboxedFileSystem, { cwd: deploymentRoot })

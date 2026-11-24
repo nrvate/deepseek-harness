@@ -14,7 +14,7 @@ import { closeMockServers, mockServer } from './mock-server.ts'
 
 const baseline: ToolSchema = { name: 'read', description: 'Read a file', parameters: { type: 'object', properties: {} } }
 const added: ToolSchema = { name: 'search', description: 'Search files', parameters: { type: 'object', properties: {} } }
-const system = (text: string) => createMessage({ role: 'system', source: { kind: 'system-prompt' }, content: [{ type: 'text', text }] })
+const system = (...texts: string[]) => createMessage({ role: 'system', source: { kind: 'system-prompt' }, content: texts.map(text => ({ type: 'text', text })) })
 const user = (text: string) => createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text }] })
 
 function model(api: Api, compat?: Model<Api>['compat']): Model<Api> {
@@ -153,7 +153,7 @@ describe('serialized conversation updates', () => {
     expect(request).not.toHaveProperty('system')
     if (provider === 'anthropic') {
       expect(request).toMatchObject({ messages: [
-        { role: 'user', content: 'first' },
+        { role: 'user', content: [{ type: 'text', text: 'first' }] },
         { role: 'system', content: [{ type: 'text', text: 'later prompt' }] },
       ] })
     } else {
@@ -174,10 +174,10 @@ describe('serialized conversation updates', () => {
     expect(requests[0]).toMatchObject({
       system: [{ type: 'text', text: 'initial' }],
       messages: [
-        { role: 'user', content: 'first' }, { role: 'user', content: 'next' },
+        { role: 'user', content: [{ type: 'text', text: 'first' }] }, { role: 'user', content: [{ type: 'text', text: 'next' }] },
         { role: 'system', content: [{ type: 'text', text: 'full updated prompt' }] },
         { role: 'system', content: [
-          { type: 'text', text: 'Instruction one.\nInstruction two.' },
+          { type: 'text', text: 'Instruction one.\n\nInstruction two.' },
           { type: 'tool_addition', tool: { type: 'tool_definition', definition: { name: 'search', description: added.description, input_schema: added.parameters } } },
         ] },
       ],
@@ -194,9 +194,9 @@ describe('serialized conversation updates', () => {
     expect(requests).toHaveLength(1)
     expect(requests[0]).toMatchObject({
       messages: [
-        { role: 'user', content: 'first' },
+        { role: 'user', content: [{ type: 'text', text: 'first' }] },
         { role: 'system', content: [
-          { type: 'text', text: 'Instruction one.\nInstruction two.' },
+          { type: 'text', text: 'Instruction one.\n\nInstruction two.' },
           { type: 'tool_addition', tool: { type: 'tool_definition', definition: { name: 'search', description: added.description, input_schema: added.parameters } } },
         ] },
       ],
@@ -212,16 +212,16 @@ describe('serialized conversation updates', () => {
     { provider: 'openai', modelId: 'gpt-5.4', field: 'input', role: 'developer' },
   ])('preserves update placement through $provider', async ({ provider, modelId, field, role }) => {
     const { requests } = await send(provider, modelId, {
-      messages: [system('initial'), user('first'),
+      messages: [system('initial', 'rule'), user('first'),
         createAssistantMessage({ source: { provider, model: modelId }, content: [{ type: 'text', text: 'answer' }] }),
-        system('updated'), user('next')],
+        system('updated', 'rule'), user('next')],
     })
     expect(requests).toHaveLength(1)
     expect(requests[0]).toHaveProperty(field, [
-      expect.objectContaining({ content: 'initial' }),
+      expect.objectContaining({ content: 'initial\n\nrule' }),
       expect.objectContaining({ role: 'user' }),
       expect.objectContaining({ role: 'assistant' }),
-      expect.objectContaining({ role, content: 'updated' }),
+      expect.objectContaining({ role, content: 'updated\n\nrule' }),
       expect.objectContaining({ role: 'user' }),
     ])
   })
@@ -230,9 +230,9 @@ describe('serialized conversation updates', () => {
     const update = addition()
     const { requests } = await send('openai', 'gpt-4.1', {
       system: 'direct',
-      messages: [system('initial'), user('first'), system('current'), user('next'), update,
+      messages: [system('initial'), user('first'), system('current', 'rule'), user('next'), update,
         createAssistantMessage({ source: { provider: 'openai', model: 'gpt-4.1' }, content: [{ type: 'text', text: 'answer' }] }),
-        system('current'), system('')], tools: [added],
+        system('current', 'rule'), system('')], tools: [added],
       toolHistory: { tools: [baseline], updates: [{ messageId: update.id, additions: [added] }] },
     })
     expect(requests).toHaveLength(1)
@@ -240,10 +240,10 @@ describe('serialized conversation updates', () => {
     expect(requests[0]).toHaveProperty('input', [
       { role: 'system', content: 'direct\n\ninitial' },
       expect.objectContaining({ role: 'user' }),
-      { role: 'user', content: [{ type: 'input_text', text: '<system-reminder>\ncurrent\n</system-reminder>' }] },
+      { role: 'user', content: [{ type: 'input_text', text: '<system-reminder>\ncurrent\n\nrule\n</system-reminder>' }] },
       expect.objectContaining({ role: 'user' }),
       expect.objectContaining({ role: 'assistant' }),
-      { role: 'user', content: [{ type: 'input_text', text: '<system-reminder>\ncurrent\n</system-reminder>' }] },
+      { role: 'user', content: [{ type: 'input_text', text: '<system-reminder>\ncurrent\n\nrule\n</system-reminder>' }] },
     ])
     expect(JSON.stringify(requests[0])).not.toContain('Instruction one.')
     expect(JSON.stringify(requests[0])).not.toContain('additional_tools')
@@ -261,9 +261,9 @@ describe('historical tool availability on the wire', () => {
     expect(requests[0]).toMatchObject({
       tools: [{ type: 'function', function: { name: 'read' } }],
       messages: [
-        { role: 'user', content: 'first' },
+        { role: 'user', content: [{ type: 'text', text: 'first' }] },
         { role: 'system', tools: [{ type: 'function', function: { name: 'search', description: added.description, parameters: added.parameters } }] },
-        { role: 'system', content: 'Instruction one.\nInstruction two.' },
+        { role: 'system', content: 'Instruction one.\n\nInstruction two.' },
       ],
     })
   })
@@ -286,7 +286,7 @@ describe('historical tool availability on the wire', () => {
         { type: 'tool_search_output', execution: 'client', tools: [
           { type: 'function', name: 'search', description: added.description, parameters: added.parameters, defer_loading: true },
         ] },
-        { role: 'developer', content: 'Instruction one.\nInstruction two.' },
+        { role: 'developer', content: 'Instruction one.\n\nInstruction two.' },
       ],
     })
   })
@@ -302,7 +302,7 @@ describe('historical tool availability on the wire', () => {
     })
     expect(requests).toHaveLength(1)
     expect(requests[0]).toMatchObject({ messages: [
-      { role: 'user', content: 'first' }, { role: 'user', content: 'restore' },
+      { role: 'user', content: [{ type: 'text', text: 'first' }] }, { role: 'user', content: [{ type: 'text', text: 'restore' }] },
       { role: 'system', content: [{ type: 'tool_removal', tool: { type: 'tool_reference', name: 'search' } }] },
       { role: 'system', content: [{ type: 'tool_addition', tool: { type: 'tool_definition', definition: { name: 'search', description: added.description, input_schema: added.parameters } } }] },
     ] })
@@ -321,7 +321,7 @@ describe('historical tool availability on the wire', () => {
     expect(requests[0]).toHaveProperty('tools', [expect.objectContaining({ name: 'search' })])
     expect(requests[0]).toHaveProperty('input', [
       { role: 'user', content: [{ type: 'input_text', text: 'first' }] },
-      { role: 'developer', content: 'Instruction one.\nInstruction two.' },
+      { role: 'developer', content: 'Instruction one.\n\nInstruction two.' },
     ])
     expect(JSON.stringify(requests[0])).not.toContain('tool_removal')
     expect(JSON.stringify(requests[0])).not.toContain('Read a file')
@@ -355,7 +355,7 @@ describe('historical tool availability on the wire', () => {
     expect(gemini.paths).toEqual(['/chat/completions'])
     expect(gemini.requests[0]).toMatchObject({
       messages: [
-        { role: 'user', content: 'Cast Austin chart' },
+        { role: 'user', content: [{ type: 'text', text: 'Cast Austin chart' }] },
         { role: 'assistant', tool_calls: [expect.objectContaining({ id: 'call_astro' })] },
         { role: 'tool', tool_call_id: 'call_astro', content: JSON.stringify({ output: yaml }) },
       ],
@@ -365,7 +365,7 @@ describe('historical tool availability on the wire', () => {
     expect(deepseek.paths).toEqual(['/chat/completions'])
     expect(deepseek.requests[0]).toMatchObject({
       messages: [
-        { role: 'user', content: 'Cast Austin chart' },
+        { role: 'user', content: [{ type: 'text', text: 'Cast Austin chart' }] },
         { role: 'assistant', tool_calls: [expect.objectContaining({ id: 'call_astro' })] },
         { role: 'tool', tool_call_id: 'call_astro', content: yaml },
       ],

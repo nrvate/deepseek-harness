@@ -1,3 +1,4 @@
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { ToolExecutionPipeline } from '@deepseek-ai/dsh-tools/pipeline'
 import { executeToolFixture } from '@deepseek-ai/dsh-tool-testkit'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
@@ -84,6 +85,7 @@ async function mountTools(opts: {
   route?: string
 } = {}): Promise<{ ctx: Context; agent: Agent; fiber: Awaited<ReturnType<Context['plugin']>>; call: (name: string, args: unknown) => Promise<ToolExecutionResult> }> {
   const ctx = new Context()
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
   await ctx.plugin(NativeToolExecutor)
@@ -956,6 +958,7 @@ describe('searchMaxResults is plugin config', () => {
     ['fractional', 1.5],
   ])('rejects a %s searchMaxResults at load', async (_label, value) => {
     const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(NativeToolExecutor)
@@ -996,6 +999,7 @@ describe('searchSummaryMaxChars is plugin config', () => {
 
   it.each([['zero', 0], ['fractional', 2.5]])('rejects a %s searchSummaryMaxChars at load', async (_label, value) => {
     const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(WebRuntime, {})
@@ -1057,6 +1061,7 @@ describe('searchMaxQueries is plugin config', () => {
 
   it.each([0, -1, 1.5])('rejects an invalid searchMaxQueries value %s at load', async (value) => {
     const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(NativeToolExecutor)
@@ -1086,6 +1091,7 @@ describe('tool-call timeout budget is plugin config', () => {
     ['searchTimeoutMs', { searchTimeoutMs: -5 }],
   ])('rejects a non-positive-integer %s at load', async (key, config) => {
     const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(NativeToolExecutor)
@@ -1119,6 +1125,7 @@ describe('fetchMaxOutputChars is plugin config', () => {
 
   it.each([0, -1, 1.5])('rejects an invalid fetchMaxOutputChars value %s at load', async (value) => {
     const ctx = new Context()
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(NativeToolExecutor)
@@ -1241,6 +1248,7 @@ describe('web tool admission per model step', () => {
   }) {
     const ctx = new Context()
     mounted.push(ctx)
+    await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SystemPrompt)
     await ctx.plugin(ToolRuntime)
     await ctx.plugin(NativeToolExecutor)

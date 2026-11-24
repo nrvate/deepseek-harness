@@ -10,6 +10,7 @@ import Authorization from '@deepseek-ai/dsh-authorization'
 import { LocalCredentialProvider } from '@deepseek-ai/dsh-credentials-local'
 import WebServer from '@deepseek-ai/dsh-host-webserver'
 import McpPolicyStore from '@deepseek-ai/dsh-mcp-policy'
+import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import Tools from '@deepseek-ai/dsh-tools'
@@ -116,11 +117,16 @@ export async function oauthWorld(interactive = true, webHost = '127.0.0.1') {
     await ctx.plugin(Authorization)
     await ctx.plugin(WebServer, { host: webHost, port: 0 })
   }
+  await ctx.plugin(SessionProjectionRegistry)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(Tools)
   await ctx.plugin(NativeToolExecutor)
-  // These worlds call the fixture's tools unattended, directly and through a manager whose entries carry no tool policy.
-  await ctx.plugin(McpPolicyStore, { servers: { oauth: { default: 'allow', tools: {} } } })
+  // These worlds call the fixture's tools unattended, directly and through a manager whose entries carry no tool
+  // policy. The connector plugin specs share this world and register the fixture server under their own names.
+  const unattended = ['oauth', 'linear', 'notion', 'tencent-docs']
+  await ctx.plugin(McpPolicyStore, {
+    servers: Object.fromEntries(unattended.map(name => [name, { default: 'allow' as const, tools: {} }])),
+  })
   const resolved = Config({ transport: 'streamable-http', serverName: 'oauth', url: origin + '/mcp',
     headers: { 'x-resource-only': 'fixture-resource-secret' }, oauth: { credentialKey: 'mcp-client/oauth' }, reconnect: { enabled: false } })
   if (resolved.transport !== 'streamable-http' || resolved.oauth === undefined) throw new Error('Missing HTTP OAuth configuration')

@@ -53,7 +53,7 @@ kind: "package-reference"
 <a id="model-experience"></a>
 ## 模型体验
 
-无直接影响。会话的选择会改变其后续请求携带哪些 MCP 工具与指令，见 [mcp-selection](../../mcp/mcp-selection/README.zh.md#model-experience)；被允许的工具不再询问用户，但不改变请求内容。
+无直接影响，因为按会话选择属于 [mcp-selection](../../mcp/mcp-selection/README.zh.md#model-experience) 的模型呈现范围，而允许某个工具只是让它不再询问。
 
 #### KV Cache effect
 

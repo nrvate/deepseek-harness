@@ -53,7 +53,7 @@ No runtime invariant companion is published: the controller keeps no state of it
 <a id="model-experience"></a>
 ## Model Experience
 
-None directly. A Session's selection changes which MCP tools and instructions its later requests carry, as [mcp-selection](../../mcp/mcp-selection/README.md#model-experience) describes; an allowed tool stops asking the person but changes no request content.
+None, as a Session's selection is [mcp-selection](../../mcp/mcp-selection/README.md#model-experience)'s model surface and an allowed tool only stops asking.
 
 #### KV Cache effect
 

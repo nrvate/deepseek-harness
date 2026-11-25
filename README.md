@@ -14,6 +14,19 @@ DeepSeek Harness is in _developer preview_ and iterating rapidly. **THERE WILL B
 
 Review the [safety notice](SAFETY.md) before running the project.
 
+## This fork
+
+This checkout is [nrvate's fork](https://github.com/nrvate/deepseek-harness) of DeepSeek Harness. It tracks upstream `master` and adds what the list below names; none of it is upstream. [FORK.md](FORK.md) is the fork's reference for the defaults that differ, the packages that exist only here, and what changes for a deployment.
+
+- **MCP servers on the Plugins page** — add, edit, test, enable, disable, and remove the servers the MCP manager runs, read each server's tools and usage, and watch them from an **MCP 2/3** status item and a per-session selector below the prompt box. See the [MCP servers page](packages/client/ui-settings-mcp-servers/README.md) and the [MCP subsystem](docs/subsystems/mcp.md).
+- **Per-session MCP servers** — a Session carries the tools and instructions of only the servers it uses, records the choice as an `mcp/servers` Session event, and hands it to its subagents. See [mcp-selection](packages/mcp/mcp-selection/README.md).
+- **MCP tool calls ask first** — every call to an MCP server's tools asks the person unless its `toolPolicy` allows it, per tool or per server, and a server's stdio command starts with a minimal environment instead of inheriting the harness's own. See [tool-call policy](packages/mcp/mcp-client/README.md#tool-call-policy).
+- **`web_fetch` host approval** — with `fetchApproval: ask` (the default), fetching a host outside `fetchAllowedHosts` asks first and shows the exact URL. See [tool-web](packages/web/tool-web/README.md).
+- **Protected paths** — `protectedPaths` keeps SSH, cloud, container, and package-registry credential stores out of confined commands and refuses them to the sandboxed filesystem. See [sandbox-policy](packages/sandbox/sandbox-policy/README.md).
+- **Credential redaction** — before a tool result is logged or sent to a model, every known credential value and well-known token format in it becomes `[redacted: <name>]`. See [secret-redaction](packages/guard/secret-redaction/README.md).
+- **Session-log upload is opt-in** — the session log leaves the machine only when `@deepseek-ai/dsh-session-log-deepseek` sets `enabled: true`. See [session-log-deepseek](packages/session/session-log-deepseek/README.md).
+- **Models settings** — a per-model default reasoning effort, request headers per provider route, and hand-declared models that reason at every selectable level. See [llm-pi-ai](packages/llm/llm-pi-ai/README.md) and [Models settings](packages/client/ui-settings-models/README.md).
+
 ## Run
 
 ### Run from `npm`

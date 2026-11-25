@@ -14,6 +14,19 @@ DeepSeek Harness 处于 _开发者预览_ 阶段，正在快速迭代。**未来
 
 运行本项目前，请阅读[安全说明](SAFETY.zh.md)。
 
+## 本分支
+
+本仓库是 [nrvate 的 DeepSeek Harness 分叉](https://github.com/nrvate/deepseek-harness)，跟随上游 `master`，并包含下列改动；这些改动都未进入上游。[FORK.md](FORK.md) 是本分叉的参考：与上游不同的默认值、仅存在于本分叉的包，以及采用本分叉时会发生的变化。
+
+- **Plugins 页面上的 MCP 服务器** —— 添加、编辑、测试、启用、停用和删除 MCP 管理器运行的服务器，查看每个服务器的工具与用量，并通过输入框下方的 **MCP 2/3** 状态项与按会话选择器查看。见 [MCP 服务器页面](packages/client/ui-settings-mcp-servers/README.zh.md)与 [MCP 子系统](docs/subsystems/mcp.zh.md)。
+- **按会话选择 MCP 服务器** —— 每个会话只携带自己所选服务器的工具与指令，选择以 `mcp/servers` 会话事件记录，并传递给其子代理。见 [mcp-selection](packages/mcp/mcp-selection/README.zh.md)。
+- **MCP 工具调用先询问** —— 除非 `toolPolicy` 按工具或按服务器允许，调用 MCP 服务器的工具前都会先询问；服务器的 stdio 命令以最小环境启动，而不继承 harness 自身的环境。见[工具调用策略](packages/mcp/mcp-client/README.zh.md#tool-call-policy)。
+- **`web_fetch` 主机审批** —— 默认为 `fetchApproval: ask`，请求 `fetchAllowedHosts` 之外的主机时会先询问并显示确切 URL。见 [tool-web](packages/web/tool-web/README.zh.md)。
+- **受保护路径** —— `protectedPaths` 让受限命令看不到 SSH、云、容器与包管理器的凭证存储，沙箱文件系统也会拒绝访问它们。见 [sandbox-policy](packages/sandbox/sandbox-policy/README.zh.md)。
+- **凭证脱敏** —— 工具结果在写入日志或发送给模型之前，其中所有已知的凭证值与常见令牌格式都会被替换为 `[redacted: <name>]`。见 [secret-redaction](packages/guard/secret-redaction/README.zh.md)。
+- **会话日志上传改为按需开启** —— 仅当 `@deepseek-ai/dsh-session-log-deepseek` 设置 `enabled: true` 时，会话日志才会离开本机。见 [session-log-deepseek](packages/session/session-log-deepseek/README.zh.md)。
+- **模型设置** —— 每个模型的默认推理强度、每个提供方路由的请求头，以及默认在所有可选强度上推理的自定义模型。见 [llm-pi-ai](packages/llm/llm-pi-ai/README.zh.md)与[模型设置](packages/client/ui-settings-models/README.zh.md)。
+
 <a id="run"></a>
 
 ## 运行
